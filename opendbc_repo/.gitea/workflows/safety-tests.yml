@@ -1,0 +1,73 @@
+name: Safety Tests
+
+on:
+  push:
+    branches:
+      - master-mici
+  pull_request:
+    branches:
+      - master-mici
+  workflow_dispatch:
+
+jobs:
+  safety-tests:
+    runs-on: macos-latest
+    env:
+      CI_SSH_PRIVATE_KEY: ${{ secrets.CI_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${HOME}/.ssh"
+          chmod 700 "${HOME}/.ssh"
+          if [[ -n "${CI_SSH_PRIVATE_KEY:-}" ]]; then
+            printf '%s\n' "${CI_SSH_PRIVATE_KEY}" | tr -d '\r' > "${HOME}/.ssh/id_ci"
+            chmod 600 "${HOME}/.ssh/id_ci"
+          fi
+          cat > "${HOME}/.ssh/config" <<'EOF'
+          Host ssh.gitlvb.teallvbs.xyz
+            HostName ssh.gitlvb.teallvbs.xyz
+            User git
+            IdentityFile ~/.ssh/id_ci
+            IdentitiesOnly yes
+            BatchMode yes
+            StrictHostKeyChecking accept-new
+          EOF
+          chmod 600 "${HOME}/.ssh/config"
+          git config --global --unset-all url."git@ssh.gitlvb.teallvbs.xyz:".insteadOf || true
+          git config --global --replace-all url."git@ssh.gitlvb.teallvbs.xyz:".insteadOf "https://gitlvb.teallvbs.xyz/"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install uv
+        shell: bash
+        run: |
+          if ! command -v uv >/dev/null 2>&1; then
+            curl -LsSf --retry 3 https://astral.sh/uv/install.sh | sh
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Install Dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --frozen --all-extras
+
+      - name: Build libsafety
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          JOBS="$(sysctl -n hw.logicalcpu 2>/dev/null || echo 4)"
+          scons -j"${JOBS}"
+
+      - name: Run Safety Tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          pytest opendbc/safety/tests/ --ignore=opendbc/safety/tests/misra -x -v
