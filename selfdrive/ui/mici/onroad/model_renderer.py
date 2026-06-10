@@ -31,6 +31,12 @@ NO_THROTTLE_COLORS = [
   rl.Color(242, 242, 242, 0),   # HSLF(112/360, 0.0, 0.95, 0.0)
 ]
 
+LANELINE_ACTIVE_COLORS = [
+  rl.Color(68, 150, 255, 115),
+  rl.Color(40, 120, 255, 92),
+  rl.Color(40, 120, 255, 0),
+]
+
 LANE_LINE_COLORS = {
   UIStatus.DISENGAGED: rl.Color(200, 200, 200, 255),
   UIStatus.OVERRIDE: rl.Color(255, 255, 255, 255),
@@ -342,12 +348,12 @@ class ModelRenderer(Widget):
     if not self._path.projected_points.size:
       return
 
-    self._lp2_status_refresh -= 1
-    if self._lp2_status_refresh <= 0:
-      self._lp2_status_refresh = 20
-      self._lp2_status = ui_state.params.get("IQLanePlannerStatus", encoding='utf-8') or "OFF"
+    self._iqlp_status_refresh -= 1
+    if self._iqlp_status_refresh <= 0:
+      self._iqlp_status_refresh = 20
+      self._iqlp_status = ui_state.params.get("IQLanePlannerStatus", encoding='utf-8') or "OFF"
 
-    if self._lp2_status == "LANELINE":
+    if self._iqlp_status == "LANELINE":
       if ui_state.status == UIStatus.DISENGAGED:
         draw_polygon(self._rect, self._path.projected_points, rl.Color(0, 0, 0, 90))
       else:
