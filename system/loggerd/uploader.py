@@ -16,6 +16,7 @@ from openpilot.common.utils import get_upload_stream
 from openpilot.common.params import Params
 from openpilot.common.realtime import set_core_affinity
 from openpilot.system.hardware.hw import Paths
+from openpilot.system.loggerd.route_stats import route_id_from_segment, should_skip_route_upload
 from openpilot.system.loggerd.xattr_cache import getxattr, setxattr
 from openpilot.common.swaglog import cloudlog
 
@@ -86,6 +87,47 @@ class Uploader:
 
     self.immediate_folders = ["crash/", "boot/"]
     self.immediate_priority = {"qlog": 0, "qlog.zst": 0, "qcamera.ts": 1}
+    self._route_skip_cache: dict[str, bool] = {}
+    self._skipped_routes_marked: set[str] = set()
+
+  def _mark_route_skipped(self, route_id: str) -> None:
+    prefix = route_id + "--"
+    for logdir in os.listdir(self.root):
+      if not logdir.startswith(prefix):
+        continue
+      path = os.path.join(self.root, logdir)
+      if not os.path.isdir(path):
+        continue
+      try:
+        for name in os.listdir(path):
+          fn = os.path.join(path, name)
+          if os.path.isfile(fn) and not name.endswith(".lock"):
+            setxattr(fn, UPLOAD_ATTR_NAME, UPLOAD_ATTR_VALUE)
+      except OSError:
+        cloudlog.exception("uploader_mark_route_skipped_failed", route_id=route_id, logdir=logdir)
+
+  def _should_skip_logdir(self, logdir: str) -> bool:
+    if any(logdir.startswith(f) or logdir == f.rstrip("/") for f in self.immediate_folders):
+      return False
+
+    route_id = route_id_from_segment(logdir)
+    if route_id is None:
+      return False
+
+    skip = self._route_skip_cache.get(route_id)
+    if skip is None and route_id not in self._route_skip_cache:
+      skip = should_skip_route_upload(self.root, route_id)
+      if skip is None:
+        return True
+      self._route_skip_cache[route_id] = skip
+
+    if skip:
+      if route_id not in self._skipped_routes_marked:
+        cloudlog.event("upload_skipped_short_route", route_id=route_id)
+        self._mark_route_skipped(route_id)
+        self._skipped_routes_marked.add(route_id)
+      return True
+    return False
 
   def list_upload_files(self, metered: bool) -> Iterator[tuple[str, str, str]]:
     r = self.params.get("AthenadRecentlyViewedRoutes")
@@ -99,6 +141,9 @@ class Uploader:
         continue
 
       if any(name.endswith(".lock") for name in names):
+        continue
+
+      if self._should_skip_logdir(logdir):
         continue
 
       for name in sorted(names, key=lambda n: self.immediate_priority.get(n, 1000)):
