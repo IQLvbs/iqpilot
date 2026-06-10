@@ -27,11 +27,14 @@ private:
   std::vector<std::string> fetchCarParams();
   void setSafetyMode(const std::vector<std::string> &params_string);
   void ensureCanFdForCachedMeb();
+  bool needsVwCanFd(const std::string &car_params_bytes, const std::string &platform_bundle_json);
+  void applyCanFdToAllBuses();
 
   bool initialized_ = false;
   bool log_once_ = false;
   bool safety_configured_ = false;
   bool canfd_configured_ = false;
+  std::string canfd_config_key_;
   bool prev_obd_multiplexing_ = false;
   std::vector<Panda *> pandas_;
   Params params_;
