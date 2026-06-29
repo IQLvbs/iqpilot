@@ -1,0 +1,44 @@
+{
+  "python/iqpilot_private/__init__.py": {
+    "mode": 420,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0
+  },
+  "python/iqpilot_private/models/__init__.cpython-312-aarch64-linux-gnu.so": {
+    "mode": 493,
+    "sha256": "32694bcdd636e3cf40f7d78ead9a81a86676edb09ccd49d29081f1df01132fba",
+    "size": 67616
+  },
+  "python/iqpilot_private/models/__init__.py": {
+    "mode": 420,
+    "sha256": "5128931b54d4f1ff131185e7711d56a788b5e2cb71e3c8154a2f79fef184b452",
+    "size": 118
+  },
+  "python/iqpilot_private/models/fetcher.cpython-312-aarch64-linux-gnu.so": {
+    "mode": 493,
+    "sha256": "3b64fec8220a7a35ec43af78527c4e3a8a1a37bd9c51ec7ef8c3de793ad42015",
+    "size": 136096
+  },
+  "python/iqpilot_private/models/git_auth.cpython-312-aarch64-linux-gnu.so": {
+    "mode": 493,
+    "sha256": "81b6c4ef55abe77161980fd2d087d28c6709bfb711492410b9375979eb305737",
+    "size": 67864
+  },
+  "python/iqpilot_private/models/helpers.cpython-312-aarch64-linux-gnu.so": {
+    "mode": 493,
+    "sha256": "3c939bbadcd52ff2ff24a4e9d943e874090cec144e9feeaedf88d9dba5e820bf",
+    "size": 139096
+  },
+  "python/iqpilot_private/models/manager.cpython-312-aarch64-linux-gnu.so": {
+    "mode": 493,
+    "sha256": "c3c084465f5946d8ee202461d18e1a6edb0cfb17fa4fa56ed060112b01aca1e8",
+    "size": 205792
+  },
+  "signatures": {
+    "python/iqpilot_private/models/__init__.cpython-312-aarch64-linux-gnu.so": "+5P+HjtPHlmu+UuI8Gj0YTM5XjaiFa1Ou9zB0V9fXjCGAb+AagEhCwtx1RFPmf9FsikeOpppPMXYeGVTQkgICw==",
+    "python/iqpilot_private/models/fetcher.cpython-312-aarch64-linux-gnu.so": "nuAdE2tC6dDpFR0D3xmGJDLpa3SXVIF57sl2p3kC1en+AGHMWAslHJlQ/xxQ+mwJ/Fw/IZXd+JS/06GGCUOlDQ==",
+    "python/iqpilot_private/models/git_auth.cpython-312-aarch64-linux-gnu.so": "MYk4zkjhzVb/tZpGRjy6LZu+uYjMuOzIEqvvLsNI6Mn6baD+ZnuA0ZLUNvHqmWlyj501H+P15ONNaTZdsBt3DQ==",
+    "python/iqpilot_private/models/helpers.cpython-312-aarch64-linux-gnu.so": "A7COtE7wIJ+tKY+BCF9QihKEzyoO0HIKxYQlgl6HRvhuYH3PB27txZ6XBt08uEIwTwGVBp8p7GMmzdVFHvjhDw==",
+    "python/iqpilot_private/models/manager.cpython-312-aarch64-linux-gnu.so": "525PzGbdX1yxHpFLdurQ6U8BDwuzfdyyAqVsNPsVqPo7qA+9ssYoneWcB6FjSNWsrZR7JP17pt0Jmks4LDa6CA=="
+  }
+}
