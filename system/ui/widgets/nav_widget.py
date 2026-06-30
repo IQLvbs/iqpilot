@@ -6,6 +6,7 @@ from collections.abc import Callable
 from openpilot.system.ui.widgets import Widget
 from openpilot.common.filter_simple import BounceFilter, FirstOrderFilter
 from openpilot.system.ui.lib.application import gui_app, MousePos, MouseEvent
+from openpilot.selfdrive.ui.ui_state import device
 
 SWIPE_AWAY_THRESHOLD = 80  # px to dismiss after releasing
 START_DISMISSING_THRESHOLD = 40  # px to start dismissing while dragging
@@ -250,3 +251,10 @@ class NavWidget(Widget, abc.ABC):
 
     self._nav_bar_y_filter.x = -NAV_BAR_MARGIN - NAV_BAR_HEIGHT
     self._nav_bar_show_time = rl.get_time()
+    device.set_override_interactive_timeout(300)
+
+  def hide_event(self):
+    super().hide_event()
+    active = gui_app.get_active_widget()
+    if not isinstance(active, NavWidget):
+      device.set_override_interactive_timeout(None)

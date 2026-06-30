@@ -33,6 +33,8 @@ class NetworkLayoutMici(NavWidget):
 
     self._current_panel = NetworkPanelType.WIFI
     self._callback_frame = 0
+    self._esim_profile_count: str | None = None
+    self._esim_profile_frame = 0
 
     self._wifi_manager = WifiManager()
     self._wifi_manager.set_active(False)
@@ -142,14 +144,21 @@ class NetworkLayoutMici(NavWidget):
     self._apn_btn.set_visible(show_cell_settings)
     self._cellular_metered_btn.set_visible(show_cell_settings)
 
-    esim_profiles = (self._esim_manager.get_state().profiles or []) if self._esim_manager.is_supported() else []
-    self._esim_button.set_value(f"{len(esim_profiles)} profiles")
-    self._roaming_btn.refresh()
-    self._cellular_metered_btn.refresh()
+    self._esim_profile_frame += 1
+    if self._esim_profile_frame % 30 == 0:
+      esim_profiles = (self._esim_manager.get_state().profiles or []) if self._esim_manager.is_supported() else []
+      count = f"{len(esim_profiles)} profiles"
+      if count != self._esim_profile_count:
+        self._esim_profile_count = count
+        self._esim_button.set_value(count)
 
   def show_event(self):
     super().show_event()
     self._current_panel = NetworkPanelType.NONE
+    self._esim_profile_frame = 0
+    self._esim_profile_count = None
+    self._roaming_btn.refresh()
+    self._cellular_metered_btn.refresh()
     self._scroller.show_event()
 
   def hide_event(self):

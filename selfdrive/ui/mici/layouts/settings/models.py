@@ -241,11 +241,7 @@ class ModelsLayoutMici(NavScroller):
       self._last_cache_t = now
       self._clear.set_value(f"{self._calculate_cache_size():.1f} MB")
 
-    self._lagd.refresh()
     self._update_lagd_subtext()
-    self._sw_delay.refresh()
-    self._lane_turn.refresh()
-    self._lane_speed.refresh()
 
   def _progress_target_bundle(self):
     try:

@@ -72,6 +72,16 @@ def _draw_accent_box(rect: rl.Rectangle, enabled: bool, pressed: bool):
   def _round_for(short_side: float, radius: float) -> float:
     return max(0.0, min(1.0, 2.0 * radius / short_side)) if short_side > 0 else 0.0
 
+  roundness = _round_for(shorter, base_radius)
+  bg = _BOX_BG_PRESSED if pressed else (_BOX_BG if enabled else _BOX_BG_DISABLED)
+
+  # ponytail: idle list tiles (settings/wifi/models) — fill + rim only; full glow on press
+  if not pressed:
+    rl.draw_rectangle_rounded(rect, roundness, _GLOW_SEGS, bg)
+    rl.draw_rectangle_rounded_lines_ex(rect, roundness, _GLOW_CORNER_SEGS, 2,
+                                       rl.Color(r, g, b, int(_RIM_ALPHA * base)))
+    return
+
   for px in range(_GLOW_OUT, 0, -1):
     f = px / _GLOW_OUT
     a = int(_GLOW_OUT_ALPHA * base * (1.0 - f) ** 2.0)
@@ -80,10 +90,9 @@ def _draw_accent_box(rect: rl.Rectangle, enabled: bool, pressed: bool):
     ex = rl.Rectangle(rect.x - px, rect.y - px, rect.width + 2 * px, rect.height + 2 * px)
     rl.draw_rectangle_rounded(ex, _round_for(shorter + 2 * px, base_radius + px), _GLOW_SEGS, rl.Color(r, g, b, a))
 
-  bg = _BOX_BG_PRESSED if pressed else (_BOX_BG if enabled else _BOX_BG_DISABLED)
-  rl.draw_rectangle_rounded(rect, _round_for(shorter, base_radius), _GLOW_SEGS, bg)
+  rl.draw_rectangle_rounded(rect, roundness, _GLOW_SEGS, bg)
 
-  glow_in = _GLOW_IN if pressed else _GLOW_IN_IDLE
+  glow_in = _GLOW_IN
   for px in range(glow_in, 0, -1):
     f = px / glow_in
     a = int(_GLOW_IN_ALPHA * base * (1.0 - f) ** 1.8)
@@ -105,13 +114,15 @@ def _draw_accent_circle(cx: float, cy: float, radius: float, enabled: bool, red:
   r, g, b = _CIRCLE_RED_RGB if red else _accent_rgb()
   c = rl.Vector2(cx, cy)
   segs = _GLOW_CORNER_SEGS * 2
+  if not pressed:
+    rl.draw_ring(c, radius - 1.5, radius + 1.5, 0, 360, segs, rl.Color(r, g, b, int(_RIM_ALPHA * base)))
+    return
   for px in range(_GLOW_OUT, 0, -1):
     a = int(_GLOW_OUT_ALPHA * base * (1.0 - px / _GLOW_OUT) ** 2.0)
     if a > 0:
       rl.draw_ring(c, radius + px - 1.0, radius + px + 1.0, 0, 360, segs, rl.Color(r, g, b, a))
-  glow_in = _GLOW_IN if pressed else _GLOW_IN_IDLE
-  for px in range(glow_in, 0, -1):
-    a = int(_GLOW_IN_ALPHA * base * (1.0 - px / glow_in) ** 1.8)
+  for px in range(_GLOW_IN, 0, -1):
+    a = int(_GLOW_IN_ALPHA * base * (1.0 - px / _GLOW_IN) ** 1.8)
     if a > 0:
       rl.draw_ring(c, radius - px - 1.5, radius - px + 1.5, 0, 360, segs, rl.Color(r, g, b, a))
   rl.draw_ring(c, radius - 1.5, radius + 1.5, 0, 360, segs, rl.Color(r, g, b, int(_RIM_ALPHA * base)))
