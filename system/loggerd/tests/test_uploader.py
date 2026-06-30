@@ -1,3 +1,4 @@
+import io
 import os
 import time
 import threading
@@ -7,7 +8,8 @@ from pathlib import Path
 from openpilot.system.hardware.hw import Paths
 
 from openpilot.common.swaglog import cloudlog
-from openpilot.system.loggerd.uploader import main, UPLOAD_ATTR_NAME, UPLOAD_ATTR_VALUE
+from openpilot.system.loggerd.uploader import Uploader, main, UPLOAD_ATTR_NAME, UPLOAD_ATTR_VALUE
+from openpilot.system.loggerd.route_upload import _decompress_zst_bytes, get_route_stats
 
 from openpilot.system.loggerd.tests.loggerd_tests_common import UploaderTestCase
 
@@ -182,3 +184,22 @@ class TestUploader(UploaderTestCase):
     for f_path in f_paths:
       lock_path = f_path.with_suffix(f_path.suffix + ".lock")
       assert not lock_path.is_file(), "File lock not cleared on startup"
+
+  def test_get_route_stats_from_qlog_zst_only(self):
+    seg_dir = self.seg_format.format(self.seg_num)
+    route_base = seg_dir.rpartition("--")[0]
+    self.make_file_with_data(seg_dir, "qlog.zst", size_mb=0.01)
+
+    assert get_route_stats(str(Paths.log_root()), route_base) is not None
+
+  def test_decompress_streaming_zst(self):
+    import zstandard as zstd
+
+    payload = os.urandom(4096)
+    out = io.BytesIO()
+    cctx = zstd.ZstdCompressor()
+    with cctx.stream_writer(out, closefd=False) as writer:
+      writer.write(payload)
+    compressed = out.getvalue()
+
+    assert _decompress_zst_bytes(compressed) == payload
