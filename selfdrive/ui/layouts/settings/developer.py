@@ -84,9 +84,18 @@ class DeveloperLayout(Widget):
 
   def _on_enable_adb(self, state: bool):
     self._params.put_bool("AdbEnabled", state)
+    self._notify_konn3kt_params_changed()
 
   def _on_enable_ssh(self, state: bool):
     self._params.put_bool("SshEnabled", state)
+    self._notify_konn3kt_params_changed()
+
+  def _notify_konn3kt_params_changed(self):
+    try:
+      from openpilot.iqpilot.konn3kt.common.params import bump_params_version
+      bump_params_version(self._params)
+    except Exception:
+      pass
 
   def _on_long_maneuver_mode(self, state: bool):
     self._params.put_bool("LongitudinalManeuverMode", state)

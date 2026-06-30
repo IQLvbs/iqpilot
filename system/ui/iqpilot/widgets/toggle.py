@@ -28,6 +28,13 @@ class IQToggle(Toggle):
     super()._handle_mouse_release(mouse_pos)
     if self._enabled and self.param_key:
       self.params.put_bool(self.param_key, self._state)
+      try:
+        from openpilot.iqpilot.konn3kt.common.params import bump_params_version, sync_longitudinal_control_mode
+        if self.param_key in ("AlphaLongitudinalEnabled", "ExperimentalMode", "IQDynamicMode"):
+          sync_longitudinal_control_mode(self.params)
+        bump_params_version(self.params)
+      except Exception:
+        pass
 
   def _render(self, rect: rl.Rectangle):
     if self.param_key:

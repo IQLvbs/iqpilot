@@ -8,6 +8,7 @@ from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.multilang import tr, tr_noop
 from openpilot.system.ui.widgets import DialogResult
 from openpilot.selfdrive.ui.ui_state import ui_state
+from openpilot.iqpilot.konn3kt.common.params import apply_longitudinal_control_mode, bump_params_version
 
 if gui_app.iqpilot_ui():
   from openpilot.system.ui.iqpilot.widgets.list_view import toggle_item
@@ -266,44 +267,22 @@ class TogglesLayout(Widget):
     return 2 if self._params.get_bool("IQDynamicMode") else 3  # IQ.Dynamic / IQ.Pilot
 
   def _apply_longitudinal_control_mode(self, button_index: int):
-    # 0 = Stock ACC, 1 = IQ.Standard, 2 = IQ.Dynamic, 3 = IQ.Pilot
-    previous_alpha = self._params.get_bool("AlphaLongitudinalEnabled")
-    previous_toyota_stock_long = self._params.get_bool("ToyotaEnforceStockLongitudinal")
-
-    if button_index == 0:
-      self._params.put_bool("AlphaLongitudinalEnabled", False)
-      self._params.put_bool("ExperimentalMode", False)
-      self._params.put_bool("IQDynamicMode", False)
-    elif button_index == 1:
-      self._params.put_bool("AlphaLongitudinalEnabled", True)
-      self._params.put_bool("ExperimentalMode", False)
-      self._params.put_bool("IQDynamicMode", False)
-      self._params.put("LongitudinalPersonality", PERSONALITY_TO_INT["relaxed"])
-    elif button_index == 2:
-      self._params.put_bool("AlphaLongitudinalEnabled", True)
-      self._params.put_bool("ExperimentalMode", True)
-      self._params.put_bool("IQDynamicMode", True)
-    else:
-      self._params.put_bool("AlphaLongitudinalEnabled", True)
-      self._params.put_bool("ExperimentalMode", True)
-      self._params.put_bool("IQDynamicMode", False)
-
-    if button_index != 0 and previous_toyota_stock_long:
-      self._params.put_bool("ToyotaEnforceStockLongitudinal", False)
-
-    if previous_alpha != self._params.get_bool("AlphaLongitudinalEnabled") or previous_toyota_stock_long != self._params.get_bool("ToyotaEnforceStockLongitudinal"):
-      self._params.put_bool("OnroadCycleRequested", True)
+    apply_longitudinal_control_mode(button_index, self._params)
+    bump_params_version(self._params)
 
   def _toggle_callback(self, state: bool, param: str):
     self._params.put_bool(param, state)
     if self._toggle_defs[param][3]:
       self._params.put_bool("OnroadCycleRequested", True)
+    bump_params_version(self._params)
 
   def _set_longitudinal_personality(self, button_index: int):
     self._params.put("LongitudinalPersonality", PERSONALITY_DISPLAY_TO_PARAM[button_index])
+    bump_params_version(self._params)
 
   def _set_speed_limit_mode(self, button_index: int):
     self._params.put("SpeedLimitMode", button_index)
+    bump_params_version(self._params)
 
   def _set_longitudinal_control_mode(self, button_index: int):
     # 0 = Stock ACC, 1 = IQ.Standard, 2 = IQ.Dynamic, 3 = IQ.Pilot

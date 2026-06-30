@@ -374,9 +374,17 @@ class BigParamControl(BigToggle):
   def _handle_mouse_release(self, mouse_pos: MousePos):
     super()._handle_mouse_release(mouse_pos)
     self.params.put_bool(self.param, self._checked)
+    self._notify_konn3kt_params_changed()
 
   def refresh(self):
     self.set_checked(self.params.get_bool(self.param, False))
+
+  def _notify_konn3kt_params_changed(self):
+    try:
+      from openpilot.iqpilot.konn3kt.common.params import bump_params_version
+      bump_params_version(self.params)
+    except Exception:
+      pass
 
 
 # TODO: param control base class
@@ -391,9 +399,17 @@ class BigCircleParamControl(BigCircleToggle):
   def _handle_mouse_release(self, mouse_pos: MousePos):
     super()._handle_mouse_release(mouse_pos)
     self.params.put_bool(self._param, self._checked)
+    self._notify_konn3kt_params_changed()
 
   def refresh(self):
     self.set_checked(self.params.get_bool(self._param, False))
+
+  def _notify_konn3kt_params_changed(self):
+    try:
+      from openpilot.iqpilot.konn3kt.common.params import bump_params_version
+      bump_params_version(self.params)
+    except Exception:
+      pass
 
 
 _CHIP_BG         = rl.Color(0x30, 0x30, 0x30, 230)
@@ -571,6 +587,11 @@ class NeonBigParamToggle(NeonBigButton):
     self._checked = not self._checked
     if self._params:
       self._params.put_bool(self._param, self._checked)
+      try:
+        from openpilot.iqpilot.konn3kt.common.params import bump_params_version
+        bump_params_version(self._params)
+      except Exception:
+        pass
     self._rebuild_chips()
     if self._toggle_callback:
       self._toggle_callback(self._checked)
