@@ -210,15 +210,15 @@ class WifiButton(BigButton):
       self._sub_label.set_color(rl.Color(255, 255, 255, int(255 * 0.9)))
       self._sub_label.set_font_weight(FontWeight.SEMI_BOLD)
 
-  def _draw_content(self, btn_y: float):
+  def _draw_content(self, btn_x: float, btn_y: float, btn_width: float, btn_height: float):
     self._label.set_color(LABEL_COLOR)
-    label_rect = rl.Rectangle(self._rect.x + self.LABEL_PADDING, btn_y + self.LABEL_VERTICAL_PADDING,
-                              self.LABEL_WIDTH, self._rect.height - self.LABEL_VERTICAL_PADDING * 2)
+    label_rect = rl.Rectangle(btn_x + self.LABEL_PADDING, btn_y + self.LABEL_VERTICAL_PADDING,
+                              self.LABEL_WIDTH, btn_height - self.LABEL_VERTICAL_PADDING * 2)
     self._label.render(label_rect)
 
     if self.value:
-      sub_label_x = self._rect.x + self.LABEL_HORIZONTAL_PADDING
-      label_y = btn_y + self._rect.height - self.LABEL_VERTICAL_PADDING
+      sub_label_x = btn_x + self.LABEL_HORIZONTAL_PADDING
+      label_y = btn_y + btn_height - self.LABEL_VERTICAL_PADDING
       sub_label_w = self.SUB_LABEL_WIDTH - (self._forget_btn.rect.width if self._show_forget_btn else 0)
       sub_label_height = self._sub_label.get_content_height(sub_label_w)
       if self._is_connected and not self._network_forgetting:
@@ -228,12 +228,12 @@ class WifiButton(BigButton):
       sub_label_rect = rl.Rectangle(sub_label_x, label_y - sub_label_height, sub_label_w, sub_label_height)
       self._sub_label.render(sub_label_rect)
 
-    self._wifi_icon.render(rl.Rectangle(self._rect.x + 30, btn_y + 30, self._wifi_icon.rect.width, self._wifi_icon.rect.height))
+    self._wifi_icon.render(rl.Rectangle(btn_x + 30, btn_y + 30, self._wifi_icon.rect.width, self._wifi_icon.rect.height))
 
     if self._show_forget_btn:
       self._forget_btn.render(rl.Rectangle(
-        self._rect.x + self._rect.width - self._forget_btn.rect.width,
-        btn_y + self._rect.height - self._forget_btn.rect.height,
+        btn_x + btn_width - self._forget_btn.rect.width,
+        btn_y + btn_height - self._forget_btn.rect.height,
         self._forget_btn.rect.width, self._forget_btn.rect.height))
 
 
@@ -244,12 +244,12 @@ class ScanningButton(BigButton):
     self._loading_animation = LoadingAnimation()
     self._is_scanning = is_scanning
 
-  def _draw_content(self, btn_y: float):
-    super()._draw_content(btn_y)
+  def _draw_content(self, btn_x: float, btn_y: float, btn_width: float, btn_height: float):
+    super()._draw_content(btn_x, btn_y, btn_width, btn_height)
     if not self._is_scanning():
       return
     anim = self._loading_animation
-    anim.set_position(self._rect.x + self._rect.width - anim.rect.width - 40, btn_y + self._rect.height - anim.rect.height - 30)
+    anim.set_position(btn_x + btn_width - anim.rect.width - 40, btn_y + btn_height - anim.rect.height - 30)
     anim.render()
 
 

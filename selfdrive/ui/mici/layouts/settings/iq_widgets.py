@@ -62,14 +62,17 @@ class MappedParamToggle(BigMultiToggle):
       return BigButton._width_hint(self)
     return super()._width_hint()
 
-  def _draw_content(self, btn_y: float):
+  def _draw_content(self, btn_x: float, btn_y: float, btn_width: float, btn_height: float):
     if self._value_only():
-      BigButton._draw_content(self, btn_y)
+      BigButton._draw_content(self, btn_x, btn_y, btn_width, btn_height)
     else:
-      super()._draw_content(btn_y)
+      super()._draw_content(btn_x, btn_y, btn_width, btn_height)
 
   def refresh(self):
-    raw = self._params.get(self._param, return_default=True)
+    try:
+      raw = self._params.get(self._param, return_default=True)
+    except UnknownKeyName:
+      raw = self._values[0]
     try:
       cur = float(raw)
     except (TypeError, ValueError):
@@ -80,7 +83,10 @@ class MappedParamToggle(BigMultiToggle):
   def _handle_mouse_release(self, mouse_pos):
     super()._handle_mouse_release(mouse_pos)
     idx = self._options.index(self.value)
-    self._params.put(self._param, self._values[idx])
+    try:
+      self._params.put(self._param, self._values[idx])
+    except UnknownKeyName:
+      pass
 
 
 class IQModeSelector(BigMultiToggle):

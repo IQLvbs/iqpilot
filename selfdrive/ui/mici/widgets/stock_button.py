@@ -15,9 +15,11 @@ from openpilot.common.filter_simple import BounceFilter
 from openpilot.selfdrive.ui.iqpilot.theme import NeonTheme
 
 try:
-  from openpilot.common.params import Params
+  from openpilot.common.params import Params, UnknownKeyName
 except ImportError:
   Params = None
+  class UnknownKeyName(Exception):
+    pass
 
 SCROLLING_SPEED_PX_S = 50
 COMPLICATION_SIZE    = 36
@@ -488,14 +490,23 @@ class BigParamControl(BigToggle):
     super().__init__(text, "", toggle_callback=toggle_callback)
     self.param = param
     self.params = Params()
-    self.set_checked(self.params.get_bool(self.param, False))
+    self.set_checked(self._read_bool())
+
+  def _read_bool(self) -> bool:
+    try:
+      return self.params.get_bool(self.param)
+    except UnknownKeyName:
+      return False
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
     super()._handle_mouse_release(mouse_pos)
-    self.params.put_bool(self.param, self._checked)
+    try:
+      self.params.put_bool(self.param, self._checked)
+    except UnknownKeyName:
+      pass
 
   def refresh(self):
-    self.set_checked(self.params.get_bool(self.param, False))
+    self.set_checked(self._read_bool())
 
 
 class BigCircleParamControl(BigCircleToggle):
@@ -504,11 +515,20 @@ class BigCircleParamControl(BigCircleToggle):
     super().__init__(icon, toggle_callback, icon_offset=icon_offset)
     self._param = param
     self.params = Params()
-    self.set_checked(self.params.get_bool(self._param, False))
+    self.set_checked(self._read_bool())
+
+  def _read_bool(self) -> bool:
+    try:
+      return self.params.get_bool(self._param)
+    except UnknownKeyName:
+      return False
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
     super()._handle_mouse_release(mouse_pos)
-    self.params.put_bool(self._param, self._checked)
+    try:
+      self.params.put_bool(self._param, self._checked)
+    except UnknownKeyName:
+      pass
 
   def refresh(self):
-    self.set_checked(self.params.get_bool(self._param, False))
+    self.set_checked(self._read_bool())
