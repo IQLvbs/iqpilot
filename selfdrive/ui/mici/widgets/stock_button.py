@@ -32,12 +32,13 @@ _FORCE_ACCENT_RGB = None
 _ACCENT_ROUND = 0.34
 _ACCENT_INSET = 6
 _GLOW_OUT = 3
-_GLOW_IN = 24
+_GLOW_IN = 12  # full inner rings while pressed (was 24 — too many draw calls per button)
+_GLOW_IN_IDLE = 4  # ponytail: idle menus only need a hint of inner glow; bake to texture if still hot
 _GLOW_OUT_ALPHA = 32
 _GLOW_IN_ALPHA = 80
 _RIM_ALPHA = 200
 _GLOW_SEGS = 16
-_GLOW_CORNER_SEGS = 36
+_GLOW_CORNER_SEGS = 16  # was 36 — each inner ring was 36-seg line strips × 24 rings per button
 
 
 def _accent_rgb() -> tuple[int, int, int]:
@@ -82,8 +83,9 @@ def _draw_accent_box(rect: rl.Rectangle, enabled: bool, pressed: bool):
   bg = _BOX_BG_PRESSED if pressed else (_BOX_BG if enabled else _BOX_BG_DISABLED)
   rl.draw_rectangle_rounded(rect, _round_for(shorter, base_radius), _GLOW_SEGS, bg)
 
-  for px in range(_GLOW_IN, 0, -1):
-    f = px / _GLOW_IN
+  glow_in = _GLOW_IN if pressed else _GLOW_IN_IDLE
+  for px in range(glow_in, 0, -1):
+    f = px / glow_in
     a = int(_GLOW_IN_ALPHA * base * (1.0 - f) ** 1.8)
     if a <= 0:
       continue
@@ -97,7 +99,7 @@ def _draw_accent_box(rect: rl.Rectangle, enabled: bool, pressed: bool):
 _CIRCLE_RED_RGB = (0xE0, 0x3A, 0x3A)
 
 
-def _draw_accent_circle(cx: float, cy: float, radius: float, enabled: bool, red: bool = False):
+def _draw_accent_circle(cx: float, cy: float, radius: float, enabled: bool, red: bool = False, pressed: bool = False):
   """Circular version of the box accent: teal (or red) rim + inward glow, matching the boxes."""
   base = 1.0 if enabled else 0.4
   r, g, b = _CIRCLE_RED_RGB if red else _accent_rgb()
@@ -107,8 +109,9 @@ def _draw_accent_circle(cx: float, cy: float, radius: float, enabled: bool, red:
     a = int(_GLOW_OUT_ALPHA * base * (1.0 - px / _GLOW_OUT) ** 2.0)
     if a > 0:
       rl.draw_ring(c, radius + px - 1.0, radius + px + 1.0, 0, 360, segs, rl.Color(r, g, b, a))
-  for px in range(_GLOW_IN, 0, -1):
-    a = int(_GLOW_IN_ALPHA * base * (1.0 - px / _GLOW_IN) ** 1.8)
+  glow_in = _GLOW_IN if pressed else _GLOW_IN_IDLE
+  for px in range(glow_in, 0, -1):
+    a = int(_GLOW_IN_ALPHA * base * (1.0 - px / glow_in) ** 1.8)
     if a > 0:
       rl.draw_ring(c, radius - px - 1.5, radius - px + 1.5, 0, 360, segs, rl.Color(r, g, b, a))
   rl.draw_ring(c, radius - 1.5, radius + 1.5, 0, 360, segs, rl.Color(r, g, b, int(_RIM_ALPHA * base)))
@@ -158,7 +161,7 @@ class BigCircleButton(Widget):
 
     cx = btn_x + self._rect.width * scale / 2.0
     cy = btn_y + self._rect.height * scale / 2.0
-    _draw_accent_circle(cx, cy, self._rect.width * scale / 2.0 - _ACCENT_INSET, self.enabled, self._red)
+    _draw_accent_circle(cx, cy, self._rect.width * scale / 2.0 - _ACCENT_INSET, self.enabled, self._red, self.is_pressed)
 
     self._draw_content(btn_y)
 
