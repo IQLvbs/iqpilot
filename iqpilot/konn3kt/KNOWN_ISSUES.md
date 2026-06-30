@@ -12,34 +12,36 @@ Verified on device `510fb287097868b1` (richard_di), 2026-07-01.
 | Always On Lateral | `AolEnabled` | OK |
 | Toggle With Cruise Main | `AolMainCruiseAllowed` | OK |
 | Lane Line Planner | `IQLanePlanner` | OK |
-| IQ.Pilot Longitudinal Control | `AlphaLongitudinalEnabled` | OK |
+| IQ.Pilot Longitudinal Control | `AlphaLongitudinalEnabled` | OK (+ `LongitudinalControlMode` sync via hephaestusd patch) |
 | Steering Mode on Brake Pedal | `AolSteeringMode` (INT) | OK |
 | Enable WebSSH | `SshEnabled` | OK (REST, not bool RPC) |
+| Cellular Uploads | `OnroadUploads` | OK (device-side `GsmMetered` alias in `hephaestusd.py`) |
 
-Bool wire format is now on-disk `0`/`1` via `param_to_bytes` / `param_from_base64`.
+Bool wire format is on-disk `0`/`1` via `param_to_bytes` / `param_from_base64`.
+Web RPC writes bump `ParamsVersion` and sync longitudinal backing keys via `iqpilot/konn3kt/hephaestus/hephaestusd.py`.
 
-## Frontend / hephaestusd — still broken
+## Frontend — still uses wrong RPC key (device workaround in place)
 
-### 1. Cellular Uploads → wrong param
+### 1. Cellular Uploads → wrong param name in app bundle
 
-- **Web UI:** "Cellular Uploads" toggle
-- **Actual RPC:** `setBoolParam("GsmMetered", !value)` and read via `!GsmMetered`
-- **Should be:** `OnroadUploads` (no inversion)
-- **Evidence:** toggling web ON sets `GsmMetered=False` while `OnroadUploads` stays unchanged; initial `OnroadUploads=True` shows as web OFF
-- **Fix:** konn3kt frontend bundle — replace `GsmMetered` with `OnroadUploads`, remove negation
+- **App UI:** "Cellular Uploads" toggle
+- **App RPC:** `setBoolParam("GsmMetered", !value)` and read via `!GsmMetered`
+- **Device param:** `OnroadUploads` (no inversion)
+- **Workaround (2026-07-01):** `hephaestusd.py` maps `GsmMetered` ↔ `OnroadUploads` and serves `OnroadUploads` on RPC
+- **Proper fix:** konn3kt app bundle — replace `GsmMetered` with `OnroadUploads`, remove negation
 
-### 2. `OnroadUploads` not in hephaestusd RPC whitelist
+## Fixed here (hephaestusd wrapper)
 
-- `getBoolParams` / `setBoolParam` return `invalid param` for `OnroadUploads`
-- **Fix:** add `OnroadUploads` to hephaestusd allowed bool keys (proprietary `.so`)
+### ~~2. `OnroadUploads` not in hephaestusd RPC whitelist~~
 
-### 3. `LongitudinalControlMode` stale after web bool toggle
+Handled in open-source `hephaestusd.py` wrapper (direct read/write + `GsmMetered` alias).
 
-- Web `setBoolParam("AlphaLongitudinalEnabled", false)` updates the bool but not `LongitudinalControlMode`
-- Device UI path calls `sync_longitudinal_control_mode`; web RPC bypasses `iqpilot/konn3kt/common/params.py`
-- **Fix:** hephaestusd should route bool writes through `param_from_base64` or call sync for `LONGITUDINAL_BACKING_KEYS`
+### ~~3. `LongitudinalControlMode` stale after web bool toggle~~
 
-### 4. `ParamsVersion` not bumped on web RPC
+`setBoolParam` wrapper calls `sync_longitudinal_control_mode` for `LONGITUDINAL_BACKING_KEYS`.
 
-- Local UI and `param_from_base64` increment `ParamsVersion`; web `setBoolParam` does not
-- **Fix:** hephaestusd should call `bump_params_version` after remote param writes
+### ~~4. `ParamsVersion` not bumped on web RPC~~
+
+`setBoolParam` wrapper calls `bump_params_version` after remote bool writes.
+
+Verify on device: `PYTHONPATH=/data/openpilot python3 iqpilot/konn3kt/tests/verify_bool_toggle_rpc.py`

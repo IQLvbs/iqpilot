@@ -17,6 +17,17 @@ LONGITUDINAL_BACKING_KEYS = frozenset({
   "ExperimentalMode",
   "IQDynamicMode",
 })
+# Konn3kt app maps "Cellular Uploads" to inverted GsmMetered; device uses OnroadUploads.
+CELLULAR_UPLOADS_RPC_ALIAS = "GsmMetered"
+ONROAD_UPLOADS_KEY = "OnroadUploads"
+
+
+def onroad_uploads_from_gsm_metered(gsm_metered: bool) -> bool:
+  return not gsm_metered
+
+
+def gsm_metered_from_onroad_uploads(onroad_uploads: bool) -> bool:
+  return not onroad_uploads
 
 
 def get_longitudinal_control_mode_index(params=None) -> int:

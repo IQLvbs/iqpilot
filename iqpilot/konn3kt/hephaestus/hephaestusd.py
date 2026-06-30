@@ -7,7 +7,62 @@ import json
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
 from openpilot.iqpilot._proprietary_loader import load_private_module
+from openpilot.iqpilot.konn3kt.common.params import (
+  CELLULAR_UPLOADS_RPC_ALIAS,
+  LONGITUDINAL_BACKING_KEYS,
+  ONROAD_UPLOADS_KEY,
+  bump_params_version,
+  gsm_metered_from_onroad_uploads,
+  onroad_uploads_from_gsm_metered,
+  sync_longitudinal_control_mode,
+)
 from openpilot.system.loggerd.route_upload import filter_upload_files_data, prune_short_routes_from_upload_queue
+
+
+def _patch_bool_param_handlers(private_module) -> None:
+  """Route Konn3kt bool RPC through params.py sync (see iqpilot/konn3kt/KNOWN_ISSUES.md)."""
+  if hasattr(private_module, "setBoolParam"):
+    original_set = private_module.setBoolParam
+
+    def setBoolParam(name, value, *args, _original=original_set, **kwargs):
+      params = Params()
+      if name == ONROAD_UPLOADS_KEY:
+        params.put_bool(ONROAD_UPLOADS_KEY, bool(value))
+        bump_params_version(params)
+        return None
+
+      if name == CELLULAR_UPLOADS_RPC_ALIAS:
+        params.put_bool(ONROAD_UPLOADS_KEY, onroad_uploads_from_gsm_metered(bool(value)))
+        result = _original(name, value, *args, **kwargs)
+        bump_params_version(params)
+        return result
+
+      result = _original(name, value, *args, **kwargs)
+      if name in LONGITUDINAL_BACKING_KEYS:
+        sync_longitudinal_control_mode(params)
+      bump_params_version(params)
+      return result
+
+    private_module.setBoolParam = setBoolParam
+
+  if hasattr(private_module, "getBoolParams"):
+    original_get = private_module.getBoolParams
+
+    def getBoolParams(names, *args, _original=original_get, **kwargs):
+      requested = list(names)
+      passthrough = [name for name in requested if name != ONROAD_UPLOADS_KEY]
+      result = _original(passthrough, *args, **kwargs) if passthrough else {}
+      if not isinstance(result, dict):
+        result = dict(result) if result else {}
+
+      params = Params()
+      if ONROAD_UPLOADS_KEY in requested:
+        result[ONROAD_UPLOADS_KEY] = params.get_bool(ONROAD_UPLOADS_KEY)
+      if CELLULAR_UPLOADS_RPC_ALIAS in result or CELLULAR_UPLOADS_RPC_ALIAS in requested:
+        result[CELLULAR_UPLOADS_RPC_ALIAS] = gsm_metered_from_onroad_uploads(params.get_bool(ONROAD_UPLOADS_KEY))
+      return result
+
+    private_module.getBoolParams = getBoolParams
 
 
 def _patch_upload_handlers(private_module) -> None:
@@ -55,6 +110,7 @@ def _sanitize_cached_upload_queue() -> None:
 
 _private = load_private_module(__name__, "iqpilot_private.konn3kt.hephaestus.hephaestusd")
 _patch_upload_handlers(_private)
+_patch_bool_param_handlers(_private)
 _sanitize_cached_upload_queue()
 
 if __name__ == "__main__":

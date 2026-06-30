@@ -62,3 +62,14 @@ def test_param_from_base64_alpha_syncs_longitudinal_mode():
   param_from_base64("AlphaLongitudinalEnabled", "MQ==")  # base64("1")
   assert get_longitudinal_control_mode_index(params) == 1
   assert int(params.get("LongitudinalControlMode")) == 1
+
+
+def test_cellular_uploads_gsm_metered_alias():
+  from openpilot.iqpilot.konn3kt.common.params import (
+    gsm_metered_from_onroad_uploads,
+    onroad_uploads_from_gsm_metered,
+  )
+  assert onroad_uploads_from_gsm_metered(False) is True
+  assert onroad_uploads_from_gsm_metered(True) is False
+  assert gsm_metered_from_onroad_uploads(True) is False
+  assert gsm_metered_from_onroad_uploads(False) is True
