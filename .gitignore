@@ -19,6 +19,9 @@ a.out
 
 /docs_site/
 
+# Local docs (IQLvbs custom, preserved across upstream sync)
+/docs/
+
 *.mp4
 *.dylib
 *.DSYM
