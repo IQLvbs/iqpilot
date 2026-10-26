@@ -32,7 +32,7 @@
       "mode": 493,
       "path": "python/openpilot/system/proprietary_runtime/_verified_import.so",
       "relative_to": "runtime_root",
-      "sha256": "9df590fe9f6509a213f6e15f014be66f24e20175ba161f6b429caf757a30b53b",
+      "sha256": "11c5614c340268001c1f5562ca3faa29e1956aed5a6a7d394bd27c7321f49083",
       "size": 200424
     },
     {

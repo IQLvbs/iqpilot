@@ -211,7 +211,7 @@ class TestCasyncDirectory:
   def test_one_file_incorrect_cache(self):
     self.setup_cache(self.cache_dir.name, range(self.NUM_FILES))
     with open(os.path.join(self.cache_dir.name, "file_0.txt"), "wb") as f:
-      f.write(b"1234")
+      f.write(b"\xff" * len(self.contents))
 
     stats = self.run_test()
     assert stats['remote'] > 0

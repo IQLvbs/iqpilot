@@ -28,7 +28,7 @@ def test_basedir_contract():
   env = os.environ.copy()
   env.pop("OPENPILOT_BASEDIR", None)
   env.pop("IQPILOT_PROPRIETARY_ROOT", None)
-  assert _runtime_paths(env) == [BASEDIR, os.path.join(BASEDIR, ".iqpilot", "bundles")]
+  assert _runtime_paths(env) == [BASEDIR, os.path.join(BASEDIR, "artifacts")]
 
 
 def test_explicit_basedir_is_preserved(tmp_path):

@@ -18,7 +18,7 @@ from iqdbc.car.volkswagen.pq_radar_handler import PQRadarHandler
 from iqdbc.car.volkswagen.values import (
   CanBus, CarControllerParams, MQB_A0_CARS, VolkswagenFlags, VolkswagenFlagsIQ, apply_pq_stopping_accel,
 )
-from iqdbc.car.volkswagen.mebutils import LongControlJerk, LongControlLimit, LatControlCurvature, LongStopHold
+from iqdbc.car.volkswagen.mebutils import CurvatureSmoother, LongControlJerk, LongControlLimit, LatControlCurvature, LongStopHold
 from iqdbc.car.vehicle_model import VehicleModel
 
 iqpilot_path = os.path.join(os.path.dirname(__file__), '..', '..', '..')
@@ -128,6 +128,10 @@ class CarController(CarControllerBase):
     self.steering_power_last = 0
     self.long_jerk_control = LongControlJerk(dt=(DT_CTRL * self.CCP.ACC_CONTROL_STEP)) if self.CP.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO) else None
     self.long_limit_control = LongControlLimit(dt=(DT_CTRL * self.CCP.ACC_CONTROL_STEP)) if self.CP.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO) else None
+    self.curvature_smoother = (
+      CurvatureSmoother(self.CCP.CURVATURE_SMOOTH_SPEED_BP, self.CCP.CURVATURE_SMOOTH_TAU_V, DT_CTRL * self.CCP.STEER_STEP)
+      if self.CP.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO) else None
+    )
     self.long_stop_hold = LongStopHold(dt=(DT_CTRL * self.CCP.ACC_CONTROL_STEP)) if self.CP.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO) else None
     self.gra_acc_counter_last = None
     self.gra_cancel_ticks = 0
@@ -271,6 +275,7 @@ class CarController(CarControllerBase):
             apply_curvature = apply_curvature + (CS.out.steeringCurvature - (CC.currentCurvature - CC.rollCompensation))
           else:
             apply_curvature = actuators.curvature + (CS.out.steeringCurvature - CC.currentCurvature)
+          apply_curvature = self.curvature_smoother.update(apply_curvature, CS.out.vEgo)
           apply_curvature = apply_std_curvature_limits(apply_curvature, self.apply_curvature_last, CS.out.vEgoRaw, CS.out.steeringCurvature,
                                                        CS.out.steeringPressed, self.CCP.STEER_STEP, CC.latActive, self.CCP.CURVATURE_LIMITS)
 
@@ -293,6 +298,7 @@ class CarController(CarControllerBase):
             hca_enabled = False
             apply_curvature = 0.
             steering_power = 0
+          self.curvature_smoother.reset(apply_curvature)
 
         can_sends.append(self.CCS.create_steering_control(self.packer_pt, self.CAN.pt, apply_curvature, hca_enabled, steering_power))
         self.apply_curvature_last = apply_curvature

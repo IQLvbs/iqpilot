@@ -154,6 +154,14 @@ typedef struct {
 } CurvatureSteeringLimits;
 
 typedef struct {
+  const int max_curvature;
+  const float curvature_to_can;
+  const uint32_t frequency;
+  const int max_curvature_error;
+  const float curvature_error_min_speed;
+} NativeCurvatureSteeringLimits;
+
+typedef struct {
   // acceleration cmd limits
   const int max_accel;
   const int min_accel;
@@ -248,6 +256,7 @@ bool steer_torque_cmd_checks(int desired_torque, int steer_req, const TorqueStee
 bool steer_angle_cmd_checks(int desired_angle, bool steer_control_enabled, const AngleSteeringLimits limits);
 bool steer_angle_cmd_checks_vm(int desired_angle, bool steer_control_enabled, const AngleSteeringLimits limits,
                                const AngleSteeringParams params);
+bool steer_native_curvature_cmd_checks(int desired_curvature, bool steer_control_enabled, const NativeCurvatureSteeringLimits limits);
 bool steer_power_cmd_checks(int desired_steer_power, bool steer_control_enabled, const CurvatureSteeringLimits limits);
 bool steer_curvature_cmd_checks_average(int desired_curvature, bool steer_control_enabled, const CurvatureSteeringLimits limits);
 bool longitudinal_accel_checks(int desired_accel, const LongitudinalLimits limits);
@@ -300,6 +309,15 @@ extern uint32_t rt_angle_msgs;
 extern uint32_t ts_angle_check_last;
 extern int desired_angle_last;
 extern struct sample_t angle_meas;         // last 6 steer angles/curvatures
+
+typedef struct {
+  int desired_last;
+  uint32_t rt_msgs;
+  uint32_t rt_msgs_prev;
+  uint32_t ts_check_last;
+  struct sample_t meas;
+} NativeCurvatureSteeringState;
+extern NativeCurvatureSteeringState native_curvature_state;
 
 // Alt experiences can be set with a USB command
 // It enables features that allow alternative experiences, like not disengaging on gas press

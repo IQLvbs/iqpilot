@@ -99,6 +99,55 @@ def test_fingerprint_cannot_distinguish_the_camera_bus():
   assert CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value
 
 
+@pytest.mark.parametrize("platform,button_message,copy_enabled", [
+  (CAR.HYUNDAI_TUCSON_4TH_GEN, "CRUISE_BUTTONS_ALT", False),
+  (CAR.HYUNDAI_TUCSON_4TH_GEN, "CRUISE_BUTTONS", True),
+  (CAR.KIA_EV6, "CRUISE_BUTTONS_ALT", True),
+  (CAR.HYUNDAI_IONIQ_5, "CRUISE_BUTTONS_ALT", True),
+])
+@pytest.mark.parametrize("enabled,main_mode,acc_mode,lfa_symbol,info_display,stopping", [
+  (False, False, 0, 1, 0, False),
+  (True, False, 0, 1, 0, False),
+  (True, True, 0, 1, 0, False),
+  (True, True, 4, 1, 0, False),
+  (True, True, 1, 0, 0, False),
+  (True, True, 1, 1, 4, False),
+  (True, True, 1, 1, 4, True),
+])
+def test_tucson_avoids_only_the_unblocked_camera_button_copy(
+    platform, button_message, copy_enabled, enabled, main_mode, acc_mode, lfa_symbol, info_display, stopping, monkeypatch):
+  monkeypatch.setattr(hyundaicanfd, "Params", StubParams)
+  CP = SimpleNamespace(carFingerprint=platform, flags=HyundaiFlags.CAMERA_SCC.value)
+  CAN = SimpleNamespace(ECAN=0, CAM=2)
+  CC = SimpleNamespace(enabled=enabled, latActive=True)
+  CS = SimpleNamespace(
+    modelV2=None, lfahda_cluster={"HDA_CntrlModSta": 0, "HDA_LFA_SymSta": lfa_symbol},
+    cruise_buttons_msg={"COUNTER": 42, "CRUISE_BUTTONS": 0}, cruise_btns_msg_canfd=button_message,
+    MainMode_ACC=main_mode, ACCMode=acc_mode, scc_control={"InfoDisplay": info_display},
+    adrv_0x161=None, adrv_0x1ea=None, ccnc_0x162=None, adrv_0x200={"COUNTER": 17, "TauGapSet": 4},
+    out=SimpleNamespace(vEgo=20.0),
+  )
+  hud = SimpleNamespace(leadDistanceBars=2)
+  button_address = 0x1AA if button_message == "CRUISE_BUTTONS_ALT" else 0x1CF
+
+  def collect():
+    packer = CANPacker(DBC_NAME)
+    return [hyundaicanfd.create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud,
+                                            0.0, False, False, False, stopping, False)
+            for frame in range(1000)]
+
+  candidate = collect()
+  with monkeypatch.context() as m:
+    m.setattr(hyundaicanfd, "CAMERA_BUTTON_COPY_DISABLED", set())
+    original = collect()
+  for frame, (before, after) in enumerate(zip(original, candidate, strict=True)):
+    buttons = [msg for msg in after if msg[0] == button_address and msg[2] == CAN.CAM]
+    assert len(buttons) == int(copy_enabled and frame % 2 == 0)
+    expected = before if copy_enabled else [msg for msg in before if msg[0] != button_address or msg[2] != CAN.CAM]
+    assert after == expected
+  assert any(msg[0] == 0x200 for frame in candidate for msg in frame)
+
+
 def test_camera_scc_steering_feeds_mdps_back_to_the_camera():
   CP = ev6_params(camera_scc=True)
   CS = FakeCarState(steer_req=1)

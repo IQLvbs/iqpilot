@@ -1288,6 +1288,11 @@ FW_VERSIONS = {
       b'\xf1\x871EA907572H \xf1\x890234',
     ],
   },
+  CAR.FORD_CAPRI_MK1: {
+    (Ecu.fwdRadar, 0x757, None): [
+      b'\xf1\x871EE907567  \xf1\x890683',
+    ],
+  },
   CAR.SKODA_ENYAQ_MK1: {
     (Ecu.srs, 0x715, None): [
       b'\xf1\x871EA959655EA\xf1\x890376',

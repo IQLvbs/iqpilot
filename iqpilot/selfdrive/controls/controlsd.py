@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import math
+import os
 import time
 from numbers import Number
 
@@ -16,6 +17,8 @@ from iqdbc.car.car_helpers import interfaces
 from iqdbc.car.vehicle_model import VehicleModel
 from iqpilot.common.steer_delay import lateral_action_delay
 from iqpilot.selfdrive.controls.lib.drive_helpers import clip_curvature
+from iqpilot.selfdrive.controls.lib.actuator_feedback import SteeringActuatorFeedback, steering_feedback_from_output
+from iqpilot.selfdrive.controls.lib.hkg_tuning import uses_hkg_tuning
 from iqpilot.selfdrive.controls.lib.curvature_lookahead import select_lateral_curvature
 from iqpilot.selfdrive.controls.lib.latcontrol import LatControl
 from iqpilot.selfdrive.controls.lib.latcontrol_pid import LatControlPID
@@ -35,6 +38,7 @@ NavTurnSignalController = import_verified_module(
 ).NavTurnSignalController
 
 State = log.SelfdriveState.OpenpilotState
+REPLAY = "REPLAY" in os.environ
 EventName = log.OnroadEvent.EventName
 LaneChangeState = log.LaneChangeState
 LaneChangeDirection = log.LaneChangeDirection
@@ -267,6 +271,8 @@ class Controls(IQControlsLayer):
     lat_delay = lateral_action_delay(self.params, self.CP, self.sm["lateralDelay"].lateralDelay) + LAT_SMOOTH_SECONDS
     if nnff_assist is not None:
       nnff_assist.update_lateral_lag(lat_delay)
+    if self.CP.carFingerprint == "HYUNDAI_TUCSON_4TH_GEN":
+      lat_delay = min(lat_delay, 0.15)
 
     actuators.curvature = self.desired_curvature
     steer, steeringAngleDeg, lac_log = self.LaC.update(CC.latActive, CS, self.VM, lp,
@@ -338,13 +344,28 @@ class Controls(IQControlsLayer):
       hudControl.leftLaneDepart = self.sm['driverAssistance'].leftLaneDeparture
       hudControl.rightLaneDepart = self.sm['driverAssistance'].rightLaneDeparture
 
+    actuator_feedback = SteeringActuatorFeedback(True)
     if CC.latActive:
-      CO = self.sm['carOutput']
-      if self.CP.steerControlType in (car.CarParams.SteerControlType.angle, car.CarParams.SteerControlType.curvatureDEPRECATED):
-        self.steer_limited_by_safety = abs(CC.actuators.steeringAngleDeg - CO.actuatorsOutput.steeringAngleDeg) > \
-                                              STEER_ANGLE_SATURATION_THRESHOLD
+      angle_control = self.CP.steerControlType in (car.CarParams.SteerControlType.angle, car.CarParams.SteerControlType.curvatureDEPRECATED)
+      if uses_hkg_tuning(self.CP):
+        # replay rewrites envelope times into the recorded clock without virtualizing the host clock
+        feedback_now = max(self.sm.logMonoTime.values()) if REPLAY else time.monotonic_ns()
+        actuator_feedback = steering_feedback_from_output(
+          self.sm['carOutput'], feedback_valid=self.sm.all_checks(['carOutput']),
+          output_mono_time=self.sm.logMonoTime['carOutput'], now_mono_time=feedback_now,
+          angle_control=angle_control, angle_threshold=STEER_ANGLE_SATURATION_THRESHOLD,
+        )
+        self.steer_limited_by_safety = actuator_feedback.limited
       else:
-        self.steer_limited_by_safety = abs(CC.actuators.torque - CO.actuatorsOutput.torque) > 1e-2
+        CO = self.sm['carOutput']
+        if angle_control:
+          self.steer_limited_by_safety = abs(CC.actuators.steeringAngleDeg - CO.actuatorsOutput.steeringAngleDeg) > \
+                                                STEER_ANGLE_SATURATION_THRESHOLD
+        else:
+          self.steer_limited_by_safety = abs(CC.actuators.torque - CO.actuatorsOutput.torque) > 1e-2
+    update_feedback = getattr(getattr(self, 'LaC', None), 'update_actuator_feedback', None)
+    if callable(update_feedback):
+      update_feedback(actuator_feedback)
 
     # TODO: both controlsState and carControl valids should be set by
     #       sm.all_checks(), but this creates a circular dependency

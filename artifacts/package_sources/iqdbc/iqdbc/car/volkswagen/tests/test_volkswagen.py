@@ -18,6 +18,7 @@ from iqdbc.car.volkswagen.fingerprints import FW_VERSIONS
 Ecu = CarParams.Ecu
 
 CHASSIS_CODE_PATTERN = re.compile('[A-Z0-9]{2}')
+AWAITING_VIN_CAPTURE = {CAR.FORD_CAPRI_MK1}
 # TODO: determine the unknown groups
 SPARE_PART_FW_PATTERN = re.compile(b'\xf1\x87(?P<gateway>[0-9][0-9A-Z]{2})(?P<unknown>[0-9][0-9A-Z][0-9])(?P<unknown2>[0-9A-Z]{2}[0-9])([A-Z0-9]| )')
 
@@ -35,6 +36,9 @@ class TestVolkswagenPlatformConfigs:
     for platform in CAR:
       with subtests.test(platform=platform.value):
         assert len(platform.config.wmis) > 0, "WMIs not set"
+        if platform in AWAITING_VIN_CAPTURE:
+          assert len(platform.config.chassis_codes) == 0, "Remove from AWAITING_VIN_CAPTURE once the chassis code is known"
+          continue
         assert len(platform.config.chassis_codes) > 0, "Chassis codes not set"
         assert all(CHASSIS_CODE_PATTERN.match(cc) for cc in
                    platform.config.chassis_codes), "Bad chassis codes"

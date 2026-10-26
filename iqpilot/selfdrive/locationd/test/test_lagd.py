@@ -97,6 +97,39 @@ class TestLagd:
     assert msg.lateralDelay.validBlocks == 0
     assert msg.lateralDelay.calPerc == 0
 
+  @pytest.mark.parametrize("fingerprint", ["HYUNDAI_TUCSON_4TH_GEN", "HYUNDAI_SONATA", "TOYOTA_RAV4"])
+  @pytest.mark.parametrize("speed", [0.0, 15.0, 20.0, 25.0, 36.0])
+  @pytest.mark.parametrize("learned,blocks", [(0.3, 0), (0.2, BLOCK_NUM_NEEDED),
+                                             (0.55, BLOCK_NUM_NEEDED), (0.7, BLOCK_NUM_NEEDED)])
+  def test_tucson_model_delay_schedule(self, fingerprint, speed, learned, blocks):
+    estimator = LateralLagEstimator(car.CarParams(carFingerprint=fingerprint, steerActuatorDelay=0.1), DT)
+    estimator.reset(learned, blocks)
+    estimator.v_ego = speed
+    delay = estimator.get_msg(True).lateralDelay
+    raw_delay = learned if blocks else estimator.initial_lag
+    if fingerprint == "HYUNDAI_TUCSON_4TH_GEN":
+      highway_delay = min(0.6, max(0.35, learned)) if blocks else 0.5
+      expected = {0.0: 0.3, 15.0: 0.3, 20.0: (0.3 + highway_delay) / 2,
+                  25.0: highway_delay, 36.0: highway_delay}[speed]
+    else:
+      expected = min(MAX_LAG, max(MIN_LAG, raw_delay)) if blocks else raw_delay
+    assert delay.lateralDelay == pytest.approx(expected)
+    assert delay.lateralDelayEstimate == pytest.approx(raw_delay)
+    assert delay.validBlocks == blocks
+    assert delay.status == ("estimated" if blocks else "unestimated")
+
+  @pytest.mark.parametrize("fingerprint", ["HYUNDAI_TUCSON_4TH_GEN", "HYUNDAI_SONATA"])
+  @pytest.mark.parametrize("angular_valid,posenet_ok,inputs_ok", [
+    (True, True, True), (True, True, False), (False, True, True), (True, False, True),
+  ])
+  def test_tucson_pose_gate_keeps_yaw_and_posenet_checks(self, fingerprint, angular_valid, posenet_ok, inputs_ok):
+    estimator = LateralLagEstimator(car.CarParams(carFingerprint=fingerprint, steerActuatorDelay=0.1), DT)
+    msg = log.DeviceMotion(angularVelocityDevice=log.DeviceMotion.XYZMeasurement(valid=angular_valid),
+                          posenetOK=posenet_ok, inputsOK=inputs_ok)
+    estimator.handle_log(1.0, "deviceMotion", msg)
+    expected = angular_valid and posenet_ok and (inputs_ok or fingerprint == "HYUNDAI_TUCSON_4TH_GEN")
+    assert estimator.pose_valid == expected
+
   def test_estimator_basics(self, subtests):
     for lag_frames in range(LAGD_MIN_LAG_FRAMES, LAGD_MAX_LAG_FRAMES - 1):
       with subtests.test(msg=f"lag_frames={lag_frames}"):

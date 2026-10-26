@@ -4,8 +4,11 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 
 import pyray as rl
 
+from iqpilot.common.swaglog import cloudlog
+from iqpilot.common.turn_guard_settings import get_turn_guards_enabled, set_turn_guards_enabled
 from iqpilot.common.ui_settings import NO_NUDGE_WARNING
-from iqpilot.selfdrive.ui.mici.widgets.stock_button import BigButton, BigParamControl
+from iqpilot.selfdrive.ui.lib.turn_guard_settings import TURN_GUARDS_DESCRIPTION, turn_guards_availability
+from iqpilot.selfdrive.ui.mici.widgets.stock_button import BigButton, BigParamControl, BigToggle
 from iqpilot.selfdrive.ui.mici.widgets.stock_dialog import BigDialogBase
 from iqpilot.selfdrive.ui.mici.layouts.settings.iq_widgets import MappedParamToggle
 from iqpilot.selfdrive.ui.ui_state import ui_state
@@ -126,16 +129,46 @@ class SteeringLayoutMici(NavScroller):
     self._sab_settings_button.set_click_callback(lambda: gui_app.push_widget(self._sab_panel))
     self._lane_change = BigButton(tr("lane change"))
     self._lane_change.set_click_callback(lambda: gui_app.push_widget(self._lc_panel))
+    self._turn_guards = BigToggle(tr("turn guards"), initial_state=get_turn_guards_enabled(ui_state.params),
+                                  toggle_callback=self._on_turn_guards)
+    self._refresh_turn_guards()
 
     self._scroller.add_widgets([
-      self._aol, self._sab_settings_button, self._lane_change,
+      self._aol, self._sab_settings_button, self._lane_change, self._turn_guards,
     ])
 
   def _on_aol_toggled(self, checked: bool):
     if checked:
       ui_state.params.put_bool("AolUnifiedEngagementMode", True)
 
+  def _refresh_turn_guards(self):
+    available, reason = turn_guards_availability(ui_state.CP, ui_state.params)
+    saved = get_turn_guards_enabled(ui_state.params)
+    offroad = ui_state.is_offroad()
+    self._turn_guards.set_checked(saved)
+    self._turn_guards.set_enabled(offroad and (available or saved))
+    description = tr("Experimental") + ": " + tr(TURN_GUARDS_DESCRIPTION)
+    if not available:
+      description += " " + reason
+    if not offroad:
+      description += " " + tr("Park the vehicle to change this setting.")
+    self._turn_guards.set_value(description)
+
+  def _on_turn_guards(self, enabled: bool):
+    if not ui_state.is_offroad() or (enabled and not turn_guards_availability(ui_state.CP, ui_state.params)[0]):
+      self._refresh_turn_guards()
+      return
+    try:
+      set_turn_guards_enabled(ui_state.params, enabled)
+    except OSError:
+      cloudlog.exception("Failed to save turn guards")
+      self._refresh_turn_guards()
+      return
+    ui_state.params.put_bool("OnroadCycleRequested", True)
+    self._refresh_turn_guards()
+
   def _refresh(self):
+    self._refresh_turn_guards()
     offroad = ui_state.is_offroad()
     self._aol.refresh()
     self._aol.set_value(tr("on") if self._aol._checked else tr("off"))

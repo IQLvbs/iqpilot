@@ -178,6 +178,26 @@ static bool rt_angle_rate_limit_check(AngleSteeringLimits limits) {
   return violation;
 }
 
+static bool rt_native_curvature_rate_limit_check(NativeCurvatureSteeringLimits limits) {
+  bool violation = false;
+  uint32_t ts = microsecond_timer_get();
+
+  int max_rt_msgs = ((float)limits.frequency * MAX_RT_INTERVAL / 1e6 * 1.2) + 1;
+  uint32_t rt_msgs = native_curvature_state.rt_msgs + native_curvature_state.rt_msgs_prev;
+  if ((int)rt_msgs > max_rt_msgs) {
+    violation = true;
+  }
+  native_curvature_state.rt_msgs += 1U;
+
+  if (safety_get_ts_elapsed(ts, native_curvature_state.ts_check_last) >= (MAX_RT_INTERVAL / 2U)) {
+    native_curvature_state.rt_msgs_prev = native_curvature_state.rt_msgs;
+    native_curvature_state.rt_msgs = 0U;
+    native_curvature_state.ts_check_last = ts;
+  }
+
+  return violation;
+}
+
 // Safety checks for angle-based steering commands
 bool steer_angle_cmd_checks(int desired_angle, bool steer_control_enabled, const AngleSteeringLimits limits) {
   bool violation = false;
@@ -279,6 +299,52 @@ bool steer_angle_cmd_checks(int desired_angle, bool steer_control_enabled, const
     } else {
       desired_angle_last = SAFETY_CLAMP(angle_meas.values[0], -limits.max_angle, limits.max_angle);
     }
+  }
+
+  return violation;
+}
+
+bool steer_native_curvature_cmd_checks(int desired_curvature, bool steer_control_enabled, const NativeCurvatureSteeringLimits limits) {
+  static const float MAX_LATERAL_JERK = 3.0 + (EARTH_G * AVERAGE_ROAD_ROLL);
+
+  const float fudged_speed = SAFETY_MAX((vehicle_speed.min / VEHICLE_SPEED_FACTOR) - 1.0, 1.0);
+  bool violation = false;
+
+  if (is_lat_active() && steer_control_enabled) {
+    violation |= safety_max_limit_check(desired_curvature, limits.max_curvature, -limits.max_curvature);
+
+    const float max_curvature_rate_sec = MAX_LATERAL_JERK / (fudged_speed * fudged_speed);
+    const float max_curvature_delta = max_curvature_rate_sec / (float)limits.frequency;
+    const int max_curvature_delta_can = (max_curvature_delta * limits.curvature_to_can) + 1.;
+
+    const int highest_desired_curvature = native_curvature_state.desired_last + max_curvature_delta_can;
+    const int lowest_desired_curvature = native_curvature_state.desired_last - max_curvature_delta_can;
+    violation |= safety_max_limit_check(desired_curvature, highest_desired_curvature, lowest_desired_curvature);
+
+    const float max_curvature = MAX_LATERAL_ACCEL / (fudged_speed * fudged_speed);
+    const int max_curvature_can = (max_curvature * limits.curvature_to_can) + 1.;
+    violation |= safety_max_limit_check(desired_curvature, max_curvature_can, -max_curvature_can);
+
+    if (limits.max_curvature_error && ((vehicle_speed.values[0] / VEHICLE_SPEED_FACTOR) > limits.curvature_error_min_speed)) {
+      const int lowest_desired_curvature_error = native_curvature_state.meas.min - limits.max_curvature_error - 1;
+      const int highest_desired_curvature_error = native_curvature_state.meas.max + limits.max_curvature_error + 1;
+      violation |= safety_max_limit_check(desired_curvature, highest_desired_curvature_error, lowest_desired_curvature_error);
+    }
+
+    violation |= rt_native_curvature_rate_limit_check(limits);
+  }
+  native_curvature_state.desired_last = desired_curvature;
+
+  if (!steer_control_enabled) {
+    violation |= desired_curvature != 0;
+  }
+
+  if (!is_lat_active()) {
+    violation |= steer_control_enabled;
+  }
+
+  if (violation || !is_lat_active()) {
+    native_curvature_state.desired_last = 0;
   }
 
   return violation;

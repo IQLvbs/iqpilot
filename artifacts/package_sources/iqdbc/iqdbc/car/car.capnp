@@ -544,6 +544,13 @@ struct CarOutput {
   # the CarController are reflected in actuatorsOutput
   # and matches what is sent to the car
   actuatorsOutput @0 :CarControl.Actuators;
+
+  # carControlMonoTime == 0 means the requested values are not a valid external request
+  requestedTorque @1 :Float32;
+  requestedSteeringAngleDeg @2 :Float32;
+  carControlMonoTime @3 :UInt64;
+  actuationMonoTime @4 :UInt64;
+  latActive @5 :Bool;
 }
 
 # ****** car param ******

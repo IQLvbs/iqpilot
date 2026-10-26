@@ -149,10 +149,12 @@ class CarControllerParams:
       self.ACC_HUD_STEP = 6
       self.STEER_DRIVER_ALLOWANCE = 80
       self.STEER_DRIVER_MAX = 300
-      self.STEERING_POWER_MAX = 90
+      self.STEERING_POWER_MAX = 100
       self.STEERING_POWER_MIN = 4
       self.STEERING_POWER_STEP = 3
       self.CURVATURE_HANDOFF_RATE = 0.20
+      self.CURVATURE_SMOOTH_SPEED_BP = [3., 10., 25.]
+      self.CURVATURE_SMOOTH_TAU_V = [0.05, 0.0325, 0.03]
 
       self.CURVATURE_PID: structs.CarParams.LateralPIDTuning = structs.CarParams.LateralPIDTuning(
         kpBP=[10., 40.],
@@ -283,6 +285,7 @@ class WMI(StrEnum):
   MAN = "WMA"
   PORSCHE_SUV = "WP1"
   AUDI_SPORT = "WUA"
+  FORD_GERMANY_CAR = "WF0"
   VOLKSWAGEN_COMMERCIAL = "WV1"
   VOLKSWAGEN_COMMERCIAL_BUS_VAN = "WV2"
   VOLKSWAGEN_EUROPE_SUV = "WVG"
@@ -753,10 +756,19 @@ class CAR(Platforms):
   )
   CUPRA_BORN_MK1 = VolkswagenMEBPlatformConfig(
     [VWCarDocs("CUPRA Born 2022-23")],
-    VolkswagenCarSpecs(mass=1950, wheelbase=2.766, steerRatio=15.9),
+    VolkswagenCarSpecs(mass=1950, wheelbase=2.766, steerRatio=18.9),
     chassis_codes={"K1"},
     model_years={"N", "P"},
     wmis={WMI.SEAT},
+  )
+  FORD_CAPRI_MK1 = VolkswagenMEBPlatformConfig(
+    [
+      VWCarDocs("Ford Capri 2024-25"),
+      VWCarDocs("Ford Explorer EV 2024-25"),
+    ],
+    VolkswagenCarSpecs(mass=2100, wheelbase=2.767, steerRatio=18.7),
+    wmis={WMI.FORD_GERMANY_CAR},
+    flags=VolkswagenFlags.MEB_GEN2,
   )
   SKODA_ENYAQ_MK1 = VolkswagenMEBPlatformConfig(
     [VWCarDocs("Škoda Enyaq 2021-23")],

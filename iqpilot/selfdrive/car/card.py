@@ -26,6 +26,8 @@ from iqdbc.car.interfaces import CarInterfaceBase, RadarInterfaceBase
 from iqpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
 from iqpilot.selfdrive.car.cruise import VCruiseHelper
 from iqpilot.selfdrive.car.helpers import convert_iq_car_control_compact, convert_to_capnp
+from iqpilot.selfdrive.controls.lib.actuator_feedback import AppliedActuators, CAR_CONTROL_TIMEOUT_NS
+from iqpilot.selfdrive.controls.lib.hkg_tuning import uses_hkg_tuning
 
 from iqpilot.sab.behavior import apply_aol_experience_flags, apply_aol_brand_overrides
 from iqpilot.selfdrive.car import interfaces as iqpilot_interfaces
@@ -99,6 +101,7 @@ class Car:
     self.initialized_prev = False
 
     self.last_actuators_output = structs.CarControl.Actuators()
+    self.last_actuators_feedback = AppliedActuators()
 
     self.params = Params()
     self.joystick_buttons_prev = [False, False]
@@ -206,7 +209,8 @@ class Car:
 
     self.v_cruise_helper = VCruiseHelper(self.CP, self.CP_IQ)
     self._needs_iq_lead_data = self.CP.brand == "hyundai"
-    self.carcontrol_stale_frames = max(1, int(round(0.06 / DT_CTRL)))
+    self._pair_actuator_feedback = uses_hkg_tuning(self.CP)
+    self.carcontrol_stale_frames = max(1, int(round(CAR_CONTROL_TIMEOUT_NS / 1e9 / DT_CTRL)))
     self._perf = PerfTraceEmitter("card", pubmaster=self.pm)
     self._perf_ring = PerfTraceRing()
     self._last_sendcan_mono_ns: int | None = None
@@ -320,6 +324,8 @@ class Car:
     co_send = messaging.new_message('carOutput')
     co_send.valid = self.sm.all_checks(['carControl'])
     co_send.carOutput.actuatorsOutput = self.last_actuators_output
+    if self._pair_actuator_feedback:
+      self.last_actuators_feedback.write_to(co_send.carOutput)
     self.pm.send('carOutput', co_send)
 
     # kick off controlsd step while we actuate the latest carControl packet
@@ -365,14 +371,19 @@ class Car:
 
     if self.sm.all_alive(['carControl']):
       # send car controls over can
-      now_nanos = self.can_log_mono_time if REPLAY else int(time.monotonic() * 1e9)
       started = time.monotonic_ns()
       cc_iq = convert_iq_car_control_compact(CC_IQ, include_leads=self._needs_iq_lead_data)
       convert_us = (time.monotonic_ns() - started) // 1000
 
       model = self.sm['modelV2'] if self.sm.valid['modelV2'] else None
       started = time.monotonic_ns()
+      now_nanos = self.can_log_mono_time if REPLAY else time.monotonic_ns()
+      if self._pair_actuator_feedback:
+        request_time = self.sm.logMonoTime['carControl'] if self.sm.all_checks(['carControl']) else 0
+        feedback = AppliedActuators.capture(CC, request_time, now_nanos)
       self.last_actuators_output, can_sends = self.CI.apply(CC, cc_iq, now_nanos, model)
+      if self._pair_actuator_feedback:
+        self.last_actuators_feedback = feedback
       apply_us = (time.monotonic_ns() - started) // 1000
 
       started = time.monotonic_ns()
@@ -403,13 +414,17 @@ class Car:
 
         fallback_cc_iq = custom.IQCarControl.new_message()
 
-        now_nanos = self.can_log_mono_time if REPLAY else int(time.monotonic() * 1e9)
         started = time.monotonic_ns()
         cc_iq = convert_iq_car_control_compact(fallback_cc_iq, include_leads=self._needs_iq_lead_data)
         convert_us = (time.monotonic_ns() - started) // 1000
 
         started = time.monotonic_ns()
+        now_nanos = self.can_log_mono_time if REPLAY else time.monotonic_ns()
+        if self._pair_actuator_feedback:
+          feedback = AppliedActuators.capture(fallback_cc, 0, now_nanos)
         self.last_actuators_output, can_sends = self.CI.apply(fallback_cc.as_reader(), cc_iq, now_nanos)
+        if self._pair_actuator_feedback:
+          self.last_actuators_feedback = feedback
         apply_us = (time.monotonic_ns() - started) // 1000
 
         started = time.monotonic_ns()

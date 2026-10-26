@@ -31,6 +31,7 @@ int safety_fwd_hook(int bus_num, int addr);
 int set_safety_hooks(uint16_t mode, uint16_t param);
 
 void set_controls_allowed(bool c);
+bool vw_meb_steer_power_violation(int power, bool steer_control_enabled);
 bool get_controls_allowed(void);
 void set_heartbeat_engaged(bool c);
 bool get_longitudinal_allowed(void);
@@ -64,6 +65,11 @@ int get_desired_angle_last();
 void set_angle_meas(int min, int max);
 int get_angle_meas_min(void);
 int get_angle_meas_max(void);
+void set_desired_curvature_last(int t);
+int get_desired_curvature_last();
+void set_curvature_meas(int min, int max);
+int get_curvature_meas_min(void);
+int get_curvature_meas_max(void);
 
 bool get_cruise_engaged_prev(void);
 void set_cruise_engaged_prev(bool engaged);

@@ -180,6 +180,7 @@ class LateralLagEstimator:
     self.okay_window_sec = okay_window_sec
     self.min_recovery_buffer_sec = min_recovery_buffer_sec
     self.initial_lag = CP.steerActuatorDelay + 0.2
+    self.fingerprint = str(CP.carFingerprint)
     self.block_size = block_size
     self.block_count = block_count
     self.min_valid_block_count = min_valid_block_count
@@ -236,6 +237,13 @@ class LateralLagEstimator:
     else:
       lateralDelay.lateralDelay = self.initial_lag
 
+    if self.fingerprint == "HYUNDAI_TUCSON_4TH_GEN":
+      if lateralDelay.status == log.LateralDelay.Status.estimated:
+        highway_lag = min(0.60, max(0.35, float(lateralDelay.lateralDelay)))
+      else:
+        highway_lag = 0.50
+      lateralDelay.lateralDelay = float(np.interp(self.v_ego, [15.0, 25.0], [self.initial_lag, highway_lag]))
+
     if not np.isnan(current_mean_lag) and not np.isnan(current_std):
       lateralDelay.lateralDelayEstimate = current_mean_lag
       lateralDelay.lateralDelayEstimateStd = current_std
@@ -268,7 +276,10 @@ class LateralLagEstimator:
       calibrated_pose = self.calibrator.build_calibrated_pose(device_pose)
       self.yaw_rate = calibrated_pose.angular_velocity.yaw
       self.yaw_rate_std = calibrated_pose.angular_velocity.yaw_std
-      self.pose_valid = msg.angularVelocityDevice.valid and msg.posenetOK and msg.inputsOK
+      # Tucson's localizer holds inputsOK false, so no lag sample ever qualified; gate on yaw-rate validity and posenet instead
+      self.pose_valid = msg.angularVelocityDevice.valid and msg.posenetOK
+      if self.fingerprint != "HYUNDAI_TUCSON_4TH_GEN":
+        self.pose_valid = self.pose_valid and msg.inputsOK
     self.t = t
 
   def points_enough(self):

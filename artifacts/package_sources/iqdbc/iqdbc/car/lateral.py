@@ -10,6 +10,7 @@ ISO_LATERAL_ACCEL = 3.0  # m/s^2
 ISO_LATERAL_JERK = 5.0  # m/s^3
 AVERAGE_ROAD_ROLL = 0.06  # ~3.4 degrees
 MAX_LATERAL_ACCEL = ISO_LATERAL_ACCEL + (ACCELERATION_DUE_TO_GRAVITY * AVERAGE_ROAD_ROLL)  # ~3.6 m/s^2
+MAX_LATERAL_JERK = 3.0 + (ACCELERATION_DUE_TO_GRAVITY * AVERAGE_ROAD_ROLL)
 
 @dataclass
 class AngleSteeringLimits:
@@ -27,6 +28,23 @@ class AngleSteeringLimits:
 @dataclass
 class CurvatureSteeringLimits:
   CURVATURE_MAX: float
+  MAX_LATERAL_ACCEL: float = MAX_LATERAL_ACCEL
+  MAX_LATERAL_JERK: float = MAX_LATERAL_JERK
+
+  def apply_limits(self, apply_curvature: float, apply_curvature_last: float, v_ego: float, curvature: float,
+                   lat_active: bool, steer_step: int) -> float:
+    v_ego = max(v_ego, 1)
+
+    max_curvature = self.MAX_LATERAL_ACCEL / (v_ego ** 2)
+    new_apply_curvature = float(np.clip(apply_curvature, -max_curvature, max_curvature))
+
+    max_jerk = (self.MAX_LATERAL_JERK / (v_ego ** 2)) * (steer_step * DT_CTRL)
+    new_apply_curvature = float(np.clip(new_apply_curvature, apply_curvature_last - max_jerk, apply_curvature_last + max_jerk))
+
+    if not lat_active:
+      new_apply_curvature = curvature
+
+    return float(np.clip(new_apply_curvature, -self.CURVATURE_MAX, self.CURVATURE_MAX))
 
 
 def apply_driver_steer_torque_limits(apply_torque: int, apply_torque_last: int, driver_torque: float, LIMITS, steer_max: int | None = None):

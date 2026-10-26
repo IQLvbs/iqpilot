@@ -206,6 +206,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"IQGasOverrideBoost", {PERSISTENT, BOOL, "0"}},
     {"IQE2EDistanceControl", {PERSISTENT, BOOL, "0"}},
     {"MaxTimeOffroad", {PERSISTENT, INT, "1800"}},
+    {"MebAngleScaleRev", {PERSISTENT, INT, "0"}},
     {"NightMode", {PERSISTENT, BOOL, "0"}},
     {"newLeadMpc", {PERSISTENT, BOOL, "0"}},
     {"ModelRunnerTypeCache", {CLEAR_ON_ONROAD_TRANSITION, INT}},

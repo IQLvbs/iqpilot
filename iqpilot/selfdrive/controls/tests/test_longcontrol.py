@@ -126,8 +126,9 @@ def noisy_cruise_commands(control, samples=500):
                    for a_ego in rng.normal(0.0, 0.15, samples)])
 
 
-def test_ev6_pid_corrects_speed_error_not_measured_accel():
-  control, pid_calls = pid_control("KIA_EV6")
+@pytest.mark.parametrize("fingerprint", ["KIA_EV6", "HYUNDAI_TUCSON_4TH_GEN"])
+def test_speed_error_pid_corrects_speed_not_measured_accel(fingerprint):
+  control, pid_calls = pid_control(fingerprint)
 
   control.update(True, cruising(13.8, 0.4), 0.05, False, (-3.5, 2.0), v_target_now=13.9)
 
@@ -136,8 +137,9 @@ def test_ev6_pid_corrects_speed_error_not_measured_accel():
   assert kwargs["feedforward"] == 0.05
 
 
-def test_ev6_command_ignores_accelerometer_noise_at_steady_speed():
-  control, _ = pid_control("KIA_EV6")
+@pytest.mark.parametrize("fingerprint", ["KIA_EV6", "HYUNDAI_TUCSON_4TH_GEN"])
+def test_speed_error_command_ignores_accelerometer_noise_at_steady_speed(fingerprint):
+  control, _ = pid_control(fingerprint)
   assert np.ptp(noisy_cruise_commands(control)) == 0.0
 
 
@@ -172,6 +174,7 @@ def test_other_cars_keep_the_original_accel_loop(fingerprint):
 
 @pytest.mark.parametrize("fingerprint,speed_error,filtered", [
   ("KIA_EV6", True, False),
+  ("HYUNDAI_TUCSON_4TH_GEN", True, False),
   ("HYUNDAI_ELANTRA_2021", False, True),
   ("HYUNDAI_SONATA", False, False),
   ("KIA_EV6_PE", False, False),

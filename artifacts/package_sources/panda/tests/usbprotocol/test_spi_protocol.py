@@ -2,6 +2,7 @@
 import binascii
 import ctypes
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -57,7 +58,7 @@ void exchange(const uint8_t *tx, uint8_t *rx, uint16_t len) {
 uint32_t execution_count(void) { return executions; }
 ''')
     library = Path(cls.temp.name) / 'spi.so'
-    subprocess.run(['cc', '-shared', '-fPIC', '-std=c11', '-Wall', '-Wextra', '-Werror',
+    subprocess.run(['cc', '-shared', '-fPIC', *(['-Wl,-Bsymbolic'] if sys.platform == 'linux' else []), '-std=c11', '-Wall', '-Wextra', '-Werror',
                     '-I', str(Path(__file__).resolve().parents[2]), str(source), '-o', str(library)], check=True)
     cls.firmware = ctypes.CDLL(str(library))
     cls.firmware.exchange.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint16]

@@ -35,6 +35,7 @@ CONTROL_CASES = {
   "mqb_v0": ("VOLKSWAGEN_PASSAT_MK8", LatControlTorqueV0),
   "pid": ("HONDA_CIVIC", LatControlPID),
 }
+HYUNDAI_CASES = {"hkg": ("HYUNDAI_KONA_EV", LatControlTorque)}
 SCENARIO_FRAMES = 360
 
 
@@ -78,7 +79,7 @@ def build_controls(module, case, lookahead=False, slew=False, smooth=False, nnff
   params.put_bool("NeuralNetworkFeedForward", False)
   params.put_bool("IQLiveSteerDelay", False)
   params.put("IQSoftwareSteerDelay", "0.10")
-  car_name, controller_type = CONTROL_CASES[case]
+  car_name, controller_type = {**CONTROL_CASES, **HYUNDAI_CASES}[case]
   interface_type = interfaces[car_name]
   cp = interface_type.get_non_essential_params(car_name)
   cp_iq = interface_type.get_non_essential_params_iq(cp, car_name)

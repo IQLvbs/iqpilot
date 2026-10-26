@@ -22,6 +22,7 @@ from iqdbc.car.volkswagen.values import VolkswagenFlags
 
 from iqpilot.cereal import custom
 from iqpilot.common.params import Params
+from iqpilot.common.turn_guard_settings import get_turn_guards_enabled, reset_turn_guards, set_turn_guards_enabled
 from iqpilot.common.ui_settings import DISPLAY_BRIGHTNESS_VALUES, NO_NUDGE_WARNING, SLEEP_TIMER_VALUES
 from iqpilot.common.swaglog import cloudlog
 from iqpilot.selfdrive.car.vehicle_catalog import load_catalog
@@ -43,6 +44,7 @@ from iqpilot.selfdrive.ui.layouts.settings.device import DeviceLayout
 from iqpilot.selfdrive.ui.layouts.settings.software import SoftwareLayout
 from iqpilot.selfdrive.ui.layouts.settings.toggles import TogglesLayout
 from iqpilot.selfdrive.ui.lib.nnff_settings import nnff_availability
+from iqpilot.selfdrive.ui.lib.turn_guard_settings import TURN_GUARDS_DESCRIPTION, turn_guards_availability
 from iqpilot.selfdrive.ui.ui_state import device, ui_state
 from iqpilot.system.hardware import HARDWARE
 from iqpilot.system.hardware.hw import Paths
@@ -275,6 +277,13 @@ class SteeringLayout(Widget):
       description=lambda: tr("Blocks lane changes when a road edge is detected on the target side."),
       param="IQEdgeGuard",
     )
+    self._turn_guards_toggle = toggle_item(
+      title=lambda: tr("Turn Guards (Experimental)"),
+      description=lambda: tr(TURN_GUARDS_DESCRIPTION),
+      initial_state=get_turn_guards_enabled(ui_state.params),
+      callback=self._on_turn_guards,
+    )
+    self._refresh_turn_guards()
     self._steer_delay_toggle = toggle_item(lambda: tr("Self-Tuning Steer Delay"), "", param="IQLiveSteerDelay")
     self._delay_control = option_item(
       tr("Manual Delay Offset"), "IQSoftwareSteerDelay", 5, 50,
@@ -293,10 +302,38 @@ class SteeringLayout(Widget):
       IQLineSeparator(40),
       self._edge_guard_toggle,
       IQLineSeparator(40),
+      self._turn_guards_toggle,
+      IQLineSeparator(40),
       self._steer_delay_toggle,
       self._delay_control,
     ]
     return items
+
+  def _refresh_turn_guards(self):
+    available, reason = turn_guards_availability(ui_state.CP, ui_state.params)
+    saved = get_turn_guards_enabled(ui_state.params)
+    offroad = ui_state.is_offroad()
+    self._turn_guards_toggle.action_item.set_state(saved)
+    self._turn_guards_toggle.action_item.set_enabled(offroad and (available or saved))
+    description = tr(TURN_GUARDS_DESCRIPTION)
+    if not available:
+      description += "<br><br>" + reason
+    if not offroad:
+      description += "<br><br>" + tr("Park the vehicle to change this setting.")
+    self._turn_guards_toggle.set_description(description)
+
+  def _on_turn_guards(self, enabled: bool):
+    if not ui_state.is_offroad() or (enabled and not turn_guards_availability(ui_state.CP, ui_state.params)[0]):
+      self._refresh_turn_guards()
+      return
+    try:
+      set_turn_guards_enabled(ui_state.params, enabled)
+    except OSError:
+      cloudlog.exception("Failed to save turn guards")
+      self._refresh_turn_guards()
+      return
+    ui_state.params.put_bool("OnroadCycleRequested", True)
+    self._refresh_turn_guards()
 
   def _set_lane_change_mode(self, selected: int):
     current = int(ui_state.params.get("IQLaneChangeTimer", return_default=True))
@@ -328,6 +365,7 @@ class SteeringLayout(Widget):
   def _update_state(self):
     super()._update_state()
 
+    self._refresh_turn_guards()
     self._aol_toggle.action_item.set_enabled(ui_state.is_offroad())
     aol_enabled = self._aol_toggle.action_item.get_state()
     limited = self._has_limited_sab_options()
@@ -363,6 +401,7 @@ class SteeringLayout(Widget):
     self._scroller.render(rect)
 
   def show_event(self):
+    self._refresh_turn_guards()
     self._scroller.show_event()
 
 
@@ -559,6 +598,11 @@ class IQDeviceLayout(DeviceLayout):
   def _reset_settings():
     def _do_reset(result: int):
       if result == DialogResult.CONFIRM:
+        try:
+          reset_turn_guards(ui_state.params)
+        except OSError:
+          cloudlog.exception("Failed to reset turn guards")
+          return
         for _key in ui_state.params.all_keys():
           ui_state.params.remove(_key)
         HARDWARE.reboot()

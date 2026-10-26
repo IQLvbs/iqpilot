@@ -539,6 +539,15 @@ def create_fca_warning_light(CP, packer, CAN, frame):
       #'DATA102': 1,
     }
     ret.append(packer.make_can_msg("ADRV_0x160", CAN.ECAN, values))
+    if CP.flags & HyundaiFlags.CANFD_HDA2.value:
+      values = {
+        'AEB_SETTING': 0x3,
+        'SET_ME_2': 0x2,
+        'SET_ME_FF': 0xff,
+        'SET_ME_FC': 0xfc,
+        'SET_ME_9': 0x1,
+      }
+      ret.append(packer.make_can_msg("ADRV_0x160", CAN.ACAN, values))
   return ret
 
 def create_tcs_messages(packer, CAN, CS):
@@ -740,6 +749,13 @@ def _make_ccnc_values(values, CS, lat_active, frame, hud_control,
     if blink_pairs:
       _apply_radar_blink(values, blink_pairs, frame, t=blink_t)
 
+CAMERA_BUTTON_COPY_DISABLED = {"HYUNDAI_TUCSON_4TH_GEN"}
+
+
+def _camera_button_copy_enabled(CP, CS):
+  return not (str(CP.carFingerprint) in CAMERA_BUTTON_COPY_DISABLED and CS.cruise_btns_msg_canfd == "CRUISE_BUTTONS_ALT")
+
+
 def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
                          disp_angle, left_lane_warning, right_lane_warning,
                          enable_corner_radar, stopping, canfd_debug):
@@ -763,7 +779,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
       #  values = copy.copy(CS.adrv_0x160)
       #  ret.append(packer.make_can_msg("ADRV_0x160", CAN.ECAN, values))
 
-      if CS.cruise_buttons_msg is not None:
+      if CS.cruise_buttons_msg is not None and _camera_button_copy_enabled(CP, CS):
         values = copy.copy(CS.cruise_buttons_msg)
         # Keep the physical long press on ECAN for CarState, but don't forward it to CAM.
         values["NORMAL_CRUISE_MAIN_BTN"] = 0

@@ -225,7 +225,22 @@ def migrate_cached_vehicle_params_if_needed(params: Params):
     params.remove("LiveParameters")
 
 
+MEB_ANGLE_SCALE_REV = 1
+
+
+def discard_cache_from_before_meb_angle_scale_fix(params: Params, CP: car.CarParams):
+  from iqdbc.car.volkswagen.values import VolkswagenFlags
+  if CP.brand != "volkswagen" or not CP.flags & VolkswagenFlags.MEB:
+    return
+  if params.get("MebAngleScaleRev") == MEB_ANGLE_SCALE_REV:
+    return
+  params.remove("LiveParametersV2")
+  params.put("MebAngleScaleRev", MEB_ANGLE_SCALE_REV)
+
+
 def retrieve_initial_vehicle_params(params: Params, CP: car.CarParams, replay: bool, debug: bool):
+  if not replay:
+    discard_cache_from_before_meb_angle_scale_fix(params, CP)
   last_parameters_data = params.get("LiveParametersV2")
   last_carparams_data = params.get("CarParamsPrevRoute")
 

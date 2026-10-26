@@ -9,6 +9,8 @@ from iqpilot.common.params import Params
 
 ADRV_0x51 = 0x51
 LFAHDA_CLUSTER = 0x1E0
+ADRV_0x160 = 0x160
+CAMERA_BUS = 2
 HDA2_EV = HyundaiFlags.CANFD | HyundaiFlags.CANFD_HDA2 | HyundaiFlags.EV
 
 
@@ -65,7 +67,7 @@ def test_cars_that_keep_their_adas_ecu_send_neither(flags, openpilot_long, monke
 
 def test_panda_safety_transmits_the_replacements_for_this_ev6(monkeypatch, tmp_path):
   interface = ev6(monkeypatch, tmp_path)
-  sends = [s for s in sent_frames(interface) if s[0] in (ADRV_0x51, LFAHDA_CLUSTER)]
+  sends = [s for s in sent_frames(interface) if s[0] in (ADRV_0x51, LFAHDA_CLUSTER, ADRV_0x160)]
   safety = libsafety_py.libsafety
   param = HyundaiSafetyFlags.EV_GAS | HyundaiSafetyFlags.LONG | HyundaiSafetyFlags.CANFD_LKA_STEERING
   assert param == 21
@@ -75,3 +77,27 @@ def test_panda_safety_transmits_the_replacements_for_this_ev6(monkeypatch, tmp_p
   assert sends
   for addr, dat, bus in sends:
     assert safety.safety_tx_hook(libsafety_py.make_CANPacket(addr, bus, dat)), (hex(addr), bus)
+
+
+def test_hda2_long_sends_the_cameras_healthy_fca_frame_on_a_can(monkeypatch, tmp_path):
+  interface = ev6(monkeypatch, tmp_path)
+  can = CanBus(interface.CP)
+  frames = [s for s in sent_frames(interface) if s[0] == ADRV_0x160 and s[2] == can.ACAN]
+
+  assert len(frames) == 50
+  assert {bytes(s[1])[3:11] for s in frames} == {bytes.fromhex("0300000002fffc01")}
+
+
+def test_the_cameras_own_fca_frame_no_longer_reaches_the_car_while_it_is_replaced(monkeypatch, tmp_path):
+  interface = ev6(monkeypatch, tmp_path)
+  can = CanBus(interface.CP)
+  safety = libsafety_py.libsafety
+  param = HyundaiSafetyFlags.EV_GAS | HyundaiSafetyFlags.LONG | HyundaiSafetyFlags.CANFD_LKA_STEERING
+  assert safety.set_safety_hooks(structs.CarParams.SafetyModel.hyundaiCanfd, param) == 0
+  safety.init_tests()
+  safety.set_timer(10_000_000)
+
+  assert safety.safety_fwd_hook(CAMERA_BUS, ADRV_0x160) != -1
+  frame = next(s for s in sent_frames(interface) if s[0] == ADRV_0x160 and s[2] == can.ACAN)
+  assert safety.safety_tx_hook(libsafety_py.make_CANPacket(frame[0], frame[2], frame[1]))
+  assert safety.safety_fwd_hook(CAMERA_BUS, ADRV_0x160) == -1

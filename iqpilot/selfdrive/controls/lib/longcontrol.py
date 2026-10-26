@@ -12,7 +12,7 @@ CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 LongCtrlState = car.CarControl.Actuators.LongControlState
 
 # measured accel response: EV6 0.15 s dead time + 0.7 s lag, 2021 Elantra 0.4 s + 1.1 s, where a speed-error loop hunts
-SPEED_ERROR_PID_CARS = {"KIA_EV6"}
+SPEED_ERROR_PID_CARS = {"KIA_EV6", "HYUNDAI_TUCSON_4TH_GEN"}
 FILTERED_A_EGO_CARS = {"HYUNDAI_ELANTRA_2021"}
 A_EGO_FILTER_TS = 0.3
 # closed-loop replay of 2021 Elantra drives: at gain 1 the accel-error loop cycles throttle and brake around a smooth plan

@@ -13,6 +13,34 @@ ButtonEvent = car.CarState.ButtonEvent
 ButtonType = car.CarState.ButtonEvent.Type
 
 
+@pytest.mark.parametrize("metric,speed,expected", [
+  (False, 0.0, 40.2),
+  (False, 47 * CV.MPH_TO_MS, 72.4),
+  (False, 48 * CV.MPH_TO_MS, 80.5),
+  (True, 0.0, 40.0),
+  (True, 47 * CV.KPH_TO_MS, 45.0),
+  (True, 48 * CV.KPH_TO_MS, 50.0),
+  (True, 250 * CV.KPH_TO_MS, V_CRUISE_MAX),
+])
+def test_tucson_engage_and_reengage_adopt_current_speed(metric, speed, expected):
+  helper = VCruiseHelper(car.CarParams(carFingerprint="HYUNDAI_TUCSON_4TH_GEN"), custom.IQCarParams())
+  state = car.CarState(vEgo=speed, cruiseState={"available": True})
+  helper.update_v_cruise(state, enabled=False, is_metric=metric)
+  helper.initialize_v_cruise(state, True, False)
+  assert helper.v_cruise_kph == pytest.approx(expected)
+  assert helper.v_cruise_cluster_kph == helper.v_cruise_kph
+  helper.v_cruise_kph = 110
+  helper.initialize_v_cruise(state, False, False)
+  assert helper.v_cruise_kph == pytest.approx(expected)
+
+
+def test_tucson_pcm_cruise_keeps_factory_speed():
+  helper = VCruiseHelper(car.CarParams(carFingerprint="HYUNDAI_TUCSON_4TH_GEN", pcmCruise=True), custom.IQCarParams())
+  helper.v_cruise_kph = 90
+  helper.initialize_v_cruise(car.CarState(vEgo=20), True, False)
+  assert helper.v_cruise_kph == 90
+
+
 def run_cruise_simulation(cruise, e2e, personality, t_end=20.):
   man = Maneuver(
     '',

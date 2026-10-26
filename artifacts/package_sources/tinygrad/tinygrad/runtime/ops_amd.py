@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import cast
-import os, ctypes, struct, hashlib, functools, importlib, mmap, errno, array, contextlib, sys, weakref, itertools, collections, atexit
+import os, ctypes, struct, hashlib, functools, importlib, mmap, errno, array, contextlib, sys, weakref, itertools, collections, atexit, time
 assert sys.platform != 'win32'
 from dataclasses import dataclass
 from tinygrad.runtime.support.hcq import HCQCompiled, HCQAllocator, HCQBuffer, HWQueue, CLikeArgsState, HCQSignal, HCQProgram, FileIOInterface
@@ -25,6 +25,7 @@ SQTT = ContextVar("SQTT", abs(VIZ.value)>=2)
 SQTT_ITRACE_SE_MASK, SQTT_LIMIT_SE, SQTT_SIMD_SEL, SQTT_TOKEN_EXCLUDE = \
   ContextVar("SQTT_ITRACE_SE_MASK", 0b11), ContextVar("SQTT_LIMIT_SE", 0), ContextVar("SQTT_SIMD_SEL", 0), ContextVar("SQTT_TOKEN_EXCLUDE", 0)
 PMC = ContextVar("PMC", abs(VIZ.value)>=2)
+AMD_USB_POLL_US = getenv("AMD_USB_POLL_US", 500)
 EVENT_INDEX_PARTIAL_FLUSH = 4 # based on a comment in nvd.h
 WAIT_REG_MEM_FUNCTION_EQ  = 3 # ==
 WAIT_REG_MEM_FUNCTION_NEQ = 4 # !=
@@ -46,7 +47,8 @@ class AMDSignal(HCQSignal):
 
   def _sleep(self, time_spent_since_last_sleep_ms:int):
     # Reasonable to sleep for long workloads (which take more than 200ms) and only timeline signals.
-    if time_spent_since_last_sleep_ms > 200 and self.owner is not None: self.owner.iface.sleep(200)
+    if self.owner is not None and self.owner.is_usb() and AMD_USB_POLL_US: time.sleep(AMD_USB_POLL_US / 1e6)
+    elif time_spent_since_last_sleep_ms > 200 and self.owner is not None: self.owner.iface.sleep(200)
 
 class AMDComputeQueue(HWQueue):
   def __init__(self, dev:AMDDevice):
@@ -132,8 +134,9 @@ class AMDComputeQueue(HWQueue):
 
   def memory_barrier(self):
     pf = '0' if self.nbio.version[:2] != (7, 11) else '1'
-    self.wait_reg_mem(reg=getattr(self.nbio, f'regBIF_BX_PF{pf}_GPU_HDP_FLUSH_REQ').addr[0],
-                      reg_done=getattr(self.nbio, f'regBIF_BX_PF{pf}_GPU_HDP_FLUSH_DONE').addr[0], value=0xffffffff)
+    req, done = getattr(self.nbio, f'regBIF_BX_PF{pf}_GPU_HDP_FLUSH_REQ'), getattr(self.nbio, f'regBIF_BX_PF{pf}_GPU_HDP_FLUSH_DONE')
+    mask = req.fields_mask('cp2')
+    self.wait_reg_mem(reg=req.addr[0], reg_done=done.addr[0], value=mask, mask=mask, op=WAIT_REG_MEM_FUNCTION_EQ)
     return self.acquire_mem()
 
   def spi_config(self, tracing:bool):
@@ -890,8 +893,9 @@ class PCIIface(PCIIfaceBase):
       else: d.iface.dev_impl.ih.interrupt_handler()
 
       if reset and d.iface.dev_impl.recover(force=d.error_state is not None):
-        d.compute_queue.put_value = d.compute_queue.read_ptr[0] = d.compute_queue.write_ptr[0] = 0
-        d.iface.dev_impl.gfx.setup_ring(*d.compute_queue.params)
+        for q, ip in [(d.compute_queue, d.iface.dev_impl.gfx), *[(q, d.iface.dev_impl.sdma) for q in d.sdma_queues.values()]]:
+          q.put_value = q.read_ptr[0] = q.write_ptr[0] = 0
+          ip.setup_ring(*q.params)
         d.timeline_signal.value = d.timeline_value - 1
         d.error_state = None
 

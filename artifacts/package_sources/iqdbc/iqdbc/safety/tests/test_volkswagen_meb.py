@@ -38,7 +38,7 @@ class TestVolkswagenMebSafetyBase(common.CarSafetyTest):
   CURVATURE_TO_CAN = 149253.7313
   MAX_CURVATURE = 0.195
   SEND_RATE = 0.02
-  MAX_POWER = 225
+  MAX_POWER = 250
   POWER_FACTOR = 0.4
 
   def _speed_msg(self, speed_mps: float):
@@ -113,6 +113,19 @@ class TestVolkswagenMebSafetyBase(common.CarSafetyTest):
 
     power_over = (self.MAX_POWER + 1) * self.POWER_FACTOR
     self.assertTrue(self._tx(self._curvature_cmd_msg(0.0, True, power=power_over)))
+
+  def test_steer_power_limit_is_full_power(self):
+    full_power_raw = int(100 / self.POWER_FACTOR)
+    self.assertEqual(self.MAX_POWER, full_power_raw)
+    self.safety.set_controls_allowed(True)
+    self.assertFalse(self.safety.vw_meb_steer_power_violation(full_power_raw, True))
+    self.assertFalse(self.safety.vw_meb_steer_power_violation(0, True))
+    self.assertTrue(self.safety.vw_meb_steer_power_violation(full_power_raw + 1, True))
+    self.assertFalse(self.safety.vw_meb_steer_power_violation(0, False))
+    self.assertTrue(self.safety.vw_meb_steer_power_violation(1, False))
+
+    self.safety.set_controls_allowed(False)
+    self.assertTrue(self.safety.vw_meb_steer_power_violation(full_power_raw, True))
 
   def test_curvature_cmd_jerk_limit(self):
     speed = 10.0

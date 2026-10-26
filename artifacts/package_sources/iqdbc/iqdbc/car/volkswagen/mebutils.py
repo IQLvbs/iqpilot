@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 
 from iqdbc.car.common.filter_simple import FirstOrderFilter
@@ -304,6 +306,26 @@ class MultiplicativeUnwindPID(PIDController):
     self.control = np.clip(control, self.neg_limit, self.pos_limit)
     self.override_prev = override
     return self.control
+
+class CurvatureSmoother():
+  def __init__(self, speed_bp, tau_v, dt):
+    self.speed_bp = speed_bp
+    self.tau_v = tau_v
+    self.dt = dt
+    self.stage_1 = 0.
+    self.stage_2 = 0.
+
+  def reset(self, curvature):
+    self.stage_1 = curvature
+    self.stage_2 = curvature
+
+  def update(self, curvature, v_ego):
+    tau = float(np.interp(v_ego, self.speed_bp, self.tau_v))
+    alpha = 1. - math.exp(-self.dt / tau)
+    self.stage_1 += alpha * (curvature - self.stage_1)
+    self.stage_2 += alpha * (self.stage_1 - self.stage_2)
+    return self.stage_2
+
 
 class LatControlCurvature():
   def __init__(self, pid_params, limit, rate):

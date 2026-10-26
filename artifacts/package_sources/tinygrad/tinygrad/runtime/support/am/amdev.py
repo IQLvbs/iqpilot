@@ -177,9 +177,8 @@ class AMDev:
         if self.is_hive():
           if reset_mode: return # in reset mode, do not raise
           raise RuntimeError("Malformed state. Use extra/amdpci/hive_reset.py to reset the hive")
-        # a mode1 reset over live engines at max clocks can wedge the GPU until it is power cycled
+        # a mode1 reset over live engines can wedge the GPU until it is power cycled; lowering clocks first wedges it after amdgpu's fini
         self.gfx.fini_hw()
-        self.smu.set_clocks(level=0)
         self.gfx.halt_engines()
         self.sdma.halt_engines()
         time.sleep(0.1)
@@ -193,10 +192,10 @@ class AMDev:
     # Re-initialize main blocks
     self.init_hw(self.gfx, self.sdma)
 
-    if (max_power:=getenv("AM_POWER_LIMIT", 0.0)) > 0:
-      self.smu.set_power_limit(max_power)
-      self.smu.set_clocks(level=None)
-    else: self.smu.set_clocks(level=-1) # last level, max perf.
+    if (max_power:=getenv("AM_POWER_LIMIT", 0.0)) > 0: self.smu.set_power_limit(max_power)
+    levels, perf = {"auto": None, "high": -1, "low": 0}, getenv("AM_PERF_LEVEL", "auto" if max_power > 0 else "high")
+    assert perf in levels, f"AM_PERF_LEVEL must be one of {list(levels)}, got {perf!r}"
+    self.smu.set_clocks(level=levels[perf])
     for ip in [self.soc, self.gfx]: ip.set_clockgating_state()
     self.reg("regSCRATCH_REG7").write(AMDev.Version)
     self.reg("regSCRATCH_REG6").write(1) # set initialized state.
@@ -240,6 +239,8 @@ class AMDev:
     if DEBUG >= 3: print(f"am {self.devfmt}: Start recovery")
     self.ih.interrupt_handler()
     self.gfx.reset_mec()
+    self.sdma.fini_hw()
+    self.sdma.init_hw()
     self.is_err_state = False
     if DEBUG >= 3: print(f"am {self.devfmt}: Recovery complete")
     return True

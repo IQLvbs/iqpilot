@@ -75,3 +75,30 @@ def test_local_tinygrad_models_execute(monkeypatch):
   policy_outputs = policy_runner.run_model()
   assert "plan" in policy_outputs
   assert "desire_state" in policy_outputs
+
+
+def test_custom_named_supercombo_is_classified_by_type_not_filename():
+  waypoint = _Bundle([_Model(
+    ModelType.supercombo,
+    "IQ_MEMSTP2g10TB7_step3000_a630_navsplit_tinygrad.pkl.iqc",
+    "IQ_MEMSTP2g10TB7_step3000_a630_navsplit_metadata.pkl.iqc",
+  )])
+  assert model_runner_mod._is_supercombo_bundle(waypoint) is True
+  assert model_runner_mod._is_fused_bundle(waypoint) is False
+
+  conventional = _Bundle([_Model(
+    ModelType.supercombo,
+    "driving_supercombo_novaspark_tinygrad.pkl.iqc",
+    "driving_supercombo_novaspark_metadata.pkl.iqc",
+  )])
+  assert model_runner_mod._is_supercombo_bundle(conventional) is True
+
+
+def test_fused_artifact_carrying_supercombo_type_is_not_classified_supercombo():
+  fused = _Bundle([_Model(
+    ModelType.supercombo,
+    "driving_fused_tinygrad.pkl",
+    "driving_fused_metadata.pkl",
+  )])
+  assert model_runner_mod._is_fused_bundle(fused) is True
+  assert model_runner_mod._is_supercombo_bundle(fused) is False
