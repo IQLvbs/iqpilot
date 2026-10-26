@@ -19,7 +19,12 @@ dependencies = [
   # core
   "cffi",
   "scons",
+  "pycapnp",
   "numpy >=2.0",
+  "msgq",
+  "iqdbc",
+  "panda",
+  "tinygrad",
 
   # body / webrtcd
   "aiohttp",
@@ -122,7 +127,7 @@ packages = [
 allow-direct-references = true
 
 [tool.uv.extra-build-dependencies]
-panda = [{ requirement = "iqdbc", match-runtime = true }]
+panda = ["iqdbc"]
 
 [tool.pytest.ini_options]
 minversion = "6.0"
@@ -239,3 +244,10 @@ unsupported-operator = "ignore"
 # Ignore not-subscriptable - false positives from dynamic types
 not-subscriptable = "ignore"
 # not-iterable errors are now fixed
+
+[tool.uv.sources]
+msgq = { path = "artifacts/package_sources/msgq" }
+iqdbc = { path = "artifacts/package_sources/iqdbc" }
+panda = { path = "artifacts/package_sources/panda" }
+tinygrad = { path = "artifacts/package_sources/tinygrad" }
+pycapnp = { path = "artifacts/package_sources/pycapnp" }

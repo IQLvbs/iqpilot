@@ -1,0 +1,14 @@
+Import('env', 'arch', 'common', 'messaging', 'transformations')
+
+loc_libs = [messaging, common, 'pthread', 'dl']
+
+iqlocd_sources = ["atlas_loc_core.cc", "models/orbit_kf.cc"]
+
+lenv = env.Clone()
+iqlocd = lenv.Program("iqlocd", iqlocd_sources, LIBS=loc_libs + transformations)
+
+if GetOption('extras'):
+  tool_env = lenv.Clone()
+  tool_env.Append(CPPDEFINES=[('main', 'iqlocd_daemon_main')])
+  tool_core = tool_env.Object('tools/atlas_loc_core_tool', 'atlas_loc_core.cc')
+  lenv.Program('tools/relocalize_rlog', ['tools/relocalize_rlog.cc', tool_core, 'models/orbit_kf.cc'], LIBS=loc_libs + transformations)

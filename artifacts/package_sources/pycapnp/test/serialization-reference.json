@@ -1,0 +1,61 @@
+{
+  "source_commit": "caee18aeef0a9a54ad8f98292a325a1675a43bec",
+  "cases": [
+    {
+      "size": 0,
+      "text_size": 0,
+      "sha256": "5d1e945d489c17931e0bd82f6daba3f8657795d6abbe81bded5dd34e3c4bab6d",
+      "bytes": 256,
+      "segments": 1
+    },
+    {
+      "size": 1,
+      "text_size": 1,
+      "sha256": "c5f683aec8691d1049acf8913bfdea5d35a126ee4c2745814aebbeea070bde16",
+      "bytes": 264,
+      "segments": 1
+    },
+    {
+      "size": 7,
+      "text_size": 7,
+      "sha256": "18478024be5786d8d07e68355a5f81f66dbd1ee48d328e4e375d04ca2bda9682",
+      "bytes": 272,
+      "segments": 1
+    },
+    {
+      "size": 1024,
+      "text_size": 1024,
+      "sha256": "fc40c903202d5c6eee2ffa7bd3be3e651badbc8623dbebe3fbc7361010bed360",
+      "bytes": 3328,
+      "segments": 1
+    },
+    {
+      "size": 8192,
+      "text_size": 8192,
+      "sha256": "c4eefda6030b879873ff39dc6a0d17cdc8f059af8ba24869a8b8f3802928dd89",
+      "bytes": 24856,
+      "segments": 3
+    },
+    {
+      "size": 65536,
+      "text_size": 65536,
+      "sha256": "a846392964ce60df5e15ff8c50d400b9783ca2d8b07216f85e9dc24c0706f7fa",
+      "bytes": 196888,
+      "segments": 3
+    },
+    {
+      "size": 1048576,
+      "text_size": 1048576,
+      "sha256": "ef3d77a4e1f80f2cf839f73c04688410957d6948f284ae0fd46f29a679f973fe",
+      "bytes": 3146008,
+      "segments": 3
+    },
+    {
+      "size": 8192,
+      "text_size": 0,
+      "sha256": "bf2e44b6eaa518a054ab8a260fcb03e154b0e07866096fa7c222c018abb7baaf",
+      "bytes": 8464,
+      "segments": 2
+    }
+  ]
+}

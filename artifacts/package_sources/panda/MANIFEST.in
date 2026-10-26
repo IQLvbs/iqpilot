@@ -1,0 +1,7 @@
+include SConstruct SConscript
+graft board
+graft certs
+graft crypto
+graft drivers
+graft python
+global-exclude __pycache__ *.pyc *.o *.os *.d *.elf *.so

@@ -1,0 +1,5 @@
+include README.md LICENSE.md
+recursive-include vendor/capnproto *.h *.c++ *.txt *.md *.capnp
+recursive-include capnp *.py *.pyx *.pxd *.h *.cpp
+recursive-include test *.py *.capnp *.binary *.txt *.json
+exclude capnp/lib/capnp.cpp capnp/lib/capnp.h capnp/lib/capnp_api.h

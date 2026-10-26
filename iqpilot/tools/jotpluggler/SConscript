@@ -1,0 +1,104 @@
+import os
+import subprocess
+import sys
+
+venv_site_packages = os.path.join(Dir("#").abspath, ".venv", "lib", "python3.12", "site-packages")
+if os.path.isdir(venv_site_packages) and venv_site_packages not in sys.path:
+  sys.path.insert(0, venv_site_packages)
+
+import imgui
+import iqdbc
+from iqpilot.tools.cabana.dbc.generate_dbc_json import generate_dbc_dict
+from iqpilot.common.basedir import BASEDIR
+
+Import('env', 'arch', 'common', 'messaging', 'visionipc', 'cereal', 'replay_lib', 'ffmpeg_libs')
+
+jot_env = env.Clone()
+# imgui.MESA_DIR only exists on the larch64 wheel; skip missing paths to avoid an ld search-path warning
+jot_env["LIBPATH"] += [p for p in [imgui.MESA_DIR] if os.path.isdir(p)]
+jot_env["CPPPATH"] += [imgui.INCLUDE_DIR]
+# IQ.Pilot patch: no comma-deps-bootstrap-icons wheel here, so BOOTSTRAP_ICONS_TTF is
+# not defined; icons.cc reads the TTF vendored under tools/jotpluggler/assets instead.
+jot_env["CXXFLAGS"] += [
+  "-DGLFW_INCLUDE_NONE",
+  '-DCABANA_PYTHON=\'"%s"\'' % sys.executable,
+  '-DCABANA_ROOT=\'"%s"\'' % os.path.realpath(BASEDIR),
+  '-DJOTP_REPO_ROOT=\'"%s"\'' % os.path.realpath(BASEDIR),
+  '-DIQDBC_DBC_PATH=\'"%s"\'' % iqdbc.DBC_PATH,
+]
+
+def write_car_fingerprint_to_dbc_header(target, source, env):
+  pairs = generate_dbc_dict()
+
+  lines = [
+    "#pragma once",
+    "",
+    "#include <string_view>",
+    "#include <utility>",
+    "",
+    "inline constexpr std::pair<std::string_view, std::string_view> kCarFingerprintToDbc[] = {",
+  ]
+  lines.extend(f'  {{"{fingerprint}", "{dbc}"}},' for fingerprint, dbc in sorted(pairs.items()))
+  lines.extend([
+    "};",
+    "",
+    "inline std::string_view dbc_for_car_fingerprint(std::string_view fingerprint) {",
+    "  for (const auto &[car_fingerprint, dbc] : kCarFingerprintToDbc) {",
+    "    if (car_fingerprint == fingerprint) return dbc;",
+    "  }",
+    "  return {};",
+    "}",
+    "",
+  ])
+
+  with open(str(target[0]), "w") as f:
+    f.write("\n".join(lines))
+
+  return None
+
+def generate_event_extractors(target, source, env):
+  subprocess.check_call([
+    sys.executable,
+    "iqpilot/tools/jotpluggler/generate_event_extractors.py",
+    os.path.realpath(BASEDIR),
+    os.path.dirname(iqdbc.__file__),
+    str(target[0]),
+  ])
+  return None
+
+generated_dbc_sources = sorted(jot_env.Glob(os.path.join(iqdbc.DBC_PATH, "*_generated.dbc")))
+if not generated_dbc_sources:
+  raise RuntimeError(f"no generated DBCs in {iqdbc.DBC_PATH}")
+generated_dbcs = [
+  jot_env.Command(os.path.join("generated_dbcs", os.path.basename(str(source))), source, Copy("$TARGET", "$SOURCE"))
+  for source in generated_dbc_sources
+]
+car_fingerprint_to_dbc = jot_env.Command(
+  "car_fingerprint_to_dbc.h", ["../cabana/dbc/generate_dbc_json.py"], jot_env.PrettyAction(write_car_fingerprint_to_dbc_header, 'GEN'),
+)
+event_extractors = jot_env.Command("generated_event_extractors.h", [
+    "generate_event_extractors.py",
+    jot_env.Glob("#iqpilot/cereal/*.capnp"),
+    jot_env.Glob("#iqpilot/cereal/include/*.capnp"),
+    os.path.join(os.path.dirname(iqdbc.__file__), "car", "car.capnp"),
+    os.path.join(os.path.dirname(iqdbc.__file__), "car", "include", "c++.capnp"),
+  ],
+  jot_env.PrettyAction(generate_event_extractors, 'GEN'),
+)
+
+# IQ.Pilot patch: iqpilot's replay_lib resolves route/API work via libcurl (vs upstream's
+# Python downloader), so jotpluggler needs curl; api.cc signs konn3kt JWTs with OpenSSL
+# primitives, and visionipc references OpenCL. Both must also be linked.
+libs = [replay_lib, common, messaging, visionipc, cereal, File(f"{imgui.LIB_DIR}/libimgui.a"), File(f"{imgui.LIB_DIR}/libglfw3.a")] + \
+        ffmpeg_libs + ["bz2", "zstd", "curl", "ssl", "crypto", "m", "pthread"]
+if arch == "Darwin":
+  jot_env["FRAMEWORKS"] = ["OpenGL", "OpenCL", "Cocoa", "IOKit", "CoreFoundation", "CoreVideo", "CoreMedia", "VideoToolbox"]
+else:
+  libs += ["GL", "OpenCL", "dl"]
+
+shared_routes = jot_env.Object("konn3kt_routes", "../cabana/routes.cc")
+shared_auth = jot_env.Object("konn3kt_auth", "../cabana/ui/auth.cc")
+program = jot_env.Program("jotpluggler", jot_env.Glob("*.cc") + shared_routes + shared_auth, LIBS=libs)
+jot_env.Depends(program, generated_dbcs)
+jot_env.Depends(program, car_fingerprint_to_dbc)
+jot_env.Depends(program, event_extractors)
