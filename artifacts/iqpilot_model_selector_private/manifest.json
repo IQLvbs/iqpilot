@@ -1,5 +1,5 @@
 {
-  "bundle_version": 1793020255,
+  "bundle_version": 1793111380,
   "python/_iqclosure/_vendored.json": {
     "mode": 420,
     "sha256": "8756c85acb0d6b34f059386aee6177bf9a5d8fb01b509dd81c8848441ef7929b",
@@ -187,53 +187,53 @@
   },
   "python/iqpilot_private/models/_enroll.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "51e7ded20d6cc9a3e5b3504fdee0845348530f66ae4ab966b05cdbe04d4fb586",
-    "size": 999640
+    "sha256": "2f746b53b8bf1d3a94b62aff4e01799da58478f85bc5ada8aa3fc6a3a2392dd5",
+    "size": 1130952
   },
   "python/iqpilot_private/models/_iqcore_binding.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "eda86746f71c2916edff66b126ecb247c3903f0fd3f5e04a315e49f5b5ce62a5",
-    "size": 1065224
+    "sha256": "a009ef4c25254a37e1f7e5d29a496f44c8b8c64a2ed1e018a447e6edb4b2466f",
+    "size": 1065240
   },
   "python/iqpilot_private/models/big_catalog.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "e06cdf34fedf534e6ce14d262144945e711557329252d992c75e865a42bb6558",
-    "size": 1130712
+    "sha256": "8940ddf707228aa2d84c7898304f4c3015fa480d097afa0b0943eb7bd2cb3e4c",
+    "size": 1065240
   },
   "python/iqpilot_private/models/egpu_model.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "4f6079de52efb4f2d6ed00540660930ee58927f8230ca7babd186a96a74634d6",
-    "size": 999704
+    "sha256": "5bddcdb629d08ad204bb0474a731990665ebde57b5b0a83198ddd23d67a7c5cf",
+    "size": 1065336
   },
   "python/iqpilot_private/models/emac_model_meta.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "cd78df0ff364299892610e3ee971d4eddf54f940df2e31f1bf7a5895360e36e4",
-    "size": 1065256
+    "sha256": "fdb0d10bd644000b64add89b7b5c959ebbdb99a4aff35ee15f5ac490291c6f65",
+    "size": 1130840
   },
   "python/iqpilot_private/models/fetcher.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "3ef1fb6c22fd72e0da2ed811f196242484a4aa9adb447648ba1527121919a66c",
-    "size": 1065496
+    "sha256": "360db5c82ac5fb7fc469d0f4e6f3c9e66e5cad718c689735edf320bd1b3cb564",
+    "size": 1196440
   },
   "python/iqpilot_private/models/git_auth.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "05b0945ba0775b8b9095d7a64d5cbacf14293140f3b79b581c88dbfc0c63c7cc",
-    "size": 1130920
+    "sha256": "f3e480084e98df618162eb866618f405d1e384609738e042754522c2db0db3c3",
+    "size": 1196472
   },
   "python/iqpilot_private/models/helpers.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "c4163c52c9c3adcbf35324fa959810ded42d68ab6e4ca12860878387a4835abf",
+    "sha256": "d3f27a00c07cafe45fda2cf1585a6dbb97630212eb0209991d5b2ee4eb86b8ab",
     "size": 1130888
   },
   "python/iqpilot_private/models/iqc.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "99a544e1bb10fb391ac80ef476d16c3d612214648e075d0d98cede39236f7e54",
-    "size": 1327688
+    "sha256": "7d4e7eff3bf719c4fcc1ce1992f7ee4ab746cdafb8029c1de1778642af103cc8",
+    "size": 1393384
   },
   "python/iqpilot_private/models/manager.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "79a5729c4b97919301bf7ed4bd510e7a90bef90f4197bf995fff204056a777c0",
-    "size": 1327448
+    "sha256": "0aa09fd09b115533811e878329f09ae7fba3b14114d681b70b45a3181747c5c3",
+    "size": 1262008
   },
   "runtime": {
     "entries": {
@@ -244,15 +244,15 @@
     }
   },
   "signatures": {
-    "python/iqpilot_private/models/_enroll.cpython-312-aarch64-linux-gnu.so": "3o/1sRPJwAwmQcNAyWhq/jvq86SN94diLhFTz1kjWnyoMhFsXuN91wbSnY16MHSdewNFRx6eWMnDQERr0PgiBA==",
-    "python/iqpilot_private/models/_iqcore_binding.cpython-312-aarch64-linux-gnu.so": "IFZCR9b7xDxjJLWu9cN4UzrbaNOm7lJXlP7IKx8TaCypG/DoCv7X6tGXbXEur99Xo+FgJfCl4hcv89j9K+fcCA==",
-    "python/iqpilot_private/models/big_catalog.cpython-312-aarch64-linux-gnu.so": "i1dPIaWnHds2Ot0KIVRlt7l8sIElH2KMHMiFoa9uXEZTx5tpoxtqg3CL+7dmD816eDkVYP0iAHOeyFarg+LtCA==",
-    "python/iqpilot_private/models/egpu_model.cpython-312-aarch64-linux-gnu.so": "IMvbngaJASgB4AJ77UJ42xw4lIz3VApgUocWNK7UNurbvSVJdXARfXrtHQmuLv3Rxul64MpGwgB6W0FyKbsTBQ==",
-    "python/iqpilot_private/models/emac_model_meta.cpython-312-aarch64-linux-gnu.so": "iSdvFxPlDGP4od+Bj43qpHLz7rv5WErQbamOOn1THJHC3DOCfeeSOr1agoaiABFkXsuVmqUZ1hxuQmrU+NSCBQ==",
-    "python/iqpilot_private/models/fetcher.cpython-312-aarch64-linux-gnu.so": "D6pqONJoH2uzPGBPFL3hfUfT9DtaIpdct0rwkc5E6jTTHHlfGjs53rRNmSb+NAhK1V9VTw30Lr7usxQPx8nLDg==",
-    "python/iqpilot_private/models/git_auth.cpython-312-aarch64-linux-gnu.so": "cIjZEPaTYbA0oAhoL2waLSbQI5JX+97IA1Ogdf1FaOusFf4eg74XweWgFKPSNvX+Qx3KawbutFKmhuoS5DYdCw==",
-    "python/iqpilot_private/models/helpers.cpython-312-aarch64-linux-gnu.so": "VrhDgZqVcfwdGevmP9GuBCGPDExaRAs6q79lGY1/EjpGbGG9yKzjhhzrxbeW5SnGzKiRJKLc73wSkmr1evdpDg==",
-    "python/iqpilot_private/models/iqc.cpython-312-aarch64-linux-gnu.so": "s67pFhPhVlIXxT3UbijmRC7kr92TA1/JLflVBYf3C4vRKqQZBfcygPkaVHTzKvV6IN1vHDEjjGv+tpwoMyAsCA==",
-    "python/iqpilot_private/models/manager.cpython-312-aarch64-linux-gnu.so": "G5cgvYq+F3XMhK6ozcIlxy86u6L6+xfuV3A4iHxaUCP33N5Pk7AXAYCQ53+QpbOYxDSUlbhWkQYKpNOcRG3kAA=="
+    "python/iqpilot_private/models/_enroll.cpython-312-aarch64-linux-gnu.so": "FJQARvkzGAE2rLinL7FORl2OcQCtLOXNsIjoD2eoEJkCPB25uSUhTsGFxvrwl3kNDOme7pcPpx/fEYJA2iXyBQ==",
+    "python/iqpilot_private/models/_iqcore_binding.cpython-312-aarch64-linux-gnu.so": "FAc1db8w7YiXqwnhQLvwxuLY5+hr71YVIVGoat3G/GpXsBFynfe9LiLTYucPEdF5CJXPUhratU+oAgNhKjKWBQ==",
+    "python/iqpilot_private/models/big_catalog.cpython-312-aarch64-linux-gnu.so": "rOyu/zWfzFCf9uyJkp1/KkdV2hgC4nXt8VOBRMmG1Vu8TeK2ZhX/m5WZ6Tv+Bc/okR7jZmD2ot/rsG2IunjCAA==",
+    "python/iqpilot_private/models/egpu_model.cpython-312-aarch64-linux-gnu.so": "jnICObFo1BUEONiSaIobM5Rhg90v5nXsx0Qy4aK3acoF8N6SpEN+k2z6gZnIVDatU/6qFJQP9eH/XpaX/vkQDQ==",
+    "python/iqpilot_private/models/emac_model_meta.cpython-312-aarch64-linux-gnu.so": "BVXcC3HNlSdwGOBzegKVNC215KVFNzK5LDi05TzSAO31EShEOuxywxh5R+N+5HytVh+lyR2cA99jl9OumttjAA==",
+    "python/iqpilot_private/models/fetcher.cpython-312-aarch64-linux-gnu.so": "/8GVT0ErILMppzGBWUNsVNkx2YBC4leQnup4ONbiza/A/cGj/dBf0n4J/PdM+HXi6GDDc9nKLaeC9YdzddpQBw==",
+    "python/iqpilot_private/models/git_auth.cpython-312-aarch64-linux-gnu.so": "A41r1PLQtCoLiMpkviHEQWSh7xW2erMNVCwRNfwrr6oeU69NtsoT7TStil9E6NC1cdgHXxOF2GjGKBn/wPb3Bw==",
+    "python/iqpilot_private/models/helpers.cpython-312-aarch64-linux-gnu.so": "8BhP7iWmkPIA9t6l7PQqAsyMtXQD4zCICLAWK7NauKQLZNyS+ez3uug3rynXTSCg8B690zAfk0O6rxNwDxJ9CA==",
+    "python/iqpilot_private/models/iqc.cpython-312-aarch64-linux-gnu.so": "T4XSJJi4TVgykEEc5Imq8iCUrdSr2UTtfn5afQzQO3jPTjsmOCyQ1NdztrnOjpGEKztXmEc+6uemcrbtqbvmAQ==",
+    "python/iqpilot_private/models/manager.cpython-312-aarch64-linux-gnu.so": "Y21ywWcS136d7X6mcqNM6R0eQWXm7wBDbxY3vvwZYWvkRJUQY/M5xYF3SHqKEYtRd7DEW0iTNNQcG7SuwDh9Cg=="
   }
 }

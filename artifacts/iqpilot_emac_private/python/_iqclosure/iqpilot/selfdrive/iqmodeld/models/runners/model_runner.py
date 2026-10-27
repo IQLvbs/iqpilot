@@ -195,7 +195,8 @@ def _is_fused_bundle(bundle) -> bool:
 
 
 def _is_supercombo_bundle(bundle) -> bool:
-  return _single_artifact_prefix(bundle, "driving_supercombo_")
+  models = _qcom_models(bundle)
+  return len(models) == 1 and models[0].type.raw == ModelType.supercombo and not _is_fused_bundle(bundle)
 
 
 def _is_split_bundle(bundle) -> bool:
