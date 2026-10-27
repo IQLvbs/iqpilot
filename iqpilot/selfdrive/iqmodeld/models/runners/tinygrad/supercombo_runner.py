@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 
 from iqpilot.common.params import Params
-from iqpilot.selfdrive.iqmodeld.models.runners.model_runner import CUSTOM_MODEL_PATH, NumpyDict, ShapeDict, SliceDict
+from iqpilot.selfdrive.iqmodeld.models.runners.model_runner import CUSTOM_MODEL_PATH, NumpyDict, ShapeDict, SliceDict, _META_MAX_BYTES, wait_for_model_load_memory
 from iqpilot.selfdrive.iqmodeld.models.runners.model_runner import ModelRunner
 from iqpilot.selfdrive.iqmodeld.models.split_model_constants import SplitModelConstants
 from iqpilot.selfdrive.iqmodeld.parser import PhaseParser
@@ -77,9 +77,10 @@ class TinygradSupercomboRunner(TinygradSupercomboRuntime, ModelRunner):
         self._pkl_path = pkl_path
         self._expected_sha256 = getattr(getattr(self._model_data.model.artifact, "downloadUri", None), "sha256", "") or ""
         self._verify_artifact_file()
+        wait_for_model_load_memory(int(os.path.getsize(pkl_path) / (1024 * 1024) * 2.5) + 256)
         self._m: dict[Any, Any] = load_pickle(pkl_path)
 
-        self._meta = self._m['metadata']
+        self._meta = self._load_meta()
         self._ish = self._meta['input_shapes']
         self._slices = {k: v for k, v in self._meta['output_slices'].items() if k != 'pad'}
         self._hidden_slice = self._meta['output_slices']['hidden_state']
@@ -96,6 +97,38 @@ class TinygradSupercomboRunner(TinygradSupercomboRuntime, ModelRunner):
         self._cam: tuple[int, int] | None = None
         self._prev_desire = np.zeros(self._ish['desire_pulse'][2], dtype=np.float32)
         self._blob_cache: dict[tuple[str, int], Any] = {}
+
+    def _load_meta(self) -> dict[Any, Any]:
+        if 'metadata' in self._m:
+            return self._m['metadata']
+        # some models ship metadata as a separate sealed .iqc artifact rather than embedding it in
+        # the model pkl; load it through the same sealed path, verified like the model artifact
+        meta_art = getattr(self._model_data.model, "metadata", None)
+        meta_name = getattr(meta_art, "fileName", "") or ""
+        if not meta_name:
+            raise KeyError("supercombo model has no embedded 'metadata' and no metadata artifact")
+        meta_path = os.path.join(CUSTOM_MODEL_PATH, meta_name)
+        meta_size = os.path.getsize(meta_path)
+        if meta_size > _META_MAX_BYTES:
+            raise ValueError(f"supercombo metadata artifact {meta_name} is artifact-sized ({meta_size}B); refusing to unpickle")
+        expected = getattr(getattr(meta_art, "downloadUri", None), "sha256", "") or ""
+        if expected:
+            actual = _file_sha256(meta_path)
+            if actual != expected:
+                try:
+                    os.remove(meta_path)
+                except OSError:
+                    pass
+                redownload_msg = self._schedule_active_bundle_redownload()
+                raise RuntimeError(
+                    "supercombo metadata SHA mismatch: "
+                    f"expected {expected}, got {actual} for {meta_path}. "
+                    f"Deleted the stale cached file{redownload_msg}."
+                )
+        meta = load_pickle(meta_path)
+        if not isinstance(meta, dict):
+            raise ValueError(f"supercombo metadata artifact {meta_name} is not a dict")
+        return meta
 
     def _verify_artifact_file(self) -> None:
         if not self._expected_sha256:

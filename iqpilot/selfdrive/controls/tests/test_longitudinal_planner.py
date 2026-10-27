@@ -5,7 +5,8 @@ from types import SimpleNamespace
 from iqpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LEAD_T_IDXS_MODEL, T_IDXS
 from iqpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc
 from iqpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalPlanSource
-from iqpilot.selfdrive.controls.lib.longitudinal_planner import J_CRUISE, get_accel_candidates, get_cruise_accel, get_e2e_accel
+from iqpilot.selfdrive.controls.lib.longitudinal_planner import (A_CRUISE_MIN, A_CRUISE_MIN_NAV, J_CRUISE, get_accel_candidates,
+                                                                 get_cruise_accel, get_e2e_accel)
 
 
 def model_velocity(v_ego, v_future):
@@ -22,6 +23,17 @@ class TestCruiseAccel:
     accel, _ = get_cruise_accel(True, v_cruise, v_ego, a_cruise_prev, 0.0, SimpleNamespace(), dt, 0.0, True)
 
     assert accel == pytest.approx(a_cruise_prev + direction * J_CRUISE * dt)
+
+  @pytest.mark.parametrize("e2e", [False, True])
+  def test_nav_target_brakes_harder_than_cruise(self, e2e):
+    def settle(min_accel):
+      accel = 0.0
+      for _ in range(100):
+        accel, _ = get_cruise_accel(e2e, 13.9, 19.4, accel, 0.0, SimpleNamespace(steerRatio=15.3, wheelbase=2.64), 0.05, 0.0, True, min_accel)
+      return accel
+
+    assert settle(A_CRUISE_MIN) == pytest.approx(A_CRUISE_MIN)
+    assert settle(A_CRUISE_MIN_NAV) == pytest.approx(A_CRUISE_MIN_NAV)
 
 
 class TestE2eCruiseConvergence:

@@ -196,6 +196,8 @@ V_CRUISE_MAX = 200  # ~ 124 mph
 V_CRUISE_UNSET = 255
 V_CRUISE_INITIAL = 40
 V_CRUISE_INITIAL_EXPERIMENTAL_MODE = 105
+ENGAGE_AT_CURRENT_SPEED_CARS = {"HYUNDAI_TUCSON_4TH_GEN"}
+ENGAGE_FLOOR_KPH = 40.0
 IMPERIAL_INCREMENT = round(CV.MPH_TO_KPH, 1)
 
 ButtonEvent = car.CarState.ButtonEvent
@@ -226,6 +228,7 @@ class VCruiseHelper(VCruiseHelperIQ):
     self._slc_accel_held = False
     self._slc_accel_release_frames = 0
     self._slc_pcm_speed_last = None
+    self._is_metric = False
 
   def _update_slc_accel_gesture(self, CS):
     self._slc_accel_release_frames = max(0, self._slc_accel_release_frames - 1)
@@ -259,6 +262,7 @@ class VCruiseHelper(VCruiseHelperIQ):
     return self.CP.brand == "volkswagen" and self.CP.openpilotLongitudinalControl and not self.CP.pcmCruise
 
   def update_v_cruise(self, CS, enabled, is_metric):
+    self._is_metric = is_metric
     self.v_cruise_kph_last = self.v_cruise_kph
     self._update_slc_accel_gesture(CS)
 
@@ -348,7 +352,18 @@ class VCruiseHelper(VCruiseHelperIQ):
         self.button_change_states[b.type.raw] = {"standstill": CS.cruiseState.standstill, "enabled": enabled}
 
   def initialize_v_cruise(self, CS, experimental_mode: bool, iq_dynamic_mode: bool) -> None:
-    if self.CP.pcmCruise or self.v_cruise_initialized:
+    if self.CP.pcmCruise:
+      return
+
+    if self.CP.carFingerprint in ENGAGE_AT_CURRENT_SPEED_CARS:
+      step_kph = 5.0 if self._is_metric else 5.0 * CV.MPH_TO_KPH
+      v_kph = max(CS.vEgo * CV.MS_TO_KPH, ENGAGE_FLOOR_KPH)
+      v_kph = round(v_kph / step_kph) * step_kph
+      self.v_cruise_kph = float(np.clip(round(v_kph, 1), self.v_cruise_min, V_CRUISE_MAX))
+      self.v_cruise_cluster_kph = self.v_cruise_kph
+      return
+
+    if self.v_cruise_initialized:
       return
 
     initial_experimental_mode = experimental_mode and not iq_dynamic_mode

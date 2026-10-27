@@ -112,13 +112,15 @@ def test_planner_latches_model_limit_after_cruise_update(monkeypatch, e2e, a_mod
   monkeypatch.setattr(lp.LongitudinalPlannerIQ, "update", lambda *args: None)
   monkeypatch.setattr(lp.LongitudinalPlannerIQ, "update_targets", lambda self, sm, v_ego, v_cruise: v_cruise)
   monkeypatch.setattr(lp, "get_accel_from_plan", lambda *args, **kwargs: (a_mpc, False))
-  monkeypatch.setattr(lp, "get_cruise_accel", lambda *args: (a_cruise, False))
+  cruise_calls = []
+  monkeypatch.setattr(lp, "get_cruise_accel", lambda *args: cruise_calls.append(args) or (a_cruise, False))
   planner = object.__new__(lp.LongitudinalPlanner)
   planner.CP = SimpleNamespace(openpilotLongitudinalControl=True, longitudinalActuatorDelay=0.1)
   planner.dt = DT_MDL
   planner.v_desired_filter = SimpleNamespace(x=FAST, update=lambda v: v)
   planner.a_desired = 0.0
   planner.a_cruise = -1.0
+  planner.source = lp.IQPlanSource.cruise
   planner.stopping_speed = 0.5
   planner.exp_speed_conv = False
   planner.launch_armed = False
@@ -151,6 +153,10 @@ def test_planner_latches_model_limit_after_cruise_update(monkeypatch, e2e, a_mod
   planner.update(sm)
   assert planner.accel_boost.value == pytest.approx(ACCEL_BOOST_RATE * DT_MDL if eligible else 0.0)
   assert planner.output_a_target == pytest.approx(min(a_mpc, a_cruise, planner.accel_boost.apply(a_model)) if e2e else min(a_mpc, a_cruise))
+  assert cruise_calls[-1][-1] == lp.A_CRUISE_MIN
+  planner.source = lp.IQPlanSource.nav
+  planner.update(sm)
+  assert cruise_calls[-1][-1] == lp.A_CRUISE_MIN_NAV
 
 
 def test_boost_bar_only_replaces_the_confidence_ball_with_the_param_on(monkeypatch):

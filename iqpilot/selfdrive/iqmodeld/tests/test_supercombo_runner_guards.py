@@ -361,3 +361,14 @@ def test_packed_pkl_extra_inputs_ride_the_packed_tail(tmp_path: Path, monkeypatc
   np.testing.assert_array_equal(packed[PACKED_STANDARD_LEN:PACKED_STANDARD_LEN + 32], 0.0)
   np.testing.assert_array_equal(packed[PACKED_STANDARD_LEN + 32:PACKED_STANDARD_LEN + 96], route_line.ravel())
   np.testing.assert_array_equal(packed[PACKED_STANDARD_LEN + 96:], drive_profile.ravel())
+
+
+def test_wait_for_model_load_memory_raises_when_insufficient(monkeypatch):
+  monkeypatch.setattr(model_runner_mod, "mem_available_mb", lambda: 100)
+  with pytest.raises(RuntimeError):
+    model_runner_mod.wait_for_model_load_memory(500, timeout_s=0.2)
+
+
+def test_wait_for_model_load_memory_passes_when_enough(monkeypatch):
+  monkeypatch.setattr(model_runner_mod, "mem_available_mb", lambda: 4096)
+  model_runner_mod.wait_for_model_load_memory(500, timeout_s=0.2)

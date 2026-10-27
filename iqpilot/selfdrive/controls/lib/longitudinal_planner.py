@@ -18,12 +18,15 @@ from iqpilot.common.swaglog import cloudlog
 from iqpilot.common.issue_debug import log_issue_limited
 
 from iqpilot.selfdrive.controls.lib.iq_longitudinal_planner import LongitudinalPlannerIQ
+from iqpilot.selfdrive.controls.lib.iq_longitudinal_planner import LongitudinalPlanSource as IQPlanSource
 from iqpilot.selfdrive.controls.lib.accel_boost import AccelBoost
 from iqpilot.selfdrive.controls.lib.e2e_distance_controller import E2EDistanceController
 
 A_CRUISE_MAX_VALS = [2.0, 1.6, 0.8, 0.6]
 A_CRUISE_MAX_BP = [0., 10.0, 25., 40.]
 A_CRUISE_MIN = -0.5
+# navd shapes its turn/curve speed targets assuming this deceleration (IQ_ROUTE_DECEL in navd route_manager)
+A_CRUISE_MIN_NAV = -1.5
 J_CRUISE = 1.0
 CRUISE_STOP_SPEED = 1.0
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
@@ -62,7 +65,7 @@ def get_lead_distance(radarState):
     return radarState.leadTwo.dRel
   return 0
 
-def get_cruise_accel(e2e, v_cruise, v_ego, a_cruise_prev, angle_steers, CP, dt, accel_coast, allow_throttle):
+def get_cruise_accel(e2e, v_cruise, v_ego, a_cruise_prev, angle_steers, CP, dt, accel_coast, allow_throttle, min_accel=A_CRUISE_MIN):
   max_accel = ACCEL_MAX if e2e else get_max_accel(v_ego)
 
   if not e2e:
@@ -75,7 +78,7 @@ def get_cruise_accel(e2e, v_cruise, v_ego, a_cruise_prev, angle_steers, CP, dt, 
     coast_limit = np.interp(v_ego, [MIN_ALLOW_THROTTLE_SPEED, MIN_ALLOW_THROTTLE_SPEED*2], [max_accel, clipped_accel_coast])
     max_accel = min(max_accel, coast_limit)
 
-  target_accel = np.clip(v_cruise - v_ego, A_CRUISE_MIN, max_accel)
+  target_accel = np.clip(v_cruise - v_ego, min_accel, max_accel)
   target_accel = float(np.clip(target_accel, a_cruise_prev - J_CRUISE * dt, a_cruise_prev + J_CRUISE * dt))
 
   cruise_should_stop = v_cruise == 0.0 and v_ego < CRUISE_STOP_SPEED
@@ -241,7 +244,8 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
     e2e = self.is_e2e(sm)
     self.a_cruise, cruise_should_stop = get_cruise_accel(e2e, v_cruise, v_ego, self.a_cruise,
                                                           steer_angle_without_offset, self.CP, self.dt,
-                                                          accel_coast, self.allow_throttle)
+                                                          accel_coast, self.allow_throttle,
+                                                          A_CRUISE_MIN_NAV if self.source == IQPlanSource.nav else A_CRUISE_MIN)
 
     model_limited = e2e and output_a_target_e2e < min(output_a_target_mpc, self.a_cruise) - 0.1
     self.accel_boost.update(sm['selfdriveState'].enabled, v_ego, sm['carState'].gasPressed, model_limited)

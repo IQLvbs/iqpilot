@@ -2,6 +2,7 @@
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
 """
 import os
+import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -64,6 +65,38 @@ _configure_accelerator()
 # referenced as metadata (pre-fix manifests self-referenced the artifact), and
 # unpickling it here double-loads the model onto the GPU
 _META_MAX_BYTES = 1 << 20
+
+MODEL_LOAD_MEMORY_WAIT_S = 90.0
+
+
+def mem_available_mb() -> int:
+  try:
+    with open("/proc/meminfo") as f:
+      for line in f:
+        if line.startswith("MemAvailable:"):
+          return int(line.split()[1]) // 1024
+  except OSError:
+    pass
+  # off-device (no /proc/meminfo) reports a huge value so the guard below is a no-op there
+  return 1 << 20
+
+
+def wait_for_model_load_memory(need_mb: int, timeout_s: float = MODEL_LOAD_MEMORY_WAIT_S) -> None:
+  # the qcom device is RAM-tight (~3.6GB); loading a big model into the boot storm (mapd+ui+
+  # dmonitoringmodeld resident) OOM-killed iqmodeld mid-load, which took the whole model stack
+  # down and cascaded into driving faults. Raise before allocating instead, so the daemon falls
+  # back to the default model gracefully; wait first so a transient boot spike settles.
+  import gc
+  gc.collect()
+  deadline = time.monotonic() + timeout_s
+  avail = mem_available_mb()
+  while avail < need_mb and time.monotonic() < deadline:
+    cloudlog.warning(f"model load deferring: {avail}MB available < {need_mb}MB needed; waiting for memory to settle")
+    time.sleep(5.0)
+    gc.collect()
+    avail = mem_available_mb()
+  if avail < need_mb:
+    raise RuntimeError(f"insufficient memory to load model: {avail}MB available < {need_mb}MB needed")
 
 
 def load_artifact_metadata(metadata_filename):

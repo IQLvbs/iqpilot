@@ -88,8 +88,28 @@ def write_time_to_param(params, param) -> None:
   t = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
   params.put(param, t)
 
-def run(cmd: list[str], cwd: str | None = None) -> str:
-  return subprocess.check_output(cmd, cwd=cwd, stderr=subprocess.STDOUT, encoding='utf8')
+GIT_PROBE_TIMEOUT = 90.0
+GIT_FETCH_TIMEOUT = 1200.0
+
+
+def run(cmd: list[str], cwd: str | None = None, timeout: float | None = None) -> str:
+  if timeout is None:
+    return subprocess.check_output(cmd, cwd=cwd, stderr=subprocess.STDOUT, encoding='utf8')
+  with subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        encoding='utf8', start_new_session=True) as proc:
+    try:
+      output, _ = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+      # a bare timeout SIGKILLs git but leaves its git-remote-https child orphaned and hung; kill the group
+      try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+      except ProcessLookupError:
+        pass
+      proc.communicate()
+      raise
+  if proc.returncode != 0:
+    raise subprocess.CalledProcessError(proc.returncode, cmd, output)
+  return output
 
 
 def has_git_repo(path: str) -> bool:
@@ -178,6 +198,22 @@ def _clear_stale_proxy_config(cwd: str) -> None:
                    check=False, capture_output=True)
     cloudlog.info("updater: restored public release remote git.konn3kt.com/IQ.Lvbs/IQ.Pilot")
 
+def _strip_git_extraheaders(cwd: str) -> None:
+  # the prebuilt checkout and the auth helpers above install an http.<url>.extraheader
+  # Authorization: Basic <CI token>; once it expires git sends it, gets 401, and can't fall back to
+  # anonymous — so every update dies with "could not read Username". Strip it (the release repo is
+  # public). MUST run after the auth helpers, which re-add it.
+  try:
+    raw = subprocess.check_output(["git", "-C", cwd, "config", "--get-regexp", r"^http\..*\.extraheader$"],
+                                  text=True, stderr=subprocess.DEVNULL)
+  except subprocess.CalledProcessError:
+    return
+  for line in raw.strip().splitlines():
+    config_key = line.split()[0] if line.strip() else ""
+    if config_key:
+      subprocess.run(["git", "-C", cwd, "config", "--unset-all", config_key], check=False, capture_output=True)
+
+
 def configure_git_auth(cwd: str) -> None:
   if _configure_broker_git_proxy(cwd):
     return
@@ -195,6 +231,8 @@ def configure_git_auth(cwd: str) -> None:
     configure_user_creds(cwd)
   except Exception:
     cloudlog.exception("updater: user git credentials unavailable")
+
+  _strip_git_extraheaders(cwd)
 
 
 def _configure_broker_git_proxy(cwd: str) -> bool:
@@ -219,6 +257,9 @@ def setup_git_options(cwd: str) -> None:
     ("protocol.version", "2"),
     ("gc.auto", "0"),
     ("gc.autoDetach", "false"),
+    # git has no network timeout of its own; abort a transfer stalled under 1KB/s for 60s
+    ("http.lowSpeedLimit", "1000"),
+    ("http.lowSpeedTime", "60"),
   ]
   for option, value in git_cfg:
     run(["git", "config", option, value], cwd)
@@ -422,15 +463,26 @@ class Updater:
     # authenticate before the very first remote op (the internet probe below),
     # since anonymous access is firewalled
     configure_git_auth(BASEDIR)
+    setup_git_options(BASEDIR)
 
     try:
-      run(["git", "ls-remote", "origin", "HEAD"], BASEDIR)
+      run(["git", "ls-remote", "origin", "HEAD"], BASEDIR, timeout=GIT_PROBE_TIMEOUT)
       self._has_internet = True
-    except subprocess.CalledProcessError:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
       self._has_internet = False
 
-    setup_git_options(BASEDIR)
-    output = run(["git", "ls-remote", "--heads"], BASEDIR)
+    if not self._has_internet:
+      cloudlog.info("updater: remote unreachable; skipping branch check")
+      self.branches = defaultdict(lambda: None)
+      return
+
+    try:
+      output = run(["git", "ls-remote", "--heads"], BASEDIR, timeout=GIT_PROBE_TIMEOUT)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+      cloudlog.exception("updater: ls-remote --heads failed")
+      self._has_internet = False
+      self.branches = defaultdict(lambda: None)
+      return
 
     self.branches = defaultdict(lambda: None)
     for line in output.split('\n'):
@@ -466,7 +518,7 @@ class Updater:
     run(["git", "config", "--replace-all", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"], BASEDIR)
 
     branch = self.target_branch
-    git_fetch_output = run(["git", "fetch", "origin", branch], BASEDIR)
+    git_fetch_output = run(["git", "fetch", "origin", branch], BASEDIR, timeout=GIT_FETCH_TIMEOUT)
     cloudlog.info("git fetch success: %s", git_fetch_output)
 
     cloudlog.info("git reset in progress")
