@@ -545,6 +545,18 @@
       ],
       "req": "Co-Pilot360 Assist+"
     },
+    "FORD_CAPRI_MK1|2024-2025": {
+      "label": "Ford Capri 2024-25",
+      "id": "FORD_CAPRI_MK1",
+      "mk": "Ford",
+      "grp": "volkswagen",
+      "mdl": "Capri",
+      "yrs": [
+        "2024",
+        "2025"
+      ],
+      "req": "Adaptive Cruise Control (ACC) & Lane Assist"
+    },
     "FORD_ESCAPE_MK4|2020-2022": {
       "label": "Ford Escape 2020-22",
       "id": "FORD_ESCAPE_MK4",
@@ -647,6 +659,18 @@
         "2024"
       ],
       "req": "Co-Pilot360 Assist+"
+    },
+    "FORD_CAPRI_MK1|2024-2025#2": {
+      "label": "Ford Explorer EV 2024-25",
+      "id": "FORD_CAPRI_MK1",
+      "mk": "Ford",
+      "grp": "volkswagen",
+      "mdl": "Explorer EV",
+      "yrs": [
+        "2024",
+        "2025"
+      ],
+      "req": "Adaptive Cruise Control (ACC) & Lane Assist"
     },
     "FORD_EXPLORER_MK6|2020-2024#2": {
       "label": "Ford Explorer Hybrid 2020-24",
