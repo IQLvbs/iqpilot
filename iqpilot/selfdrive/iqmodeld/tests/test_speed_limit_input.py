@@ -22,3 +22,13 @@ def test_cereal_publishes_declared_speed_limit_slice_and_zeros_otherwise():
   assert empty.iqDriveModelData.speedLimitMps == 0.0
   assert empty.iqDriveModelData.speedLimitProb == 0.0
   assert not empty.iqDriveModelData.speedLimitIsMph
+
+
+def test_publishes_nav_turn_probs_only_for_models_that_have_them():
+  from iqpilot.selfdrive.iqmodeld.messaging import populate_iq_model_nav_turn
+  msg = messaging.new_message("iqDriveModelData")
+  assert not populate_iq_model_nav_turn(msg.iqDriveModelData, {})
+  assert len(msg.iqDriveModelData.navTurnProbs) == 0
+  assert not populate_iq_model_nav_turn(msg.iqDriveModelData, {"blinker_probabilities": np.array([[np.nan, 0.5, 0.5]])})
+  assert populate_iq_model_nav_turn(msg.iqDriveModelData, {"blinker_probabilities": np.array([[0.1, 0.8, 0.1]])})
+  assert list(msg.iqDriveModelData.navTurnProbs) == pytest.approx([0.1, 0.8, 0.1])

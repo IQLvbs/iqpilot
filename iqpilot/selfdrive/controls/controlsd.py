@@ -17,7 +17,7 @@ from iqdbc.car.car_helpers import interfaces
 from iqdbc.car.vehicle_model import VehicleModel
 from iqpilot.common.steer_delay import lateral_action_delay
 from iqpilot.selfdrive.controls.lib.drive_helpers import clip_curvature
-from iqpilot.selfdrive.controls.lib.actuator_feedback import SteeringActuatorFeedback, steering_feedback_from_output
+from iqpilot.selfdrive.controls.lib.actuator_feedback import SteeringActuatorFeedback, car_output_supports_pairing, steering_feedback_from_output
 from iqpilot.selfdrive.controls.lib.hkg_tuning import uses_hkg_tuning
 from iqpilot.selfdrive.controls.lib.curvature_lookahead import select_lateral_curvature
 from iqpilot.selfdrive.controls.lib.latcontrol import LatControl
@@ -347,7 +347,7 @@ class Controls(IQControlsLayer):
     actuator_feedback = SteeringActuatorFeedback(True)
     if CC.latActive:
       angle_control = self.CP.steerControlType in (car.CarParams.SteerControlType.angle, car.CarParams.SteerControlType.curvatureDEPRECATED)
-      if uses_hkg_tuning(self.CP):
+      if uses_hkg_tuning(self.CP) and car_output_supports_pairing():
         # replay rewrites envelope times into the recorded clock without virtualizing the host clock
         feedback_now = max(self.sm.logMonoTime.values()) if REPLAY else time.monotonic_ns()
         actuator_feedback = steering_feedback_from_output(

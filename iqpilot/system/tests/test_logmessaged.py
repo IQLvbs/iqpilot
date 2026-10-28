@@ -7,7 +7,7 @@ import iqpilot.cereal.messaging as messaging
 from iqpilot.system.manager.process_config import managed_processes
 from iqpilot.system.hardware.hw import Paths
 from iqpilot.common.swaglog import cloudlog, ipchandler
-from iqpilot.system.logmessaged import close_log_handler
+from iqpilot.system.logmessaged import close_log_handler, shutdown
 
 
 def test_close_log_handler_tolerates_rollover_interruption():
@@ -16,6 +16,23 @@ def test_close_log_handler_tolerates_rollover_interruption():
       raise ValueError
 
   close_log_handler(InterruptedHandler())
+
+
+def test_shutdown_releases_sockets_and_handler():
+  calls = []
+
+  class Recorder:
+    def __init__(self, label):
+      self.label = label
+
+    def close(self):
+      calls.append(f"{self.label}.close")
+
+    def term(self):
+      calls.append(f"{self.label}.term")
+
+  shutdown(Recorder("sock"), Recorder("ctx"), Recorder("handler"))
+  assert calls == ["sock.close", "ctx.term", "handler.close"]
 
 
 class TestLogmessaged:

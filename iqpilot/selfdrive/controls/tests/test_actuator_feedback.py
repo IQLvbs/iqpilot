@@ -1,13 +1,15 @@
 # Copyright (c) 2026 IQ.Lvbs. All rights reserved.
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import capnp
 import pytest
 
 from iqpilot.cereal import car
 from iqpilot.selfdrive.controls.lib.actuator_feedback import (
-  AppliedActuators, CAR_CONTROL_TIMEOUT_NS, steering_feedback_from_output, steering_limited_from_feedback,
+  AppliedActuators, CAR_CONTROL_TIMEOUT_NS, PAIRING_FIELDS, car_output_supports_pairing, steering_feedback_from_output,
+  steering_limited_from_feedback,
 )
 
 
@@ -137,3 +139,15 @@ struct LegacyCarOutput { actuatorsOutput @0 :Car.CarControl.Actuators; }
     assert not limited(decoded)
   with legacy.LegacyCarOutput.from_bytes(payload) as decoded:
     assert decoded.actuatorsOutput.torque == pytest.approx(0.2)
+
+
+def test_pairing_requires_every_field_in_the_loaded_schema():
+  assert car_output_supports_pairing(SimpleNamespace(fieldnames=["actuatorsOutput", *PAIRING_FIELDS]))
+  assert not car_output_supports_pairing(SimpleNamespace(fieldnames=["actuatorsOutput"]))
+  for missing in PAIRING_FIELDS:
+    fields = ["actuatorsOutput", *(name for name in PAIRING_FIELDS if name != missing)]
+    assert not car_output_supports_pairing(SimpleNamespace(fieldnames=fields))
+
+
+def test_pairing_support_follows_the_real_car_output_schema():
+  assert car_output_supports_pairing() == (set(PAIRING_FIELDS) <= set(car.CarOutput.schema.fieldnames))

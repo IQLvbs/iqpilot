@@ -1,9 +1,23 @@
 # Copyright (c) 2026 IQ.Lvbs. All rights reserved.
+import functools
 import math
 from dataclasses import dataclass
 
 CAR_CONTROL_TIMEOUT_NS = 60_000_000
 STEER_TORQUE_SATURATION_THRESHOLD = 1e-2
+PAIRING_FIELDS = ("requestedTorque", "requestedSteeringAngleDeg", "carControlMonoTime", "actuationMonoTime", "latActive")
+
+
+def car_output_supports_pairing(schema=None) -> bool:
+  if schema is None:
+    return _loaded_car_output_supports_pairing()
+  return set(PAIRING_FIELDS) <= set(schema.fieldnames)
+
+
+@functools.cache
+def _loaded_car_output_supports_pairing() -> bool:
+  from iqpilot.cereal import car
+  return car_output_supports_pairing(car.CarOutput.schema)
 
 
 @dataclass(frozen=True)

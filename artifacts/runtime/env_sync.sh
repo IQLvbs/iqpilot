@@ -61,7 +61,8 @@ sync_python_env() {
   fi
   VENV_SITE_PACKAGES="$("$DIR/.venv/bin/python3" -c 'import site; print(site.getsitepackages()[0])' 2>/dev/null || true)"
   PACKAGES_READY=0
-  if [ -d "$DIR/artifacts/package_runtime" ] && PYTHONPATH="$DIR/artifacts/package_runtime" /usr/local/venv/bin/python3 -c "import iqdbc, msgq, panda, tinygrad, capnp" 2>/dev/null; then
+  if [ -d "$DIR/artifacts/package_runtime" ] && PYTHONPATH="$DIR/artifacts/package_runtime" /usr/local/venv/bin/python3 -c "import iqdbc, msgq, panda, tinygrad, capnp" 2>/dev/null \
+      && PYTHONPATH="$DIR/artifacts/package_runtime" /usr/local/venv/bin/python3 "$DIR/iqpilot/system/runtime_packages_verify.py" 2>/dev/null; then
     PACKAGES_READY=1
   elif [ "$PACKAGE_LOCK_SHA" = "$INSTALLED_PACKAGE_LOCK_SHA" ] && "$DIR/.venv/bin/python3" -c "import iqdbc, msgq, panda, tinygrad, capnp" 2>/dev/null \
       && "$DIR/.venv/bin/python3" "$DIR/iqpilot/system/runtime_packages_verify.py"; then
@@ -70,7 +71,8 @@ sync_python_env() {
     PACKAGES_READY=1
   fi
   RUNTIME_WHEELS_READY=0
-  if [ -d "$DIR/artifacts/package_runtime" ] && PYTHONPATH="$DIR/artifacts/package_runtime" /usr/local/venv/bin/python3 -c "import libdatachannel" 2>/dev/null; then
+  if [ -d "$DIR/artifacts/package_runtime" ] && PYTHONPATH="$DIR/artifacts/package_runtime" /usr/local/venv/bin/python3 -c "import libdatachannel" 2>/dev/null \
+      && PYTHONPATH="$DIR:$DIR/artifacts/package_runtime" /usr/local/venv/bin/python3 "$DIR/iqpilot/system/runtime_wheels_verify.py" 2>/dev/null; then
     RUNTIME_WHEELS_READY=1
   elif [ "$RUNTIME_WHEEL_LOCK_SHA" = "$INSTALLED_RUNTIME_WHEEL_LOCK_SHA" ] && "$DIR/.venv/bin/python3" -c "import libdatachannel" 2>/dev/null \
       && PYTHONPATH="$DIR" "$DIR/.venv/bin/python3" "$DIR/iqpilot/system/runtime_wheels_verify.py"; then

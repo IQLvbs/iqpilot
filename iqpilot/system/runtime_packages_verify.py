@@ -7,18 +7,31 @@ parsed directly here. Runs under the interpreter whose site-packages should be
 checked; prints missing files and exits nonzero on any damage.
 """
 import csv
+import importlib.util
 import sys
 from importlib import metadata
 from pathlib import Path
 
 PACKAGES = ("iqdbc", "msgq", "panda", "tinygrad", "pycapnp")
+IMPORT_NAME = {"pycapnp": "capnp"}
+REQUIRED_DATA = {"iqdbc": ("car/car.capnp", "car/rlog.capnp", "car/include/c++.capnp")}
+
+
+def _verify_without_metadata(name):
+  imp = IMPORT_NAME.get(name, name)
+  spec = importlib.util.find_spec(imp)
+  if spec is None or spec.origin is None:
+    return [f"{name}: not installed"]
+  base = Path(spec.origin).parent
+  return [f"{name}: {rel}" for rel in REQUIRED_DATA.get(imp, ()) if not (base / rel).is_file()]
+
 
 missing = []
 for name in PACKAGES:
   try:
     dist = metadata.distribution(name)
   except metadata.PackageNotFoundError:
-    missing.append(f"{name}: not installed")
+    missing.extend(_verify_without_metadata(name))
     continue
   record = dist.read_text("RECORD")
   if not record:

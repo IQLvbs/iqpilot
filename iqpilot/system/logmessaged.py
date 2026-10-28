@@ -15,6 +15,12 @@ def close_log_handler(log_handler):
     pass
 
 
+def shutdown(sock, ctx, log_handler):
+  sock.close()
+  ctx.term()
+  close_log_handler(log_handler)
+
+
 def main() -> NoReturn:
   log_handler = get_file_handler()
   log_handler.setFormatter(SwagLogFileFormatter(None))
@@ -49,10 +55,7 @@ def main() -> NoReturn:
         msg = messaging.new_message(None, valid=True, errorLogMessage=record)
         error_log_message_sock.send(msg.to_bytes())
   finally:
-    sock.close()
-    ctx.term()
-
-    close_log_handler(log_handler)
+    shutdown(sock, ctx, log_handler)
 
 if __name__ == "__main__":
   main()

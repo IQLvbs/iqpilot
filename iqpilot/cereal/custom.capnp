@@ -511,6 +511,7 @@ struct IQDriveModelData @0xcdf0f7f14f46cb86 {
   reasoningText @7 :Text;
   reasoningState @8 :Text;
   backupPath @9 :IQModelPath;
+  navTurnProbs @10 :List(Float32);
 }
 
 struct IQModelPath @0xe0b60694a7e33f3d {

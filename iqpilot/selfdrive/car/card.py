@@ -26,7 +26,7 @@ from iqdbc.car.interfaces import CarInterfaceBase, RadarInterfaceBase
 from iqpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
 from iqpilot.selfdrive.car.cruise import VCruiseHelper
 from iqpilot.selfdrive.car.helpers import convert_iq_car_control_compact, convert_to_capnp
-from iqpilot.selfdrive.controls.lib.actuator_feedback import AppliedActuators, CAR_CONTROL_TIMEOUT_NS
+from iqpilot.selfdrive.controls.lib.actuator_feedback import AppliedActuators, CAR_CONTROL_TIMEOUT_NS, car_output_supports_pairing
 from iqpilot.selfdrive.controls.lib.hkg_tuning import uses_hkg_tuning
 
 from iqpilot.sab.behavior import apply_aol_experience_flags, apply_aol_brand_overrides
@@ -209,7 +209,9 @@ class Car:
 
     self.v_cruise_helper = VCruiseHelper(self.CP, self.CP_IQ)
     self._needs_iq_lead_data = self.CP.brand == "hyundai"
-    self._pair_actuator_feedback = uses_hkg_tuning(self.CP)
+    self._pair_actuator_feedback = uses_hkg_tuning(self.CP) and car_output_supports_pairing()
+    if uses_hkg_tuning(self.CP) and not self._pair_actuator_feedback:
+      cloudlog.warning("loaded iqdbc CarOutput has no actuator pairing fields; steering limit detection uses the unpaired comparison")
     self.carcontrol_stale_frames = max(1, int(round(CAR_CONTROL_TIMEOUT_NS / 1e9 / DT_CTRL)))
     self._perf = PerfTraceEmitter("card", pubmaster=self.pm)
     self._perf_ring = PerfTraceRing()

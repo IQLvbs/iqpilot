@@ -278,6 +278,17 @@ def populate_odometry_message(msg: capnp._DynamicStructBuilder, outputs: dict[st
   odo.roadTransformTransStd = outputs["road_transform_stds"][0, :3].tolist()
 
 
+def populate_iq_model_nav_turn(message: capnp._DynamicStructBuilder, outputs: dict[str, np.ndarray]) -> bool:
+  values = outputs.get("blinker_probabilities")
+  if values is None:
+    return False
+  probs = np.asarray(values, dtype=np.float32).reshape(-1)
+  if probs.size != 3 or not np.isfinite(probs).all():
+    return False
+  message.navTurnProbs = probs.tolist()
+  return True
+
+
 def populate_iq_model_speed_limit(message: capnp._DynamicStructBuilder, outputs: dict[str, np.ndarray]) -> bool:
   values = outputs.get("speed_limit")
   valid = False

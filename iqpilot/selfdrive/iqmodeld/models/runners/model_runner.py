@@ -67,6 +67,8 @@ _configure_accelerator()
 _META_MAX_BYTES = 1 << 20
 
 MODEL_LOAD_MEMORY_WAIT_S = 90.0
+MODEL_LOAD_MEMORY_FALLBACK_S = 15.0
+MODEL_LOAD_MEMORY_RECOVERY_MB = 64
 
 
 def mem_available_mb() -> int:
@@ -83,13 +85,17 @@ def mem_available_mb() -> int:
 def wait_for_model_load_memory(need_mb: int, timeout_s: float = MODEL_LOAD_MEMORY_WAIT_S) -> None:
   import gc
   gc.collect()
-  deadline = time.monotonic() + timeout_s
+  start = time.monotonic()
+  deadline = start + timeout_s
   avail = mem_available_mb()
+  start_avail = avail
   while avail < need_mb and time.monotonic() < deadline:
     cloudlog.warning(f"model load deferring: {avail}MB available < {need_mb}MB needed; waiting for memory to settle")
     time.sleep(5.0)
     gc.collect()
     avail = mem_available_mb()
+    if time.monotonic() - start >= MODEL_LOAD_MEMORY_FALLBACK_S and avail < start_avail + MODEL_LOAD_MEMORY_RECOVERY_MB:
+      break
   if avail < need_mb:
     raise RuntimeError(f"insufficient memory to load model: {avail}MB available < {need_mb}MB needed")
 
