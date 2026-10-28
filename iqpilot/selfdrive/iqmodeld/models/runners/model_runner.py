@@ -77,15 +77,10 @@ def mem_available_mb() -> int:
           return int(line.split()[1]) // 1024
   except OSError:
     pass
-  # off-device (no /proc/meminfo) reports a huge value so the guard below is a no-op there
   return 1 << 20
 
 
 def wait_for_model_load_memory(need_mb: int, timeout_s: float = MODEL_LOAD_MEMORY_WAIT_S) -> None:
-  # the qcom device is RAM-tight (~3.6GB); loading a big model into the boot storm (mapd+ui+
-  # dmonitoringmodeld resident) OOM-killed iqmodeld mid-load, which took the whole model stack
-  # down and cascaded into driving faults. Raise before allocating instead, so the daemon falls
-  # back to the default model gracefully; wait first so a transient boot spike settles.
   import gc
   gc.collect()
   deadline = time.monotonic() + timeout_s
@@ -238,6 +233,18 @@ def _is_split_bundle(bundle) -> bool:
   return not present.isdisjoint(split_kinds)
 
 
+def _optional_private_runner(bundle):
+  try:
+    from iqpilot.system.proprietary_runtime._verified_import import import_verified_module
+    module = import_verified_module("iqpilot_context_private", "iqpilot_private.context.iqmodel_runtime")
+  except Exception:
+    return None
+  builder = getattr(module, "build_runner", None)
+  if builder is None:
+    return None
+  return builder(bundle)
+
+
 def get_model_runner() -> "ModelRunner":
   """Build the runner backend that fits the active bundle (supercombo / fused /
   combined-split / split / single). Concrete runners are imported lazily so one
@@ -249,6 +256,10 @@ def get_model_runner() -> "ModelRunner":
   # device; the big host serves the bundle's precompiled artifact
   if not (bundle and bundle.models and _qcom_models(bundle)):
     return TinygradRunner(ModelType.supercombo)
+
+  private_runner = _optional_private_runner(bundle)
+  if private_runner is not None:
+    return private_runner
 
   if _is_supercombo_bundle(bundle):
     from iqpilot.selfdrive.iqmodeld.models.runners.tinygrad.supercombo_runner import TinygradSupercomboRunner

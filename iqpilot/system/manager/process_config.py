@@ -99,7 +99,6 @@ def iqmapd_needed(params: Params) -> bool:
   )
 
 def iqmodeld_model_ready(started: bool, params: Params, CP: car.CarParams) -> bool:
-  # hold the map daemons off until iqmodeld sets IqModelLoaded: on RAM-tight devices the model decrypt collided with ~250MB of resident map data and OOM-killed the load (flag is set after load or graceful fallback, cleared each drive; not set when iqmodeld isn't the loader)
   return (not is_tinygrad_model(started, params, CP)) or params.get_bool("IqModelLoaded")
 
 def iqmapd_onroad(started: bool, params: Params, CP: car.CarParams) -> bool:

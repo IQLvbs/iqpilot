@@ -100,7 +100,6 @@ def run(cmd: list[str], cwd: str | None = None, timeout: float | None = None) ->
     try:
       output, _ = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
-      # a bare timeout SIGKILLs git but leaves its git-remote-https child orphaned and hung; kill the group
       try:
         os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
       except ProcessLookupError:
@@ -199,10 +198,6 @@ def _clear_stale_proxy_config(cwd: str) -> None:
     cloudlog.info("updater: restored public release remote git.konn3kt.com/IQ.Lvbs/IQ.Pilot")
 
 def _strip_git_extraheaders(cwd: str) -> None:
-  # the prebuilt checkout and the auth helpers above install an http.<url>.extraheader
-  # Authorization: Basic <CI token>; once it expires git sends it, gets 401, and can't fall back to
-  # anonymous — so every update dies with "could not read Username". Strip it (the release repo is
-  # public). MUST run after the auth helpers, which re-add it.
   try:
     raw = subprocess.check_output(["git", "-C", cwd, "config", "--get-regexp", r"^http\..*\.extraheader$"],
                                   text=True, stderr=subprocess.DEVNULL)
@@ -257,7 +252,6 @@ def setup_git_options(cwd: str) -> None:
     ("protocol.version", "2"),
     ("gc.auto", "0"),
     ("gc.autoDetach", "false"),
-    # git has no network timeout of its own; abort a transfer stalled under 1KB/s for 60s
     ("http.lowSpeedLimit", "1000"),
     ("http.lowSpeedTime", "60"),
   ]

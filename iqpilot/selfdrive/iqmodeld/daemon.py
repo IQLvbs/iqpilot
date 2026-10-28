@@ -571,7 +571,7 @@ class InferenceDaemon:
     self._gpu = WarpContext()
     cloudlog.warning("CL context ready; loading model")
     self._runtime = NeuralEngineState(self._gpu)
-    Params().put_bool("IqModelLoaded", True)  # model (or graceful fallback) is resident; release the map daemons held off the memory bus so their ~250MB didn't collide with this decrypt
+    Params().put_bool("IqModelLoaded", True)
     self._reasoning_wire = ReasoningWire(getattr(self._runtime.model_runner, "reasoning_metadata", {}))
     self._feature_inputs = FeatureInputComposer({**getattr(self._runtime.model_runner, "reasoning_metadata", {}),
                                                 "input_shapes": self._runtime.model_runner.input_shapes})

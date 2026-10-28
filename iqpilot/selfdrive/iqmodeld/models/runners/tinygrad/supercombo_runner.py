@@ -101,8 +101,6 @@ class TinygradSupercomboRunner(TinygradSupercomboRuntime, ModelRunner):
     def _load_meta(self) -> dict[Any, Any]:
         if 'metadata' in self._m:
             return self._m['metadata']
-        # some models ship metadata as a separate sealed .iqc artifact rather than embedding it in
-        # the model pkl; load it through the same sealed path, verified like the model artifact
         meta_art = getattr(self._model_data.model, "metadata", None)
         meta_name = getattr(meta_art, "fileName", "") or ""
         if not meta_name:
