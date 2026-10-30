@@ -1,0 +1,6 @@
+SConscript(['pandad/SConscript'])
+SConscript(['car/SConscript'])
+SConscript(['controls/lib/lead_assist/SConscript'])
+SConscript(['locationd/SConscript'])
+SConscript(['dmonitoringmodeld/SConscript'])
+SConscript(['ui/SConscript'])

@@ -1,0 +1,6 @@
+Import('env')
+
+lenv = env.Clone()
+lenv['SHLIBPREFIX'] = 'lib'
+lenv['SHLIBSUFFIX'] = '.so'
+lenv.SharedLibrary('leadsolver', ['lead_solver.c'], LIBS=['m'])

@@ -1,0 +1,5 @@
+Import('env', 'envCython')
+
+native_kernel = env.StaticLibrary("../state_estimation/native_kernels", ["../state_estimation/native_kernels.cc"])
+native_binding_env = envCython.Clone(CYTHONFLAGS=["--cplus"])
+native_binding_env.Program("../state_estimation/native_binding_pyx.so", ["../state_estimation/native_binding_pyx.pyx"], LIBS=[native_kernel] + envCython["LIBS"])

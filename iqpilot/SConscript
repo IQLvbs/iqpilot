@@ -1,0 +1,4 @@
+# Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
+SConscript(['common/transformations/SConscript'])
+SConscript(['selfdrive/iqmodeld/SConscript'])
+SConscript(['selfdrive/iqlocd/SConscript'])

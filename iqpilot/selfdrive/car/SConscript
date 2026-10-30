@@ -1,0 +1,11 @@
+Import('env', 'envCython')
+
+lenv = env.Clone()
+lenv['SHLIBPREFIX'] = 'lib'
+lenv['SHLIBSUFFIX'] = '.so'
+lenv.Append(CCFLAGS=['-ffp-contract=off'])
+lenv.SharedLibrary('cansignals', ['can_signals.c'])
+
+penv = envCython.Clone()
+penv.Append(CCFLAGS=['-ffp-contract=off'])
+penv.Program('_can_parser_native.so', ['can_parser_native.c'])
