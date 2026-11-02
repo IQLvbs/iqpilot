@@ -2,11 +2,11 @@
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
 
 IQ.Pilot drawing surface. Onroad renderers and settings widgets paint through
-this facade instead of touching pyray directly, so the HUD has one vocabulary
+this facade instead of touching raylib directly, so the HUD has one vocabulary
 for shapes/text/textures. Each call forwards verbatim to the backing library —
-output is identical to a raw pyray call, only the call site reads in IQ terms.
+output is identical to a raw raylib call, only the call site reads in IQ terms.
 """
-import pyray as _p
+import raylib_nb as _p
 from iqpilot.system.ui.lib.text_measure import measure_text_cached as _measure
 
 Rgba = _p.Color

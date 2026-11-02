@@ -1,4 +1,4 @@
-import pyray as rl
+import raylib_nb as rl
 from dataclasses import dataclass
 from iqpilot.common.constants import CV
 from iqpilot.selfdrive.ui.onroad.exp_button import ExpButton
@@ -44,9 +44,6 @@ class Colors:
   OVERRIDE = rl.Color(145, 155, 149, 255)  # Added
   ENGAGED = rl.Color(0x0C, 0x94, 0x96, 0xFF)
   LIMIT_ENGAGED = rl.Color(0x27, 0xF5, 0xD3, 0xFF)
-  DISENGAGED_BG = rl.Color(0, 0, 0, 153)
-  OVERRIDE_BG = rl.Color(145, 155, 149, 204)
-  ENGAGED_BG = rl.Color(128, 216, 166, 204)
   GREY = rl.Color(166, 166, 166, 255)
   DARK_GREY = rl.Color(114, 114, 114, 255)
   BLACK_TRANSLUCENT = rl.Color(0, 0, 0, 166)

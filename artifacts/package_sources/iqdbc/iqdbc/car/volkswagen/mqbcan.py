@@ -296,8 +296,8 @@ def acc_hud_status_value(main_switch_on, acc_faulted, longActive, longOverride):
   return hud_status
 
 
-def create_acc_accel_control(packer, bus, acc_type, accel, acc_control, stopping, starting, esp_hold, comfortBand, jerkLimit, eBrakeActive,
-                             esp_override=None):
+def create_acc_accel_control(packer, bus, acc_type, accel, acc_control, stopping, starting, esp_hold, eBrakeActive,
+                             esp_override=None, upper_jerk=4.0, lower_jerk=4.0, upper_control_limit=0.2, lower_control_limit=0.2):
   commands = []
   acc_enabled = acc_control in (3, 4)
 
@@ -306,10 +306,10 @@ def create_acc_accel_control(packer, bus, acc_type, accel, acc_control, stopping
     "ACC_Status_ACC": acc_control,
     "ACC_StartStopp_Info": acc_enabled,
     "ACC_Sollbeschleunigung_02": accel if acc_enabled else 3.01,
-    "ACC_zul_Regelabw_unten": 0.2 if acc_enabled else 0,
-    "ACC_zul_Regelabw_oben": 0.2 if acc_enabled else 0,
-    "ACC_neg_Sollbeschl_Grad_02": 4.0 if acc_enabled else 0,
-    "ACC_pos_Sollbeschl_Grad_02": 4.0 if acc_enabled else 0,
+    "ACC_zul_Regelabw_unten": lower_control_limit if acc_enabled else 0,
+    "ACC_zul_Regelabw_oben": upper_control_limit if acc_enabled else 0,
+    "ACC_neg_Sollbeschl_Grad_02": lower_jerk if acc_enabled else 0,
+    "ACC_pos_Sollbeschl_Grad_02": upper_jerk if acc_enabled else 0,
     "ACC_Anfahren": starting if acc_enabled else False,
     "ACC_Anhalten": stopping if acc_enabled else False,
   }

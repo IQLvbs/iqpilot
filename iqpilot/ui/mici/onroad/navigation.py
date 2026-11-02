@@ -1,7 +1,7 @@
 import math
 import time
 
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.selfdrive.ui.ui_state import ui_state
 from iqpilot.system.ui.lib.application import FontWeight, gui_app

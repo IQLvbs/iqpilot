@@ -4,6 +4,7 @@ import hashlib
 import json
 import lzma
 import os
+import shlex
 import struct
 import subprocess
 import time
@@ -23,8 +24,6 @@ if _REPO_ROOT not in sys.path:
 
 import requests
 
-import iqpilot.system.updated.casync.casync as casync
-
 try:
   from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 except Exception as exc:
@@ -34,7 +33,6 @@ else:
   _CRYPTO_IMPORT_ERROR = None
 
 SPARSE_CHUNK_FMT = struct.Struct('H2xI4x')
-CAIBX_URL = "https://commadist.azureedge.net/agnosupdate/"
 IQPILOT_MANIFEST_PUBLIC_KEY = bytes.fromhex("40ae3f81b77506ecc4982a1ca37ba1d6f8765d2ae510eae9039577206c3e5732")
 
 AGNOS_MANIFEST_FILE = "system/hardware/tici/agnos.json"
@@ -46,7 +44,7 @@ PART_RESUME_DELAY = 2
 
 def _image_auth_module():
   try:
-    from iqpilot.system.proprietary_runtime._verified_import import import_verified_module
+    from iqpilot.system.proprietary_runtime.bundle_modes import import_verified_module
     return import_verified_module("iqpilot_updater_private", "iqpilot_private.updater.git_remote")
   except Exception:
     pass
@@ -61,6 +59,10 @@ def _image_auth_module():
   except Exception:
     pass
   return None
+
+# The updater UIs read stdout as "<text>:<percent>" progress, so diagnostics must stay off stdout.
+def _diag(msg: str) -> None:
+  print(msg, file=sys.stderr, flush=True)
 
 def _is_private_os_image(url: str) -> bool:
   return "/iq.lvbs/iqos/" in url.lower()
@@ -133,10 +135,10 @@ def _ensure_k3_registered(dongle_id: str) -> str:
       result = resp.json()
       registered_id = result.get("dongle_id")
       if registered_id:
-        print(f"IQ.OS proxy: registered with konn3kt as {registered_id}", flush=True)
+        _diag(f"IQ.OS proxy: registered with konn3kt as {registered_id}")
         return registered_id
   except Exception as e:
-    print(f"IQ.OS proxy: k3 registration failed ({type(e).__name__}: {e})", flush=True)
+    _diag(f"IQ.OS proxy: k3 registration failed ({type(e).__name__}: {e})")
   return dongle_id
 
 def _k3_proxy_url(url: str) -> tuple[str, dict] | None:
@@ -167,7 +169,7 @@ def _k3_proxy_url(url: str) -> tuple[str, dict] | None:
     proxy_url = f"{API_HOST.rstrip('/')}/v1/devices/{dongle_id}/assets/iqos/{_extract_image_path(url)}"
     return proxy_url, {"Authorization": f"JWT {token}"}
   except Exception as e:
-    print(f"IQ.OS proxy: primary path failed ({type(e).__name__}: {e}), trying minimal fallback", flush=True)
+    _diag(f"IQ.OS proxy: primary path failed ({type(e).__name__}: {e}), trying minimal fallback")
 
   dongle_id = _read_dongle_id()
   if not dongle_id:
@@ -180,7 +182,7 @@ def _k3_proxy_url(url: str) -> tuple[str, dict] | None:
     return None
   api_host = os.environ.get("API_HOST", "https://api-iqlabs.konn3kt.com")
   proxy_url = f"{api_host.rstrip('/')}/v1/devices/{dongle_id}/assets/iqos/{_extract_image_path(url)}"
-  print(f"IQ.OS proxy: minimal fallback → {proxy_url}", flush=True)
+  _diag(f"IQ.OS proxy: minimal fallback → {proxy_url}")
   return proxy_url, {"Authorization": f"JWT {token}"}
 
 def _download_headers(url: str) -> dict:
@@ -192,13 +194,6 @@ def _download_headers(url: str) -> dict:
         return headers
     except Exception:
       pass
-  try:
-    from iqpilot.common.git_creds import get_credentials
-    creds = get_credentials()
-    if creds and all(creds) and "/iq.lvbs/iqos" in url.lower():
-      return {"Authorization": "Basic " + base64.b64encode(f"{creds[0]}:{creds[1]}".encode()).decode()}
-  except Exception:
-    pass
   return {}
 
 class RangeNotSupported(requests.exceptions.RequestException):
@@ -214,6 +209,14 @@ def _ranged_get(url: str, headers: dict, offset: int) -> requests.Response:
     raise RangeNotSupported(f"server ignored range resume at {offset} for {url}")
   return req
 
+def _os_auth_error(url: str) -> str:
+  return (
+    "cannot install IQ.OS: device could not authenticate to konn3kt. The image is served only "
+    "through the konn3kt device proxy, which needs a device-signed JWT; that token is unavailable "
+    "when the custodian signer is unreachable — typically because the running software tree is not "
+    "SELinux-labeled code_t, so iqkeeperd refuses the signing socket. Re-label the tree "
+    f"(run iq-selabel, or chcon -R -t code_t on it) and retry. url={url}")
+
 def _open_image_response(url: str, offset: int = 0) -> requests.Response:
   proxy = _k3_proxy_url(url)
   if proxy is not None:
@@ -224,12 +227,10 @@ def _open_image_response(url: str, offset: int = 0) -> requests.Response:
       resp = requests.get(proxy_url, stream=True, headers={'Accept-Encoding': None, **proxy_headers}, timeout=120)
     resp.raise_for_status()
     return resp
-  if _is_private_os_image(url):
-    auth = _download_headers(url)
-    if not auth:
-      raise RuntimeError(f"IQ.OS image requires authentication and no credentials are available: {url}")
-
   auth = _download_headers(url)
+  if _is_private_os_image(url) and not auth:
+    raise RuntimeError(_os_auth_error(url))
+
   req = requests.get(url, stream=True, headers={'Accept-Encoding': None, **auth}, timeout=60)
   req.raise_for_status()
   if int(req.headers.get('content-length') or 0) >= 1024:
@@ -390,16 +391,123 @@ def get_partition_path(target_slot_number: int, partition: dict) -> str:
 
   return path
 
+# IQ.OS 4.9.9.4 workaround: udev gives the loader and system partitions to root:otaflash 0660, and only
+# `iq` is listed in otaflash. iq.service runs as User=comma, the same uid 1000 under another name, so
+# systemd's initgroups leaves otaflash out and opening a partition raises PermissionError. `sg otaflash`
+# resolves uid 1000 to iq, a listed member, so it needs no password. The narrow sudo no longer allows
+# dd; that route stays last for older images. Remove the sg route once the image gives the service otaflash.
+OTAFLASH_GROUP = "otaflash"
+PARTITION_ROUTES = ("direct", "sg", "sudo")
+_partition_routes: dict[str, str] = {}
+
+
+def _route_command(route: str, command: str) -> list[str]:
+  if route == "sg":
+    return ["sg", OTAFLASH_GROUP, "-c", command]
+  return ["sudo", "-n", *shlex.split(command)]
+
+
+def _route_works(route: str, path: str) -> bool:
+  try:
+    if route == "direct":
+      with open(path, 'rb') as f:
+        f.read(1)
+      with open(path, 'r+b'):
+        pass
+      return True
+    quoted = shlex.quote(path)
+    # count=0 with conv=notrunc opens the partition for writing without writing anything
+    for command in (f"dd if={quoted} of=/dev/null bs=4096 count=1 status=none",
+                    f"dd if=/dev/null of={quoted} bs=4096 count=0 conv=notrunc status=none"):
+      subprocess.run(_route_command(route, command), check=True, stdin=subprocess.DEVNULL,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+    return True
+  except (OSError, subprocess.SubprocessError):
+    return False
+
+
+def _find_route(path: str) -> str | None:
+  return next((route for route in PARTITION_ROUTES if _route_works(route, path)), None)
+
+
+def preflight_partition_io(paths: list[str], log) -> None:
+  """Find a route that can read each path and open it for writing, and log it. Writes nothing."""
+  refused = []
+  for path in paths:
+    route = _find_route(path)
+    log.info(f"partition I/O preflight: {path} via {route or 'nothing'}")
+    if route is None:
+      refused.append(path)
+    else:
+      _partition_routes[path] = route
+  if refused:
+    raise PermissionError(f"no route can read and write {', '.join(refused)} (tried {', '.join(PARTITION_ROUTES)})")
+
+
+def _route_for(path: str) -> str:
+  if path not in _partition_routes:
+    _partition_routes[path] = _find_route(path) or "direct"
+  return _partition_routes[path]
+
+
+def read_partition(path: str, offset: int, length: int) -> Generator[bytes, None, None]:
+  chunk_size = 1024 * 1024
+  if _route_for(path) == "direct":
+    with open(path, 'rb') as f:
+      f.seek(offset)
+      while length > 0 and (chunk := f.read(min(chunk_size, length))):
+        length -= len(chunk)
+        yield chunk
+    return
+  command = (f"dd if={shlex.quote(path)} bs=1M skip={offset} count={length} "
+             "iflag=skip_bytes,count_bytes status=none")
+  proc = subprocess.Popen(_route_command(_partition_routes[path], command), stdin=subprocess.DEVNULL,
+                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+  try:
+    while chunk := proc.stdout.read(chunk_size):
+      yield chunk
+  finally:
+    proc.stdout.close()
+    if proc.wait() != 0:
+      raise PermissionError(f"reading {path} through {_partition_routes[path]} failed ({proc.returncode})")
+
+
+def write_partition_at(path: str, offset: int, data: bytes) -> None:
+  if _route_for(path) == "direct":
+    with open(path, 'r+b') as f:
+      f.seek(offset)
+      f.write(data)
+    return
+  command = f"dd of={shlex.quote(path)} bs=1M seek={offset} oflag=seek_bytes conv=notrunc status=none"
+  subprocess.run(_route_command(_partition_routes[path], command), input=data, check=True, stderr=subprocess.DEVNULL)
+
+
+class _PipedWriter:
+  """dd fed through a pipe; close() waits for dd so nothing is still in flight when the caller syncs and verifies."""
+  def __init__(self, path: str, route: str) -> None:
+    self.path, self.route = path, route
+    command = f"dd of={shlex.quote(path)} bs=1M conv=notrunc iflag=fullblock status=none"
+    self.proc = subprocess.Popen(_route_command(route, command), stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+  def write(self, data: bytes) -> None:
+    self.proc.stdin.write(data)
+
+  def close(self) -> None:
+    self.proc.stdin.close()
+    if self.proc.wait() != 0:
+      raise OSError(f"writing {self.path} through {self.route} failed ({self.proc.returncode})")
+
+
+def open_partition_writer(path: str):
+  if _route_for(path) == "direct":
+    return open(path, 'wb+')
+  return _PipedWriter(path, _partition_routes[path])
+
+
 def get_raw_hash(path: str, partition_size: int) -> str:
   raw_hash = hashlib.sha256()
-  pos, chunk_size = 0, 1024 * 1024
-
-  with open(path, 'rb') as out:
-    while pos < partition_size:
-      n = min(chunk_size, partition_size - pos)
-      raw_hash.update(out.read(n))
-      pos += n
-
+  for chunk in read_partition(path, 0, partition_size):
+    raw_hash.update(chunk)
   return raw_hash.hexdigest().lower()
 
 def verify_partition(target_slot_number: int, partition: dict[str, str | int], force_full_check: bool = False) -> bool:
@@ -419,29 +527,18 @@ def verify_partition(target_slot_number: int, partition: dict[str, str | int], f
   if full_check:
     return get_raw_hash(path, partition_size) == partition_hash.lower()
   else:
-    with open(path, 'rb') as out:
-      out.seek(partition_size)
-      return out.read(64) == partition_hash.lower().encode()
-
-def _sudo_write_at(path: str, offset: int, data: bytes) -> None:
-  subprocess.run(f"sudo -n dd of={path} bs=1 seek={offset} count={len(data)} conv=notrunc 2>/dev/null",
-                 input=data, shell=True, check=True)
+    return b"".join(read_partition(path, partition_size, 64)) == partition_hash.lower().encode()
 
 def clear_partition_hash(target_slot_number: int, partition: dict) -> None:
   path = get_partition_path(target_slot_number, partition)
-  _sudo_write_at(path, partition['size'], b"\x00" * 64)
+  write_partition_at(path, partition['size'], b"\x00" * 64)
   os.sync()
 
 def extract_compressed_image(target_slot_number: int, partition: dict, cloudlog):
   path = get_partition_path(target_slot_number, partition)
   downloader = StreamingDecompressor(partition['url'], parts=int(partition.get('url_parts', 0)))
 
-  try:
-    out = open(path, 'wb+')
-  except PermissionError:
-    out = subprocess.Popen(["sudo", "-n", "dd", f"of={path}", "bs=1M", "conv=notrunc", "iflag=fullblock"],
-                           stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    out = out.stdin
+  out = open_partition_writer(path)
 
   last_p = 0
   written = 0
@@ -469,46 +566,6 @@ def extract_compressed_image(target_slot_number: int, partition: dict, cloudlog)
 
   os.sync()
 
-def extract_casync_image(target_slot_number: int, partition: dict, cloudlog):
-  path = get_partition_path(target_slot_number, partition)
-  seed_path = path[:-1] + ('b' if path[-1] == 'a' else 'a')
-
-  target = casync.parse_caibx(partition['casync_caibx'])
-
-  sources: list[tuple[str, casync.ChunkReader, casync.ChunkDict]] = []
-
-  try:
-    raw_hash = get_raw_hash(seed_path, partition['size'])
-    caibx_url = f"{CAIBX_URL}{partition['name']}-{raw_hash}.caibx"
-
-    try:
-      cloudlog.info(f"casync fetching {caibx_url}")
-      sources += [('seed', casync.FileChunkReader(seed_path), casync.build_chunk_dict(casync.parse_caibx(caibx_url)))]
-    except requests.RequestException:
-      cloudlog.error(f"casync failed to load {caibx_url}")
-  except Exception:
-    cloudlog.exception("casync failed to hash seed partition")
-
-  sources += [('target', casync.FileChunkReader(path), casync.build_chunk_dict(target))]
-
-  sources += [('remote', casync.RemoteChunkReader(partition['casync_store']), casync.build_chunk_dict(target))]
-
-  last_p = 0
-
-  def progress(cur):
-    nonlocal last_p
-    p = int(cur / partition['size'] * 100)
-    if p != last_p:
-      last_p = p
-      print(f"Installing {partition['name']}: {p}", flush=True)
-
-  stats = casync.extract(target, sources, path, progress)
-  cloudlog.error(f'casync done {json.dumps(stats)}')
-
-  os.sync()
-  if not verify_partition(target_slot_number, partition, force_full_check=True):
-    raise Exception(f"Raw hash mismatch '{partition['hash_raw'].lower()}'")
-
 def flash_partition(target_slot_number: int, partition: dict, cloudlog, standalone=False):
   cloudlog.info(f"Downloading and writing {partition['name']}")
 
@@ -522,13 +579,10 @@ def flash_partition(target_slot_number: int, partition: dict, cloudlog, standalo
 
   path = get_partition_path(target_slot_number, partition)
 
-  if ('casync_caibx' in partition) and not standalone:
-    extract_casync_image(target_slot_number, partition, cloudlog)
-  else:
-    extract_compressed_image(target_slot_number, partition, cloudlog)
+  extract_compressed_image(target_slot_number, partition, cloudlog)
 
   if not full_check:
-    _sudo_write_at(path, partition['size'], partition['hash_raw'].lower().encode())
+    write_partition_at(path, partition['size'], partition['hash_raw'].lower().encode())
 
 def swap(manifest_path: str, target_slot_number: int, cloudlog) -> None:
   verify_manifest_signature(manifest_path)
@@ -573,10 +627,83 @@ def flash_agnos_update(manifest_path: str, target_slot_number: int, cloudlog, st
 
   cloudlog.info(f"AGNOS ready on slot {target_slot_number}")
 
+def board_name() -> str:
+  try:
+    with open("/sys/firmware/devicetree/base/model") as f:
+      return f.read().strip("\x00").strip().split("comma ")[-1]
+  except OSError:
+    return ""
+
+
+def select_for_board(update: list, device: str | None = None) -> list:
+  """Keep the entries for this board, as IQ.OS 5's iqos.select_for_board does (xbl differs by board)."""
+  boards = {p["board"] for p in update if isinstance(p, dict) and p.get("board")}
+  if not boards:
+    return list(update)
+  device = board_name() if device is None else device
+  if not device:
+    raise RuntimeError("manifest declares boards but this device's model could not be read")
+  chosen = [p for p in update if not p.get("board") or p["board"] == device]
+  missing = {p["name"] for p in update} - {p["name"] for p in chosen}
+  if missing:
+    raise RuntimeError(f"manifest has no {'/'.join(sorted(missing))} for {device} (boards {'/'.join(sorted(boards))})")
+  return chosen
+
+
+def flash_iqos5_update(manifest_path: str, target_slot_number: int, cloudlog) -> None:
+  """Flash IQ.OS 5 to the target slot from AGNOS with this build's flasher; the new tree's code never runs here."""
+  verify_manifest_signature(manifest_path)
+  update = select_for_board(json.load(open(manifest_path)))
+  cloudlog.info(f"IQ.OS 5 target slot {target_slot_number}: {', '.join(p['name'] for p in update)}")
+  preflight_partition_io([get_partition_path(target_slot_number, p) for p in update], cloudlog)
+
+  os.system(f"sudo -n /usr/sbin/abctl --set_unbootable {target_slot_number}")
+  for partition in update:
+    for retries in range(10):
+      try:
+        flash_partition(target_slot_number, partition, cloudlog, standalone=True)
+        break
+      except requests.exceptions.RequestException:
+        cloudlog.exception("Failed")
+        cloudlog.info(f"Failed to download {partition['name']}, retrying ({retries})")
+        time.sleep(10)
+    else:
+      raise Exception(f"Maximum retries exceeded flashing {partition['name']}")
+
+  bad = [p['name'] for p in update if not verify_partition(target_slot_number, p, force_full_check=p['full_check'])]
+  if bad:
+    raise Exception(f"IQ.OS 5 slot {target_slot_number} failed verification: {', '.join(bad)}")
+  cloudlog.info(f"IQ.OS 5 ready on slot {target_slot_number}")
+
+
+def switch_slot(target_slot_number: int, cloudlog, attempts: int = 3) -> None:
+  """comma's stock abctl, the only switch IQ.OS 4.9.9.4's narrow sudo allows."""
+  out = ""
+  for _ in range(attempts):
+    result = subprocess.run(["sudo", "-n", "/usr/sbin/abctl", "--set_active", str(target_slot_number)],
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf8')
+    out = result.stdout
+    if result.returncode == 0 and "No such file or directory" not in out and "lun as boot lun" in out:
+      cloudlog.info(f"Swap successful {out}")
+      return
+    cloudlog.error(f"Swap failed {out}")
+  raise Exception(f"switching to slot {target_slot_number} failed: {out.strip()}")
+
+
 def verify_agnos_update(manifest_path: str, target_slot_number: int) -> bool:
   verify_manifest_signature(manifest_path)
   update = json.load(open(manifest_path))
   return all(verify_partition(target_slot_number, partition) for partition in update)
+
+def preflight_image_auth(manifest_path: str) -> None:
+  verify_manifest_signature(manifest_path)
+  update = json.load(open(manifest_path))
+  for partition in update:
+    url = partition.get('url', '')
+    if _is_private_os_image(url):
+      if _k3_proxy_url(url) is None:
+        raise RuntimeError(_os_auth_error(url))
+      return
 
 if __name__ == "__main__":
   import argparse
@@ -587,10 +714,19 @@ if __name__ == "__main__":
 
   parser.add_argument("--verify", action="store_true", help="Verify and perform swap if update ready")
   parser.add_argument("--swap", action="store_true", help="Verify and perform swap, downloads if necessary")
+  parser.add_argument("--check-auth", action="store_true", help="Preflight: confirm the device can authenticate to the image source, then exit")
   parser.add_argument("manifest", help="Manifest json")
   args = parser.parse_args()
 
   logging.basicConfig(level=logging.INFO)
+
+  if args.check_auth:
+    try:
+      preflight_image_auth(args.manifest)
+    except Exception as e:
+      print(f"Error: {e}", flush=True)
+      exit(1)
+    exit(0)
 
   target_slot_number = get_target_slot_number()
   if args.verify:

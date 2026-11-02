@@ -3,7 +3,7 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 """
 
 import time
-import pyray as rl
+import raylib_nb as rl
 
 try:
   from iqpilot.common.params import Params

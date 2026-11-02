@@ -40,7 +40,7 @@ def emoji_images(monkeypatch):
   monkeypatch.setattr(emoji.rl, 'unload_texture', lambda texture: None)
   yield loaded, unloaded
   for image in loaded:
-    if not any(image.data == released.data for released in unloaded):
+    if not any(image is released for released in unloaded):
       original_unload(image)
 
 
@@ -80,35 +80,36 @@ def test_emoji_eviction_flushes_draws_before_releasing_texture(emoji_images, mon
 
 
 def test_font_cpu_release_preserves_metrics_and_texture(monkeypatch):
-  images = [application.rl.gen_image_color(12, 24, application.rl.WHITE) for _ in range(3)]
-  glyphs = application.rl.ffi.new('GlyphInfo[]', 3)
+  released = []
   font = application.rl.Font()
   font.texture.id = 5
   font.glyphCount = 3
-  font.glyphs = glyphs
-  for index, image in enumerate(images):
-    glyphs[index].image = image
-    glyphs[index].value = 65 + index
-    glyphs[index].advanceX = 17
   monkeypatch.setattr(application.rl, 'get_font_default', lambda: SimpleNamespace(texture=SimpleNamespace(id=1)))
+  monkeypatch.setattr(application.rl, 'unload_font_glyph_images', released.append)
   application._release_font_cpu_images(font)
+  assert released == [font]
   assert font.texture.id == 5
-  assert all(glyphs[index].image.data == application.rl.ffi.NULL for index in range(3))
-  assert [glyphs[index].value for index in range(3)] == [65, 66, 67]
-  assert [glyphs[index].advanceX for index in range(3)] == [17] * 3
-  application._release_font_cpu_images(font)
+  assert font.glyphCount == 3
+
+
+def test_font_cpu_release_tolerates_fonts_without_glyphs():
+  font = application.rl.Font()
+  font.texture.id = 5
+  application.rl.unload_font_glyph_images(font)
+  application.rl.unload_font_glyph_images(font)
+  assert font.texture.id == 5
 
 
 def test_shared_default_font_images_are_preserved(monkeypatch):
   font = SimpleNamespace(texture=SimpleNamespace(id=1))
   monkeypatch.setattr(application.rl, 'get_font_default', lambda: font)
+  monkeypatch.setattr(application.rl, 'unload_font_glyph_images', lambda font: pytest.fail('default font glyphs released'))
   application._release_font_cpu_images(font)
 
 
 @pytest.mark.parametrize('atlas_available', [True, False])
 def test_unused_fonts_allocate_only_when_requested(monkeypatch, tmp_path, atlas_available):
   loaded = []
-  gui_fonts = []
   monkeypatch.setattr(application, 'FONT_DIR', tmp_path)
   if atlas_available:
     for weight in application.FontWeight:
@@ -125,7 +126,6 @@ def test_unused_fonts_allocate_only_when_requested(monkeypatch, tmp_path, atlas_
   monkeypatch.setattr(application.rl, 'get_font_default', application.rl.Font)
   monkeypatch.setattr(application.rl, 'gen_texture_mipmaps', lambda texture: None)
   monkeypatch.setattr(application.rl, 'set_texture_filter', lambda *args: None)
-  monkeypatch.setattr(application.rl, 'gui_set_font', gui_fonts.append)
   app = application.GuiApplication.__new__(application.GuiApplication)
   app._fonts = {}
   with pytest.raises(KeyError):
@@ -135,7 +135,6 @@ def test_unused_fonts_allocate_only_when_requested(monkeypatch, tmp_path, atlas_
   unused = (application.FontWeight.LIGHT, application.FontWeight.AUDIOWIDE)
   assert set(app._fonts) == set(application.FontWeight) - set(unused)
   assert len(loaded) == len(app._fonts)
-  assert gui_fonts == [app.font()]
   for weight in unused:
     before = len(loaded)
     first = app.font(weight)

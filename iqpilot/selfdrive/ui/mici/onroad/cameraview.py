@@ -1,4 +1,6 @@
-import pyray as rl
+from array import array
+
+import raylib_nb as rl
 
 from iqpilot.cereal.visionipc import VisionStreamType
 from iqpilot.system.hardware import EGL_DMA_BUF_SUPPORTED
@@ -80,9 +82,9 @@ class CameraView(BaseCameraView):
   def _initialize_shader(self, stream_type: VisionStreamType) -> None:
     super()._initialize_shader(stream_type)
     self._engaged_loc = rl.get_shader_location(self.shader, "engaged")
-    self._engaged_val = rl.ffi.new("int[1]", [1])
+    self._engaged_val = array("i", [1])
     self._enhance_driver_loc = rl.get_shader_location(self.shader, "enhance_driver")
-    self._enhance_driver_val = rl.ffi.new("int[1]", [1 if stream_type == VisionStreamType.VISION_STREAM_DRIVER else 0])
+    self._enhance_driver_val = array("i", [1 if stream_type == VisionStreamType.VISION_STREAM_DRIVER else 0])
 
   def _update_texture_color_filtering(self):
     self._engaged_val[0] = 1 if ui_state.status != UIStatus.DISENGAGED else 0

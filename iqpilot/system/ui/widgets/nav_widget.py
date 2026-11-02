@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import abc
-import pyray as rl
+import raylib_nb as rl
 from collections.abc import Callable
 from iqpilot.system.ui.widgets import Widget
 from iqpilot.common.filter_simple import BounceFilter, FirstOrderFilter

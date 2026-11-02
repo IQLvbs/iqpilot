@@ -9,6 +9,18 @@ from iqdbc.car import ACCELERATION_DUE_TO_GRAVITY
 from iqdbc.car.lateral import ISO_LATERAL_ACCEL
 from iqdbc.car.interfaces import ACCEL_MIN, ACCEL_MAX
 
+# Outputs the car can't be driven without, keyed to the name shown to the driver. Once one
+# stops arriving (not alive: 0.5 s at 20Hz, 0.1 s for controls), engaging is refused and an
+# engaged drive takes over, naming the output. Low average rates and every other service
+# stay silent soft warnings (commIssue).
+CRITICAL_SERVICES = {
+  'modelV2': "Driving Model",
+  'longitudinalPlan': "Planner",
+  'radarState': "Lead Tracking",
+  'deviceMotion': "Localizer",
+  'controlsState': "Controls",
+}
+
 MIN_EXCESSIVE_ACTUATION_COUNT = int(0.25 / DT_CTRL)
 MIN_LATERAL_ENGAGE_BUFFER = int(1 / DT_CTRL)
 
@@ -81,3 +93,7 @@ class SteerShortfallCheck:
 
     self._shortfall_frames = self._shortfall_frames + 1 if falling_short else 0
     return self._shortfall_frames >= int(STEER_SHORTFALL_TIME / DT_CTRL)
+
+
+def unresponsive_critical_services(sm: messaging.SubMaster) -> list[str]:
+  return [s for s in CRITICAL_SERVICES if s in sm.alive and s not in sm.ignore_alive and not sm.alive[s]]

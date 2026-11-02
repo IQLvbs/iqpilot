@@ -160,7 +160,7 @@ class CarControllerParams:
         kpBP=[10., 40.],
         kiBP=[10., 40.],
         kf=1.,
-        kpV=[0., 1.45],
+        kpV=[0., 0.7],
         kiV=[0., 0.12],
       )
 

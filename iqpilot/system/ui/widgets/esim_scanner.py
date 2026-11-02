@@ -1,7 +1,7 @@
 import numpy as np
-import pyray as rl
+import raylib_nb as rl
 
-from iqpilot.system.ui.lib.application import gui_app, FontWeight
+from iqpilot.system.ui.lib.application import gui_app, FontWeight, TextAlignment
 from iqpilot.system.ui.lib.multilang import tr
 from iqpilot.system.ui.widgets import DialogResult, NavWidget
 from iqpilot.system.ui.widgets.label import gui_label
@@ -116,7 +116,7 @@ class EsimQrScannerDialog(NavWidget):
         tr("camera starting"),
         font_size=72 if gui_app.big_ui() else 44,
         font_weight=FontWeight.BOLD,
-        alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+        alignment=TextAlignment.CENTER,
       )
     else:
       text_rect = rl.Rectangle(rect.x + 40, rect.y + 40, rect.width - 80, 90)
@@ -125,7 +125,7 @@ class EsimQrScannerDialog(NavWidget):
         self._status,
         font_size=50 if gui_app.big_ui() else 30,
         font_weight=FontWeight.MEDIUM,
-        alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
+        alignment=TextAlignment.LEFT,
       )
 
     return self._result

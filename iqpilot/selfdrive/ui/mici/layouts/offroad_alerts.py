@@ -1,4 +1,4 @@
-import pyray as rl
+import raylib_nb as rl
 import re
 import time
 from dataclasses import dataclass
@@ -9,7 +9,7 @@ from iqpilot.system.hardware import HARDWARE
 from iqpilot.system.ui.widgets import Widget
 from iqpilot.system.ui.widgets.label import UnifiedLabel
 from iqpilot.system.ui.widgets.scroller import Scroller
-from iqpilot.system.ui.lib.application import gui_app, FontWeight
+from iqpilot.system.ui.lib.application import gui_app, FontWeight, TextAlignment, TextAlignmentVertical
 from iqpilot.system.ui.lib.multilang import tr
 
 REFRESH_INTERVAL = 5.0  # seconds
@@ -60,12 +60,12 @@ class AlertItem(Widget):
     self._icon_green = gui_app.texture("icons_mici/offroad_alerts/green_wheel.png", self.ICON_SIZE, self.ICON_SIZE)
 
     self._title_label = UnifiedLabel(text="", font_size=32, font_weight=FontWeight.SEMI_BOLD, text_color=self.TEXT_COLOR,
-                                     alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
-                                     alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP, line_height=0.95)
+                                     alignment=TextAlignment.LEFT,
+                                     alignment_vertical=TextAlignmentVertical.TOP, line_height=0.95)
 
     self._body_label = UnifiedLabel(text="", font_size=28, font_weight=FontWeight.ROMAN, text_color=self.TEXT_COLOR,
-                                    alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
-                                    alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_BOTTOM, line_height=0.95)
+                                    alignment=TextAlignment.LEFT,
+                                    alignment_vertical=TextAlignmentVertical.BOTTOM, line_height=0.95)
 
     self._title_text = ""
     self._body_text = ""
@@ -201,17 +201,14 @@ class MiciOffroadAlerts(Widget):
 
     # Create empty state label
     self._empty_label = UnifiedLabel(tr("no alerts"), 65, FontWeight.DISPLAY, rl.WHITE,
-                                     alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
-                                     alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE)
+                                     alignment=TextAlignment.CENTER,
+                                     alignment_vertical=TextAlignmentVertical.MIDDLE)
 
     # Build initial alert list
     self._build_alerts()
 
   def active_alerts(self) -> int:
     return sum(alert.visible for alert in self.sorted_alerts)
-
-  def scrolling(self):
-    return self._scroller.scroll_panel.is_touch_valid()
 
   def _build_alerts(self):
     """Build sorted list of alerts from OFFROAD_ALERTS."""

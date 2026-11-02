@@ -1,8 +1,8 @@
 from collections.abc import Callable
 
-import pyray as rl
+import raylib_nb as rl
 
-from iqpilot.system.ui.lib.application import gui_app, FontWeight
+from iqpilot.system.ui.lib.application import gui_app, FontWeight, TextAlignment, TextAlignmentVertical
 from iqpilot.system.ui.widgets import Widget
 from iqpilot.system.ui.widgets.label import UnifiedLabel
 from iqpilot.common.filter_simple import FirstOrderFilter
@@ -36,8 +36,8 @@ class SmallSlider(Widget):
     self._is_dragging_circle = False
 
     self._label = UnifiedLabel(title, font_size=36, font_weight=FontWeight.MEDIUM, text_color=rl.Color(255, 255, 255, int(255 * 0.65)),
-                               alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT if right_to_left else rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
-                               alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE, line_height=0.9)
+                               alignment=TextAlignment.RIGHT if right_to_left else TextAlignment.LEFT,
+                               alignment_vertical=TextAlignmentVertical.MIDDLE, line_height=0.9)
 
   def _load_assets(self):
     self.set_rect(rl.Rectangle(0, 0, 316 + self.HORIZONTAL_PADDING * 2, 100))
@@ -83,7 +83,7 @@ class SmallSlider(Widget):
         self._circle_bg_txt.width + self.HORIZONTAL_PADDING * 2,
         self._rect.height,
       )
-      if rl.check_collision_point_rec(mouse_event.pos, circle_button_rect):
+      if rl.check_collision_point_rec(rl.Vector2(mouse_event.pos.x, mouse_event.pos.y), circle_button_rect):
         self._start_x_circle = mouse_event.pos.x
         self._is_dragging_circle = True
 
@@ -179,7 +179,7 @@ class BigSlider(SmallSlider):
     self._icon = icon
     super().__init__(title, confirm_callback=confirm_callback)
     self._label = UnifiedLabel(title, font_size=48, font_weight=FontWeight.DISPLAY, text_color=rl.Color(255, 255, 255, int(255 * 0.65)),
-                               alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT, alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE,
+                               alignment=TextAlignment.RIGHT, alignment_vertical=TextAlignmentVertical.MIDDLE,
                                line_height=0.875)
 
   def _load_assets(self):

@@ -748,3 +748,51 @@ def test_mapbox_failure_backs_off_instead_of_retrying_every_second(monkeypatch, 
   controller.segment_distance = 0.0
   controller.get_mapbox_speed_limit(datetime(2026, 9, 20), False, 25.0, sm)
   assert len(calls) == 2
+
+
+def test_hanging_request_does_not_queue_a_request_every_frame(monkeypatch):
+  # On a dead network one provider's request hangs ~20 s on the shared single worker. Each queued request
+  # must still count as in flight, or every 20 Hz planner frame queues another one and plannerd's heap
+  # and its periodic full collection grow for the rest of the drive.
+  import iqpilot.selfdrive.controls.lib.speed_limit_controller as slc_module
+
+  class StalledExecutor:
+    def __init__(self):
+      self.queued = []
+
+    def submit(self, fn):
+      future = SimpleNamespace(callbacks=[], add_done_callback=lambda callback: future.callbacks.append(callback))
+      self.queued.append((fn, future))
+      return future
+
+    def run_all(self):
+      while self.queued:
+        fn, future = self.queued.pop(0)
+        result = fn()
+        for callback in future.callbacks:
+          callback(SimpleNamespace(result=lambda result=result: result))
+
+  def get(*_args, **_kwargs):
+    raise slc_module.requests.ConnectionError("down")
+
+  monkeypatch.setattr(slc_module, "is_url_pingable", lambda _url: True)
+  controller = SpeedLimitController(FakeParams())
+  controller.executor = StalledExecutor()
+  controller.session = SimpleNamespace(get=get)
+  controller.gps_valid = True
+  controller.mapbox_token = "token"
+  controller.tomtom_token = "token"
+  controller.gps_position = {"latitude": 40.0, "longitude": -73.0, "bearing": 0.0}
+  sm = {"carState": SimpleNamespace(steeringAngleDeg=0.0), "vehicleParameters": SimpleNamespace(angleOffsetDeg=0.0)}
+
+  for _ in range(400):
+    controller.get_mapbox_speed_limit(datetime(2026, 10, 23), False, 15.0, sm)
+    controller.get_tomtom_speed_limit(datetime(2026, 10, 23), False, 15.0, sm)
+  assert len(controller.executor.queued) == 2
+
+  controller.executor.run_all()
+  assert not controller.calling_mapbox and not controller.calling_tomtom
+  for _ in range(400):
+    controller.get_mapbox_speed_limit(datetime(2026, 10, 23), False, 15.0, sm)
+    controller.get_tomtom_speed_limit(datetime(2026, 10, 23), False, 15.0, sm)
+  assert controller.executor.queued == []

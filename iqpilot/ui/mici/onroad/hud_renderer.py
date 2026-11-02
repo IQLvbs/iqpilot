@@ -1,7 +1,7 @@
 """
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
 """
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.selfdrive.ui.mici.onroad.hud_renderer import HudRenderer
 from iqpilot.ui.onroad.hud_overlays import IQBlindSpotOverlay

@@ -1,4 +1,4 @@
-import pyray as rl
+import raylib_nb as rl
 from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
 import iqpilot.cereal.messaging as messaging

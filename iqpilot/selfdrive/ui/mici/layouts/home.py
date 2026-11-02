@@ -5,7 +5,7 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 import time
 
 from iqpilot.cereal import log
-import pyray as rl
+import raylib_nb as rl
 from collections.abc import Callable
 from iqpilot.system.ui.widgets.label import MiciLabel, UnifiedLabel
 from iqpilot.system.ui.widgets import Widget

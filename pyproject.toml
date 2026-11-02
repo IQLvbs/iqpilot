@@ -49,7 +49,7 @@ dependencies = [
 
   # these should be removed
   "psutil",
-  "pycryptodome", # used in updated/casync, panda, body, and a test
+  "pycryptodome", # used in panda, body, and a test
   "cryptography", # proprietary bundle signing / verification
   "setproctitle",
 
@@ -57,7 +57,7 @@ dependencies = [
   "zstandard",
 
   # ui
-  "raylib > 5.5.0.3",
+  "raylib-nanobind @ git+https://git.konn3kt.com/teal/iqraylib.git@e1d6be28aab406a4282891d2b2fab4a121733cce",
   "pyzbar @ git+https://gitlvb.teallvbs.xyz/IQ.Lvbs/op-dependencies.git@release-pyzbar#subdirectory=pyzbar ; sys_platform == 'linux'",
   "qrcode",
   "mapbox-earcut",
@@ -208,10 +208,10 @@ lint.flake8-implicit-str-concat.allow-multiline = false
 "time.time".msg = "Use time.monotonic"
 
 # raylib banned APIs
-"pyray.measure_text_ex".msg = "Use iqpilot.system.ui.lib.text_measure"
-"pyray.is_mouse_button_pressed".msg = "This can miss events. Use Widget._handle_mouse_press"
-"pyray.is_mouse_button_released".msg = "This can miss events. Use Widget._handle_mouse_release"
-"pyray.draw_text".msg = "Use a function (such as rl.draw_font_ex) that takes font as an argument"
+"raylib_nb.measure_text_ex".msg = "Use iqpilot.system.ui.lib.text_measure"
+"raylib_nb.is_mouse_button_pressed".msg = "This can miss events. Use Widget._handle_mouse_press"
+"raylib_nb.is_mouse_button_released".msg = "This can miss events. Use Widget._handle_mouse_release"
+"raylib_nb.draw_text".msg = "Use a function (such as rl.draw_font_ex) that takes font as an argument"
 
 [tool.ruff.format]
 quote-style = "preserve"

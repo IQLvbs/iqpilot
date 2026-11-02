@@ -1,7 +1,7 @@
 # Copyright (c) 2026 IQ.Lvbs. All rights reserved.
 import colorsys
 import numpy as np
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.system.ui.lib.shader_polygon import Gradient, draw_polygon
 

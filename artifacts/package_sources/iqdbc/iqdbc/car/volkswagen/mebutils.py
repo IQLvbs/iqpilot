@@ -8,155 +8,34 @@ from iqdbc.car.common.pid import PIDController
 from iqdbc.car import DT_CTRL
 
 
-class LongControlJerk():
-  JERK_LIMIT_MIN = 0.5
-  JERK_LIMIT_MIN_NO_LEAD = 0.7
-  JERK_LIMIT_MAX = 5.0
-  FILTER_GAIN_DISTANCE = [10, 50]
-  FILTER_GAIN_DISTANCE_CHANGE = [0, 20]
-  FILTER_GAIN_MAX = 0.95
-  FILTER_GAIN_MIN = 0.75
-  FILTER_GAIN_NO_LEAD = 0.95
-  
-  def __init__(self, dt=DT_CTRL):
-    self.dy_up = 0.
-    self.dy_down = 0.
-    self.jerk_up = 0.
-    self.jerk_down = 0.
-    self.dt = dt
-    self.accel_last = 0.
-    self.distance_last = 0.
-    self.jerk_limit_min = self.JERK_LIMIT_MIN_NO_LEAD
-    
-  def update(self, enabled, override, distance, has_lead, accel, critical_state):
-    # jerk limits by accel change and distance are used to improve comfort while ensuring a fast enough car reaction
-    # override mechanics reminder:
-    # (1) sending accel = 0 and directly setting jerk to zero results in round about steady accel until harder accel pedal press -> lack of control
-    # (2) sending accel = 0 and allowing a high jerk results in a abrupt accel cut -> lack of comfort    
-    if not enabled:
-      self.jerk_up = 0.
-      self.jerk_down = 0.
-      self.dy_up = 0.
-      self.dy_down = 0.
-    elif override:
-      self.jerk_up = self.JERK_LIMIT_MIN
-      self.jerk_down = self.JERK_LIMIT_MIN
-      self.dy_up = 0.
-      self.dy_down = 0.
-    elif critical_state: # force best car reaction
-      self.jerk_up = self.JERK_LIMIT_MAX
-      self.jerk_down = self.JERK_LIMIT_MAX
-      self.dy_up = 0.
-      self.dy_down = 0.
-    else:
-      jerk_limit_min_target = self.JERK_LIMIT_MIN if has_lead else self.JERK_LIMIT_MIN_NO_LEAD # jerk limit min base line
-      jerk_limit_min_delta = abs(self.JERK_LIMIT_MIN_NO_LEAD - self.JERK_LIMIT_MIN) * self.dt
-      if self.jerk_limit_min < jerk_limit_min_target:
-        self.jerk_limit_min = min(self.jerk_limit_min + jerk_limit_min_delta, jerk_limit_min_target)
-      elif self.jerk_limit_min > jerk_limit_min_target:
-        self.jerk_limit_min = max(self.jerk_limit_min - jerk_limit_min_delta, jerk_limit_min_target)
-      
-      if has_lead:
-        distance_change = (self.distance_last - distance) / self.dt if 0 not in (self.distance_last, distance) else 0
-        filter_gain_dist = np.interp(distance, self.FILTER_GAIN_DISTANCE, [self.FILTER_GAIN_MAX, self.jerk_limit_min]) # gain by distance
-        filter_gain_dist_change = np.interp(abs(distance_change), self.FILTER_GAIN_DISTANCE_CHANGE, [self.jerk_limit_min, self.FILTER_GAIN_MAX]) # gain by distance change
-        filter_gain = max(filter_gain_dist, filter_gain_dist_change) # use highest gain
-      else:
-        filter_gain = self.FILTER_GAIN_NO_LEAD
-      
-      j = (accel - self.accel_last) / self.dt
-  
-      tgt_up = abs(j) if j > 0 else 0.
-      tgt_down = abs(j) if j < 0 else 0.
-  
-      # how fast does the car react to acceleration
-      self.dy_up += filter_gain * (tgt_up - self.jerk_up - self.dy_up)
-      self.jerk_up += self.dt * self.dy_up
-      self.jerk_up = np.clip(self.jerk_up, self.jerk_limit_min, self.JERK_LIMIT_MAX)
-  
-      # how fast does the car react to braking
-      self.dy_down += filter_gain * (tgt_down - self.jerk_down - self.dy_down)
-      self.jerk_down += self.dt * self.dy_down
-      self.jerk_down = np.clip(self.jerk_down, self.jerk_limit_min, self.JERK_LIMIT_MAX)
-  
-    self.accel_last = accel
-    self.distance_last = distance
+def longitudinal_comfort_values(CC, CC_IQ, legacy_band):
+  """Return positive/negative jerk and VW oben/unten deviation fields."""
+  comfort = CC_IQ.longitudinalComfort
+  legacy = (4.0, 4.0, legacy_band, legacy_band)
+  if not CC.longComfortMode or not comfort.valid:
+    return legacy
+  values = (comfort.jerkUp, comfort.jerkDown, comfort.accelDeviationAbove, comfort.accelDeviationBelow)
+  if not all(np.isfinite(v) for v in values) or min(values) < 0 or min(values[:2]) <= 0:
+    return legacy
+  if str(CC.hudControl.visualAlert) == 'fcw' or comfort.bypassJerkLimit:
+    return 5.0, 5.0, 0.0, 0.0
 
-  def get_jerk_up(self):
-    return self.jerk_up
-    
-  def get_jerk_down(self):
-    return self.jerk_down
-    
-
-class LongControlLimit():
-  LOWER_LIMIT_FACTOR = 0.024
-  LOWER_LIMIT_MAX = LOWER_LIMIT_FACTOR * 8
-  LOWER_LIMIT_MIN = LOWER_LIMIT_FACTOR * 2
-  UPPER_LIMIT_FACTOR = 0.0625
-  UPPER_LIMIT_MAX = UPPER_LIMIT_FACTOR * 3
-  LIMIT_MIN = 0.
-  LIMIT_DISTANCE = [10, 100] # limit range
-  LIMIT_DISTANCE_CHANGE_DOWN = [0, 20] # high precision for worst case high speed approaching a stopped lead
-  LIMIT_DISTANCE_CHANGE_UP = [0, 5] # precisely follow an accelerating lead especially from stop
-  LIMIT_DISTANCE_CHANGE_UP_ACT = [0, 60]
-  DISTANCE_FILTER_RC = [0.15, 0.6] # smooth noisy distance signal for distant leads
-  DISTANCE_TIMEOUT = 1. # seconds
-  
-  def __init__(self, dt=DT_CTRL):
-    self.upper_limit = self.LIMIT_MIN
-    self.lower_limit = self.LIMIT_MIN
-    self.dt = dt
-    self.distance_last = 0.
-    self.distance_filter = FirstOrderFilter(0.0, rc=self.DISTANCE_FILTER_RC[0], dt=dt, initialized=False)
-    self.distance_valid_timer = 0
-    
-  def update(self, enabled: bool, speed: float, set_speed: float, distance: float, has_lead: bool, critical_state: bool):
-    # control limits by distance are used to improve comfort while ensuring precise car reaction if neccessary
-    # also used to reduce an effect of decel overshoot when target is breaking
-    # limits are controlled mainly by distance of lead car
-    if not enabled or critical_state: # force most precise accel command execution
-      self.upper_limit = self.LIMIT_MIN
-      self.lower_limit = self.LIMIT_MIN
-      self.distance_valid_timer = 0
-    elif not has_lead: 
-      if self.distance_valid_timer < self.DISTANCE_TIMEOUT: # fluctuation block: keep alive
-        self.distance_valid_timer += self.dt
-      else: # force most precise
-        self.upper_limit = self.LIMIT_MIN
-        self.lower_limit = self.LIMIT_MIN
-    else:
-      distance_change_raw = (self.distance_last - distance) / self.dt if 0 not in (self.distance_last, distance) else 0
-      distance_filter_rc = np.interp(distance, self.LIMIT_DISTANCE, self.DISTANCE_FILTER_RC)
-      if (self.distance_last == 0 or self.distance_valid_timer != 0) and distance != 0: # for new lead detection reset filter and correctly force current state upon next iteration
-        self.distance_filter = FirstOrderFilter(0.0, rc=distance_filter_rc, dt=self.dt, initialized=False)
-        distance_change = distance_change_raw
-      else:
-        self.distance_filter.update_alpha(distance_filter_rc)
-        distance_change = self.distance_filter.update(distance_change_raw)
-      self.distance_valid_timer = 0
-        
-      # how far can the true accel vary downwards from requested accel
-      upper_limit_dist = np.interp(distance, self.LIMIT_DISTANCE, [self.LIMIT_MIN, self.UPPER_LIMIT_MAX]) # base line based on distance
-      upper_limit_dist_change = np.interp(-min(0, distance_change), self.LIMIT_DISTANCE_CHANGE_UP, [self.UPPER_LIMIT_MAX, self.LIMIT_MIN]) # limit by distance change up
-      upper_limit_dist_change = np.interp(distance, self.LIMIT_DISTANCE_CHANGE_UP_ACT, [upper_limit_dist_change, upper_limit_dist]) # distance change activation
-      self.upper_limit = min(upper_limit_dist, upper_limit_dist_change) # use lowest limit
-      
-      # how far can the true accel vary upwards from requested accel
-      set_speed_diff_up = max(0, abs(speed) - abs(set_speed)) # set speed difference down requested by user or speed overshoot (includes hud - real speed difference!)
-      set_speed_diff_up_factor = np.interp(set_speed_diff_up, [1, 1.75], [1., 0.]) # faster requested speed decrease and less speed overshoot downhill 
-      lower_limit_dist = np.interp(distance, self.LIMIT_DISTANCE, [self.LOWER_LIMIT_MIN, self.LOWER_LIMIT_MAX]) # base line based on distance
-      lower_limit_dist_speed = lower_limit_dist * set_speed_diff_up_factor
-      lower_limit_dist_change = np.interp(max(0, distance_change), self.LIMIT_DISTANCE_CHANGE_DOWN, [self.LOWER_LIMIT_MAX, self.LIMIT_MIN]) # limit by distance change down
-      self.lower_limit = min(lower_limit_dist_speed, lower_limit_dist_change) # use lowest limit
-
-    self.distance_last = distance
-
-  def get_upper_limit(self):
-    return self.upper_limit
-    
-  def get_lower_limit(self):
-    return self.lower_limit   
+  up, down = min(comfort.jerkUp, 5.0), min(comfort.jerkDown, 5.0)
+  above, below = comfort.accelDeviationAbove, comfort.accelDeviationBelow
+  if comfort.bypassJerkDownLimit:
+    down = 5.0
+  if not comfort.comfortEnabled or comfort.bypassJerkDownLimit:
+    above = below = 0.0
+  # Physical above -> unten, below -> oben. Stock Golf ACC (cae14e88932eb364 /
+  # 2021-03-26--14-43-28, segments 2-3) tightens unten to zero while braking,
+  # and commonly sends unten/oben = 0.192/0.125 while accelerating. Sustained
+  # cruise reaches oben = 0.375; segments 0-5 never exceed unten/oben =
+  # 0.192/0.5 while active. Cap the shared policy to that stock envelope.
+  # This supports the original port's comments; ECU semantics are inferred.
+  # Round down to DBC steps: encoding must never widen the requested band.
+  unten = np.floor(min(above, 0.192) / 0.024) * 0.024
+  oben = np.floor(min(below, 0.5) / 0.0625) * 0.0625
+  return up, down, oben, unten
 
 
 class LongStopHold():
@@ -247,7 +126,7 @@ def map_speed_to_acc_tempolimit(v_ms):
       break
 
   return acc_value
-  
+
 def get_acc_warning_meb(self, acc_hud):
   # this works as long our radar does not fault while using OP
   if (acc_hud["ACC_Status_ACC"] in (3, 4) # ACC active or in override mode
@@ -257,7 +136,7 @@ def get_acc_warning_meb(self, acc_hud):
       and acc_hud["ACC_Display_Prio"] == 0): # this warning has highest priority
     return True
   return False
-  
+
 class MultiplicativeUnwindPID(PIDController):
   def __init__(self, k_p, k_i, k_f=0., k_d=0., pos_limit=1e308, neg_limit=-1e308, rate=100, min_cmd=1e-10, ki_red_time=1.0):
     super().__init__(k_p, k_i, k_f=k_f, k_d=k_d, pos_limit=pos_limit, neg_limit=neg_limit, rate=rate)
@@ -279,7 +158,7 @@ class MultiplicativeUnwindPID(PIDController):
     steps = max(int(self.ki_red_time * self.rate), 1)
     factor = (self.min_cmd / abs(self.i)) ** (1.0 / steps)
     self.i_unwind_factor = min(factor, 1.0)
-    
+
   def update(self, error, error_rate=0.0, speed=0.0, override=False, feedforward=0., freeze_integrator=False):
     self.speed = speed
 
@@ -335,7 +214,7 @@ class LatControlCurvature():
                                        rate=rate, min_cmd=6.7e-6, ki_red_time=2.0)
   def reset(self):
     self.pid.reset()
-  
+
   def update(self, CS, CC, desired_curvature):
     actual_curvature_vm    = CC.currentCurvature # includes roll
     speed_floor            = max(CS.vEgo, 0.1)

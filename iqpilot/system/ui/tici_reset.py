@@ -5,7 +5,7 @@ import threading
 import time
 from enum import IntEnum
 
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.system.hardware import PC
 from iqpilot.system.ui.lib.application import gui_app, FontWeight, FONT_SCALE

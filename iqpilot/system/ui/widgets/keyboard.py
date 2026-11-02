@@ -2,9 +2,9 @@ from functools import partial
 import time
 from typing import Literal
 
-import pyray as rl
+import raylib_nb as rl
 
-from iqpilot.system.ui.lib.application import gui_app, FontWeight
+from iqpilot.system.ui.lib.application import gui_app, FontWeight, TextAlignment
 from iqpilot.system.ui.lib.multilang import tr
 from iqpilot.system.ui.widgets import Widget
 from iqpilot.system.ui.widgets.button import ButtonStyle, Button
@@ -74,8 +74,8 @@ class Keyboard(Widget):
     self._layout_name: Literal["lowercase", "uppercase", "numbers", "specials"] = "lowercase"
     self._caps_lock = False
     self._last_shift_press_time = 0
-    self._title = Label("", 90, FontWeight.BOLD, rl.GuiTextAlignment.TEXT_ALIGN_LEFT, text_padding=20)
-    self._sub_title = Label("", 55, FontWeight.NORMAL, rl.GuiTextAlignment.TEXT_ALIGN_LEFT, text_padding=20)
+    self._title = Label("", 90, FontWeight.BOLD, TextAlignment.LEFT, text_padding=20)
+    self._sub_title = Label("", 55, FontWeight.NORMAL, TextAlignment.LEFT, text_padding=20)
 
     self._max_text_size = max_text_size
     self._min_text_size = min_text_size

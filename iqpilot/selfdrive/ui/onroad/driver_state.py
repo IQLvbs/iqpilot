@@ -1,5 +1,5 @@
 import numpy as np
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.cereal import log
 from dataclasses import dataclass
 from iqpilot.selfdrive.ui import UI_BORDER_SIZE

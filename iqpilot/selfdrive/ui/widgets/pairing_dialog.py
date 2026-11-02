@@ -1,4 +1,4 @@
-import pyray as rl
+import raylib_nb as rl
 import qrcode
 import numpy as np
 import time
@@ -6,10 +6,11 @@ import jwt
 import os
 from datetime import datetime, timedelta, UTC
 
-from iqpilot.common.api.base import BaseApi, _CUSTODIAN_KEY, _custodian_sign_jwt
+from iqpilot.common.api import Api
+from iqpilot.common.api.base import BaseApi
 from iqpilot.common.swaglog import cloudlog
 from iqpilot.common.params import Params
-from iqpilot.konn3kt.registration import get_or_create_dongle_id, ensure_dev_pairing_identity
+from iqpilot.konn3kt.registration import get_cached_dongle_id, ensure_dev_pairing_identity
 from iqpilot.system.hardware import HARDWARE, PC
 from iqpilot.system.ui.widgets import Widget
 from iqpilot.system.ui.lib.application import FontWeight, gui_app
@@ -55,11 +56,13 @@ class PairingDialog(Widget):
 
     try:
       algorithm, private_key, public_key = BaseApi.get_key_pair()
-      if not private_key or not algorithm:
+      if not private_key or not algorithm or not public_key:
         cloudlog.error("No device keys found")
         return "error://keys_not_found"
 
-      dongle_id = get_or_create_dongle_id(self.params, prefer_readonly=True)
+      dongle_id = get_cached_dongle_id(self.params, prefer_readonly=True)
+      if dongle_id is None:
+        return "error://registration_pending"
 
       try:
         serial = HARDWARE.get_serial() or ""
@@ -72,7 +75,7 @@ class PairingDialog(Widget):
         cloudlog.error("No hardware serial found, cannot generate pairing token")
         return "error://serial_not_found"
 
-      now = datetime.now(UTC).replace(tzinfo=None)
+      now = datetime.now(UTC)
       payload = {
         'identity': dongle_id,
         'nbf': now,
@@ -86,13 +89,11 @@ class PairingDialog(Widget):
       }
 
       try:
-        if private_key is _CUSTODIAN_KEY:
-          serializable = {k: v.isoformat() if isinstance(v, datetime) else v for k, v in payload.items()}
-          token = _custodian_sign_jwt(dongle_id, serializable, algorithm)
-        else:
-          token = jwt.encode(payload, private_key, algorithm=algorithm)
+        token = Api(dongle_id).get_token(payload)
       except Exception as e:
-        cloudlog.warning(f"jwt.encode failed ({e}), retrying with normalized key")
+        if not isinstance(private_key, (str, bytes)):
+          raise
+        cloudlog.warning(f"Pairing token signing failed ({e}), retrying with normalized key")
         try:
           from cryptography.hazmat.primitives import serialization
           key_bytes = private_key.encode("utf-8") if isinstance(private_key, str) else private_key
@@ -132,12 +133,7 @@ class PairingDialog(Widget):
       if self.qr_texture and self.qr_texture.id != 0:
         rl.unload_texture(self.qr_texture)
 
-      rl_image = rl.Image()
-      rl_image.data = rl.ffi.cast("void *", img_array.ctypes.data)
-      rl_image.width = pil_img.width
-      rl_image.height = pil_img.height
-      rl_image.mipmaps = 1
-      rl_image.format = rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8
+      rl_image = rl.Image(img_array, pil_img.width, pil_img.height, 1, rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8)
 
       self.qr_texture = rl.load_texture_from_image(rl_image)
     except Exception:
@@ -219,7 +215,7 @@ class PairingDialog(Widget):
       rl.draw_circle(int(circle_x), int(circle_y), circle_radius, rl.Color(16, 185, 169, 255))
       number = str(i + 1)
       number_size = measure_text_cached(font, number, 30)
-      rl.draw_text_ex(font, number, (int(circle_x - number_size.x // 2), int(circle_y - number_size.y // 2)), 30, 0, rl.WHITE)
+      rl.draw_text_ex(font, number, rl.Vector2(int(circle_x - number_size.x // 2), int(circle_y - number_size.y // 2)), 30, 0, rl.WHITE)
 
       # Text
       rl.draw_text_ex(font, "\n".join(wrapped), rl.Vector2(text_x, y), 47, 0.0, rl.WHITE)

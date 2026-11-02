@@ -1,5 +1,5 @@
 import time
-import pyray as rl
+import raylib_nb as rl
 from collections.abc import Callable
 from enum import IntEnum
 from iqpilot.cereal import log
@@ -13,7 +13,7 @@ from iqpilot.selfdrive.ui.layouts.sidebar import NETWORK_TYPES
 from iqpilot.selfdrive.ui.lib.wifi_ssid import current_ssid
 from iqpilot.selfdrive.ui.ui_state import ui_state
 from iqpilot.system.ui.lib.text_measure import measure_text_cached
-from iqpilot.system.ui.lib.application import gui_app, FontWeight, MouseEvent, MousePos
+from iqpilot.system.ui.lib.application import gui_app, FontWeight, MouseEvent, MousePos, TextAlignmentVertical
 from iqpilot.system.ui.lib.multilang import tr, trn
 from iqpilot.system.ui.widgets.label import UnifiedLabel
 from iqpilot.system.ui.widgets import Widget
@@ -140,7 +140,7 @@ class HomeLayout(Widget):
     self._version_commit_text = ""
     self._status_version_label = UnifiedLabel("", font_size=44, font_weight=FontWeight.MEDIUM,
                                               text_color=rl.Color(185, 185, 190, 255),
-                                              alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE,
+                                              alignment_vertical=TextAlignmentVertical.MIDDLE,
                                               wrap_text=False, scroll=True)
     self._prev_update_available = False
     self._prev_alerts_present = False
@@ -410,7 +410,7 @@ class HomeLayout(Widget):
 
   def _handle_mouse_press(self, mouse_pos: MousePos):
     if (self.current_state == HomeLayoutState.HOME and ui_state.prime_state.is_paired()
-        and not self._show_picker and rl.check_collision_point_rec(mouse_pos, self.right_column_rect)):
+        and not self._show_picker and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self.right_column_rect)):
       self._press_start = time.monotonic()
       self._press_origin = (mouse_pos.x, mouse_pos.y)
       self._press_scrolled = False
@@ -445,9 +445,9 @@ class HomeLayout(Widget):
 
     super()._handle_mouse_release(mouse_pos)
 
-    if self.update_available and rl.check_collision_point_rec(mouse_pos, self.update_notif_rect):
+    if self.update_available and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self.update_notif_rect):
       self._set_state(HomeLayoutState.UPDATE)
-    elif self.alert_count > 0 and rl.check_collision_point_rec(mouse_pos, self.alert_notif_rect):
+    elif self.alert_count > 0 and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self.alert_notif_rect):
       self._set_state(HomeLayoutState.ALERTS)
 
   def _render_status_bar(self):

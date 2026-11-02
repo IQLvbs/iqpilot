@@ -5,8 +5,7 @@ from types import SimpleNamespace
 from iqpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LEAD_T_IDXS_MODEL, T_IDXS
 from iqpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc
 from iqpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalPlanSource
-from iqpilot.selfdrive.controls.lib.longitudinal_planner import (A_CRUISE_MIN, A_CRUISE_MIN_NAV, J_CRUISE, get_accel_candidates,
-                                                                 get_cruise_accel, get_e2e_accel)
+from iqpilot.selfdrive.controls.lib.longitudinal_planner import A_CRUISE_MIN, A_CRUISE_MIN_NAV, J_CRUISE_BP, J_CRUISE_VALS, get_accel_candidates, get_cruise_accel, get_e2e_accel
 
 
 def model_velocity(v_ego, v_future):
@@ -20,16 +19,29 @@ class TestCruiseAccel:
   ])
   def test_e2e_rate_limit(self, v_cruise, v_ego, a_cruise_prev, direction):
     dt = 0.05
-    accel, _ = get_cruise_accel(True, v_cruise, v_ego, a_cruise_prev, 0.0, SimpleNamespace(), dt, 0.0, True)
+    accel, _ = get_cruise_accel(True, v_cruise, v_ego, a_cruise_prev, a_cruise_prev, 0.0, SimpleNamespace(), dt, 0.0, True)
 
-    assert accel == pytest.approx(a_cruise_prev + direction * J_CRUISE * dt)
+    assert accel == pytest.approx(a_cruise_prev + direction * np.interp(v_ego, J_CRUISE_BP, J_CRUISE_VALS) * dt)
+
+  def test_rate_limit_is_gentler_at_highway_speed(self):
+    dt = 0.05
+    city, _ = get_cruise_accel(True, 30.0, 5.0, 0.0, 0.0, 0.0, SimpleNamespace(), dt, 0.0, True)
+    highway, _ = get_cruise_accel(True, 45.0, 30.0, 0.0, 0.0, 0.0, SimpleNamespace(), dt, 0.0, True)
+
+    assert 0.0 < highway < city
+
+  def test_lowering_set_speed_while_braking_does_not_wait_for_cruise_to_ramp_down(self):
+    dt = 0.05
+    accel, _ = get_cruise_accel(True, 10.0, 30.0, 0.4, -1.0, 0.0, SimpleNamespace(), dt, 0.0, True)
+
+    assert accel < 0.0
 
   @pytest.mark.parametrize("e2e", [False, True])
   def test_nav_target_brakes_harder_than_cruise(self, e2e):
     def settle(min_accel):
       accel = 0.0
       for _ in range(100):
-        accel, _ = get_cruise_accel(e2e, 13.9, 19.4, accel, 0.0, SimpleNamespace(steerRatio=15.3, wheelbase=2.64), 0.05, 0.0, True, min_accel)
+        accel, _ = get_cruise_accel(e2e, 13.9, 19.4, accel, accel, 0.0, SimpleNamespace(steerRatio=15.3, wheelbase=2.64), 0.05, 0.0, True, min_accel)
       return accel
 
     assert settle(A_CRUISE_MIN) == pytest.approx(A_CRUISE_MIN)

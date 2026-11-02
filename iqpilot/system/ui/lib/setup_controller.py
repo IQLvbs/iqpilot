@@ -35,6 +35,7 @@ SETUP_METHODS = {
   "startInstall",
   "getInstallProgress",
   "confirmOsUpdate",
+  "declineOsUpdate",
   "ping",
 }
 
@@ -240,6 +241,9 @@ class SetupController:
       # Phone approved flashing the newer IQ.OS — unblock the install thread.
       self.os_update.confirm()
       return {"confirmed": True}
+    if method == "declineOsUpdate":
+      self.os_update.decline()
+      return {"declined": True}
     raise SetupAuthError(f"method_not_allowed:{method}")
 
   # ---- op implementations --------------------------------------------------

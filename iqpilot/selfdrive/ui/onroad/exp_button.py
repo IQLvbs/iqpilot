@@ -1,5 +1,5 @@
 import time
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.common.params import Params
 from iqpilot.selfdrive.ui.ui_state import ui_state
 from iqpilot.system.ui.lib.application import gui_app

@@ -1,8 +1,8 @@
 import os
-import pyray as rl
+import raylib_nb as rl
 from collections.abc import Callable
 from abc import ABC
-from iqpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
+from iqpilot.system.ui.lib.application import gui_app, FontWeight, MousePos, TextAlignment, TextAlignmentVertical
 from iqpilot.system.ui.lib.multilang import tr
 from iqpilot.system.ui.lib.text_measure import measure_text_cached
 from iqpilot.system.ui.widgets import Widget
@@ -86,7 +86,7 @@ class ButtonAction(ItemAction):
     self._pressed = False
     self._font = gui_app.font(FontWeight.NORMAL)
     self._value_label = UnifiedLabel("", ITEM_TEXT_FONT_SIZE, text_color=ITEM_TEXT_VALUE_COLOR,
-                                     alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE,
+                                     alignment_vertical=TextAlignmentVertical.MIDDLE,
                                      wrap_text=False, scroll=True)
 
     def pressed():
@@ -144,8 +144,8 @@ class ButtonAction(ItemAction):
         self._value_label.render(value_rect)
       else:
         gui_label(value_rect, value_text, font_size=ITEM_TEXT_FONT_SIZE, color=ITEM_TEXT_VALUE_COLOR,
-                  font_weight=FontWeight.NORMAL, alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
-                  alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE)
+                  font_weight=FontWeight.NORMAL, alignment=TextAlignment.LEFT,
+                  alignment_vertical=TextAlignmentVertical.MIDDLE)
 
     # TODO: just use the generic Widget click callbacks everywhere, no returning from render
     pressed = self._pressed
@@ -162,7 +162,7 @@ class TextAction(ItemAction):
     initial_text = _resolve_value(text, "")
     text_width = measure_text_cached(self._font, initial_text, ITEM_TEXT_FONT_SIZE).x
     self._scroll_label = UnifiedLabel(initial_text, ITEM_TEXT_FONT_SIZE, text_color=color,
-                                      alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE,
+                                      alignment_vertical=TextAlignmentVertical.MIDDLE,
                                       wrap_text=False, scroll=True)
     super().__init__(int(text_width + TEXT_PADDING), enabled)
 
@@ -182,8 +182,8 @@ class TextAction(ItemAction):
       self._scroll_label.render(rect)
     else:
       gui_label(self._rect, text, font_size=ITEM_TEXT_FONT_SIZE, color=self.color,
-                font_weight=FontWeight.NORMAL, alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT,
-                alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE)
+                font_weight=FontWeight.NORMAL, alignment=TextAlignment.RIGHT,
+                alignment_vertical=TextAlignmentVertical.MIDDLE)
     return False
 
   def set_text(self, text: str | Callable[[], str]):
@@ -256,9 +256,6 @@ class MultipleButtonAction(ItemAction):
     if 0 <= index < len(self.buttons):
       self.selected_button = index
 
-  def get_selected_button(self) -> int:
-    return self.selected_button
-
   def _render(self, rect: rl.Rectangle):
     spacing = RIGHT_ITEM_PADDING
     button_y = rect.y + (rect.height - BUTTON_HEIGHT) / 2
@@ -312,7 +309,7 @@ class MultipleButtonAction(ItemAction):
     for i, _ in enumerate(self.buttons):
       button_x = self._rect.x + i * (button_width + spacing)
       button_rect = rl.Rectangle(button_x, button_y, button_width, BUTTON_HEIGHT)
-      if rl.check_collision_point_rec(mouse_pos, button_rect):
+      if rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), button_rect):
         if not self._is_button_enabled(i):
           continue
         self.selected_button = i
@@ -365,7 +362,7 @@ class ListItem(Widget):
     # Check not in action rect
     if self.action_item:
       action_rect = self.get_right_item_rect(self._rect)
-      if rl.check_collision_point_rec(mouse_pos, action_rect):
+      if rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), action_rect):
         # Click was on right item, don't toggle description
         return
 

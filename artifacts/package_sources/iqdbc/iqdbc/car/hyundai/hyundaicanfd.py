@@ -335,12 +335,12 @@ def create_acc_cancel(packer, CP, CAN, cruise_info_copy):
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
 def create_lfahda_cluster(packer, CS, CAN, long_active, lat_active, synthesize=False):
-  if CS.lfahda_cluster is not None:
-    values = copy.copy(CS.lfahda_cluster)
-    rx_counter = values.pop("COUNTER", None)
-  elif synthesize:
+  if synthesize:
     values = {"HDA_OptUsmSta": 2}
     rx_counter = None
+  elif CS.lfahda_cluster is not None:
+    values = copy.copy(CS.lfahda_cluster)
+    rx_counter = values.pop("COUNTER", None)
   else:
     return []
   values["HDA_CntrlModSta"] = 2 if long_active else 0
@@ -400,7 +400,8 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
   elif hyundai_jerk.carrot_cruise == 2:
     accel = accel_value_last = hyundai_jerk.carrot_cruise_accel
 
-  jerk_u = 2.0 if stopping or soft_hold_active else hyundai_jerk.jerk_u
+  # Comfort mode keeps this stopping jerk unless gas override or FCW takes over.
+  jerk_u = hyundai_jerk.jerk_u if hyundai_jerk.comfort_active else (2.0 if stopping or soft_hold_active else hyundai_jerk.jerk_u)
   jerk_l = hyundai_jerk.jerk_l
   if not enabled or gas_override:
     a_val, a_raw = 0, 0
@@ -549,6 +550,23 @@ def create_fca_warning_light(CP, packer, CAN, frame):
       }
       ret.append(packer.make_can_msg("ADRV_0x160", CAN.ACAN, values))
   return ret
+
+RADAR_0x140_VALUES = {"DATA_3": 0x41, "DATA_4": 0x80}
+RADAR_0x160_VALUES = {"AEB_SETTING": 0x3, "SET_ME_2": 0x2, "SET_ME_FF": 0xff, "SET_ME_FC": 0xfc, "SET_ME_9": 0x1}
+ADRV_0x51_CAMERA_VALUES = {"DATA_3": 0x08, "DATA_6": 0xe2, "DATA_7": 0xfe, "DATA_13": 0x20, "DATA_14": 0xff,
+                           "DATA_15": 0xff, "DATA_24": 0x08, "DATA_28": 0x10}
+
+
+def create_camera_keepalive(CP, packer, CAN, frame):
+  if CP.flags & HyundaiFlags.CAMERA_SCC.value:
+    return []
+  if CP.flags & HyundaiFlags.CANFD_HDA2.value:
+    return [packer.make_can_msg("ADRV_0x51", CAN.CAM, ADRV_0x51_CAMERA_VALUES)]
+  ret = [packer.make_can_msg("RADAR_0x140", CAN.CAM, RADAR_0x140_VALUES)]
+  if frame % 2 == 0:
+    ret.append(packer.make_can_msg("ADRV_0x160", CAN.CAM, RADAR_0x160_VALUES))
+  return ret
+
 
 def create_tcs_messages(packer, CAN, CS):
   ret = []

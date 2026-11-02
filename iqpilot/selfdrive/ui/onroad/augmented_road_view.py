@@ -1,6 +1,6 @@
 import time
 import numpy as np
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.cereal import log, messaging
 from iqpilot.cereal.visionipc import VisionStreamType
 from iqpilot.selfdrive.ui import UI_BORDER_SIZE

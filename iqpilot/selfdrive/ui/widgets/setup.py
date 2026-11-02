@@ -1,5 +1,5 @@
 import math
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.common.time_helpers import system_time_valid
 from iqpilot.selfdrive.ui.ui_state import ui_state
 from iqpilot.selfdrive.ui.widgets.pairing_dialog import PairingDialog

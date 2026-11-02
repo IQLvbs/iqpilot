@@ -1758,7 +1758,7 @@ BO_ 1414 Waehlhebel_02: 8 Getriebe_AL551_951_D4_C7
  SG_ WH_KD_Fehler : 63|1@1+ (1.0,0.0) [0.0|1] ""  Gateway_D4C7
 
 
-VAL_ 159 EPS_HCA_Status 0 "disabled" 1 "initializing" 2 "fault" 3 "ready" 4 "rejected" 5 "active" ;
+VAL_ 159 EPS_HCA_Status 0 "disabled" 1 "initializing" 2 "fault" 3 "ready" 4 "rejected" 5 "active" 7 "active" ;
 VAL_ 269 ACC_Freigabe_Momentenanf 0 "Momanf_nicht_freigegeben" 1 "Momanf_freigegeben" ;
 VAL_ 269 ACC_Freigabe_Verzanf 0 "Verzanf_nicht_freigegeben" 1 "Verzanf_freigegeben" ;
 VAL_ 269 ACC_Getriebestellung_P 0 "P_Stellung_nicht_angefordert" 1 "Anforderung_P_Stellung" ;

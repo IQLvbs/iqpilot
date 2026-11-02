@@ -19,6 +19,8 @@ class SensorState(dict):
   def __init__(self, *args):
     super().__init__(*args)
     self.logMonoTime = dict.fromkeys(self, 1_000_000_000)
+    self.valid = dict.fromkeys(self, True)
+    self.alive = dict.fromkeys(self, True)
     self.valid_inputs = True
 
   def all_checks(self, service_list):

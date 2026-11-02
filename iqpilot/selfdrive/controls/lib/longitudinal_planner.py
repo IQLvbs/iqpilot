@@ -21,13 +21,15 @@ from iqpilot.selfdrive.controls.lib.iq_longitudinal_planner import LongitudinalP
 from iqpilot.selfdrive.controls.lib.iq_longitudinal_planner import LongitudinalPlanSource as IQPlanSource
 from iqpilot.selfdrive.controls.lib.accel_boost import AccelBoost
 from iqpilot.selfdrive.controls.lib.e2e_distance_controller import E2EDistanceController
+from iqpilot.selfdrive.controls.lib.stop_offset import CONTROLLER_VERSION, LeadStopTargets, StopFrame, StopOffset, StopOffsetPlan
 
 A_CRUISE_MAX_VALS = [2.0, 1.6, 0.8, 0.6]
 A_CRUISE_MAX_BP = [0., 10.0, 25., 40.]
-A_CRUISE_MIN = -0.5
-# navd shapes its turn/curve speed targets assuming this deceleration (IQ_ROUTE_DECEL in navd route_manager)
+A_CRUISE_MIN = -1.2
+J_CRUISE_VALS = [1.6, 1.2, 0.8, 0.6]
+J_CRUISE_BP = [0., 10.0, 25., 40.]
+# navd shapes turn/curve targets assuming this deceleration.
 A_CRUISE_MIN_NAV = -1.5
-J_CRUISE = 1.0
 CRUISE_STOP_SPEED = 1.0
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 ALLOW_THROTTLE_THRESHOLD = 0.4
@@ -65,7 +67,7 @@ def get_lead_distance(radarState):
     return radarState.leadTwo.dRel
   return 0
 
-def get_cruise_accel(e2e, v_cruise, v_ego, a_cruise_prev, angle_steers, CP, dt, accel_coast, allow_throttle, min_accel=A_CRUISE_MIN):
+def get_cruise_accel(e2e, v_cruise, v_ego, a_cruise_prev, a_target_prev, angle_steers, CP, dt, accel_coast, allow_throttle, min_accel=A_CRUISE_MIN):
   max_accel = ACCEL_MAX if e2e else get_max_accel(v_ego)
 
   if not e2e:
@@ -79,7 +81,8 @@ def get_cruise_accel(e2e, v_cruise, v_ego, a_cruise_prev, angle_steers, CP, dt, 
     max_accel = min(max_accel, coast_limit)
 
   target_accel = np.clip(v_cruise - v_ego, min_accel, max_accel)
-  target_accel = float(np.clip(target_accel, a_cruise_prev - J_CRUISE * dt, a_cruise_prev + J_CRUISE * dt))
+  j_cruise = np.interp(v_ego, J_CRUISE_BP, J_CRUISE_VALS)
+  target_accel = float(np.clip(target_accel, min(a_cruise_prev, a_target_prev) - j_cruise * dt, a_cruise_prev + j_cruise * dt))
 
   cruise_should_stop = v_cruise == 0.0 and v_ego < CRUISE_STOP_SPEED
   return target_accel, cruise_should_stop
@@ -117,11 +120,11 @@ def get_accel_candidates(e2e, has_lead, mpc_candidate, cruise_candidate, e2e_can
 
 
 class LongitudinalPlanner(LongitudinalPlannerIQ):
-  def __init__(self, CP, CP_IQ, init_v=0.0, init_a=0.0, dt=DT_MDL):
+  def __init__(self, CP, CP_IQ, init_v=0.0, init_a=0.0, dt=DT_MDL, *, stop_offset_m=None):
     self.CP = CP
     self.stopping_speed = CP_IQ.longitudinalStoppingSpeedOverride or DEFAULT_STOPPING_SPEED
     self.mpc = LongitudinalMpc(dt=dt)
-    LongitudinalPlannerIQ.__init__(self, self.CP, CP_IQ, self.mpc)
+    LongitudinalPlannerIQ.__init__(self, self.CP, CP_IQ, self.mpc, stop_offset_m=stop_offset_m)
     self.fcw = False
     self.dt = dt
     self.allow_throttle = True
@@ -148,6 +151,50 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
     self.j_desired_trajectory = np.zeros(CONTROL_N)
+    self.stop_offset = StopOffset(max(self.custom_stop_distance.distance, 0.0), CONTROL_N_T_IDX, delay=CP.longitudinalActuatorDelay, dt=dt)
+    self.lead_stops = LeadStopTargets(dt)
+    self.stop_plan = StopOffsetPlan()
+    self.stop_position = 0.0
+    self.stop_time = None
+    self.stop_previous_speed = init_v
+
+  def update_stop_offset(self, sm, reset_state):
+    cs = sm['carState']
+    offset = max(self.custom_stop_distance.distance, 0.0)
+    if not self.custom_stop_distance.valid:
+      self.stop_offset.reset()
+      self.lead_stops.reset()
+      self.stop_plan = StopOffsetPlan(state='invalidConfiguration')
+      self.stop_time = None
+      self.stop_previous_speed = cs.vEgo
+      return
+    if offset != self.stop_offset.offset:
+      self.stop_offset = StopOffset(offset, CONTROL_N_T_IDX, delay=self.CP.longitudinalActuatorDelay, dt=self.dt)
+      self.lead_stops.reset()
+    now = (self.stop_time + self.dt) if self.stop_time is not None else 0.0
+    radar_fresh = True
+    if hasattr(sm, 'logMonoTime'):
+      now = max(sm.logMonoTime[s] for s in ('carState', 'modelV2', 'radarState')) * 1e-9
+      radar_fresh = (sm.valid['radarState'] and sm.alive['radarState']
+                     and 0.0 <= now - sm.logMonoTime['radarState'] * 1e-9 <= 0.2)
+    elapsed = self.dt if self.stop_time is None else now - self.stop_time
+    if not 0.0 <= elapsed <= 0.2:
+      self.stop_offset.reset()
+      self.lead_stops.reset()
+      elapsed = 0.0
+    self.stop_position += (self.stop_previous_speed + cs.vEgo) * 0.5 * elapsed
+    self.stop_previous_speed, self.stop_time = cs.vEgo, now
+    active = (self.CP.openpilotLongitudinalControl and not reset_state
+              and sm['selfdriveState'].enabled and sm['carControl'].longActive)
+    override = cs.gasPressed or bool(getattr(sm['iqCarState'], 'accelPressed', False))
+    frame = StopFrame(now, self.stop_position, cs.vEgo, cs.aEgo, active, override, self.a_desired, self.v_desired_filter.x)
+    if active and not override:
+      rs = sm['radarState']
+      targets = self.lead_stops.update(frame, (rs.leadOne, rs.leadTwo)) if radar_fresh else ()
+    else:
+      self.lead_stops.reset()
+      targets = ()
+    self.stop_plan = self.stop_offset.update(frame, targets)
 
   @staticmethod
   def parse_model(model_msg):
@@ -203,7 +250,9 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
       v_cruise = 0.0
 
     personality = sm['selfdriveState'].personality
-    self.mpc.set_weights(personality=personality)
+    self.update_stop_offset(sm, reset_state)
+    prev_accel_constraint = not (reset_state or sm['carState'].standstill)
+    self.mpc.set_weights(prev_accel_constraint, personality=personality)
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
     self.mpc.update(sm['modelV2'], sm['radarState'], personality=personality)
     v_cruise = LongitudinalPlannerIQ.update_targets(self, sm, self.v_desired_filter.x, v_cruise)
@@ -223,7 +272,6 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
 
     output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
     output_should_stop_e2e = sm['modelV2'].action.shouldStop
-    output_a_target_e2e, output_should_stop_e2e = self.apply_e2e_stop_distance(sm, v_ego, output_a_target_e2e, output_should_stop_e2e)
     if self.is_e2e(sm) and not self.mpc.status:
       output_a_target_e2e = get_e2e_accel(v_ego, v_cruise, model_v, output_a_target_e2e, output_should_stop_e2e)
 
@@ -242,7 +290,7 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
       output_a_target_e2e = max(output_a_target_e2e, min(a_launch, a_launch_max))
 
     e2e = self.is_e2e(sm)
-    self.a_cruise, cruise_should_stop = get_cruise_accel(e2e, v_cruise, v_ego, self.a_cruise,
+    self.a_cruise, cruise_should_stop = get_cruise_accel(e2e, v_cruise, v_ego, self.a_cruise, a_prev,
                                                           steer_angle_without_offset, self.CP, self.dt,
                                                           accel_coast, self.allow_throttle,
                                                           A_CRUISE_MIN_NAV if self.source == IQPlanSource.nav else A_CRUISE_MIN)
@@ -258,7 +306,7 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
     output_a_target_e2e = self.distance_control.update(
       sm, self.mpc, a_model=output_a_target_e2e, a_mpc=output_a_target_mpc, a_cruise=self.a_cruise,
       e2e=e2e, engaged=self.CP.openpilotLongitudinalControl and not reset_state and sm['selfdriveState'].enabled and sm['carControl'].longActive,
-      should_stop=output_should_stop_e2e or output_should_stop_mpc or cruise_should_stop or self.forcing_stop,
+      should_stop=output_should_stop_e2e or output_should_stop_mpc or cruise_should_stop or self.forcing_stop or self.stop_plan.active,
       fcw=self.fcw, allow_throttle=self.allow_throttle, lateral_accel=lateral_accel,
     )
 
@@ -269,6 +317,10 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
       (self.a_cruise, LongitudinalPlanSource.cruise, cruise_should_stop),
       (output_a_target_e2e, LongitudinalPlanSource.e2e, output_should_stop_e2e),
     )
+    stop_trajectory = self.stop_plan.trajectory
+    if stop_trajectory is not None:
+      stop_source = LongitudinalPlanSource.lead1 if self.stop_plan.target.source == 'lead1' else LongitudinalPlanSource.lead0
+      candidates.append((stop_trajectory.acceleration, stop_source, stop_trajectory.should_stop))
 
     output_a_target, self.mpc.source, _ = min(candidates, key=lambda c: c[0])
     self.output_should_stop = any(should_stop for _, _, should_stop in candidates)
@@ -285,10 +337,35 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
       self.mode_blend_timer = 0.0 if limited_a_target == output_a_target else max(self.mode_blend_timer - self.dt, 0.0)
       output_a_target = limited_a_target
 
+    if stop_trajectory is not None:
+      # A mode blend may ease ordinary braking, but must not override the
+      # selected stopping preference after final candidate arbitration.
+      output_a_target = min(output_a_target, stop_trajectory.acceleration)
+      if output_a_target == stop_trajectory.acceleration:
+        self.mpc.source = stop_source
+        self.v_desired_trajectory = np.asarray(stop_trajectory.speeds)
+        self.a_desired_trajectory = np.asarray(stop_trajectory.accelerations)
+        self.j_desired_trajectory = np.asarray(stop_trajectory.jerks)
     self.output_a_target = np.clip(output_a_target, ACCEL_MIN, ACCEL_MAX)
 
     self.a_desired = float(self.output_a_target)
     self.v_desired_filter.x = self.v_desired_filter.x + self.dt * (self.output_a_target + a_prev) / 2.0
+
+  def _fill_stop_offset(self, stop):
+    # The planner's math is numpy; pycapnp on device rejects numpy scalars, so cast every field explicitly.
+    stop.version = int(CONTROLLER_VERSION)
+    stop.valid = bool(self.stop_plan.trajectory is not None)
+    stop.configurationValid = bool(self.custom_stop_distance.valid)
+    stop.requestedOffset = float(self.custom_stop_distance.requested_distance)
+    stop.supportedSources = ['lead']
+    stop.state = str(self.stop_plan.state)
+    if self.stop_plan.target is not None:
+      stop.eventId = int(self.stop_plan.target.event_id)
+      stop.source = str(self.stop_plan.target.source)
+      stop.baselineDistance = float(self.stop_plan.target.position - self.stop_position)
+      stop.distance = float(self.stop_plan.remaining)
+      stop.uncertainty = float(self.stop_plan.target.uncertainty)
+      stop.shortfall = float(self.stop_plan.shortfall)
 
   def publish(self, sm, pm):
     plan_send = messaging.new_message('longitudinalPlan')
@@ -317,6 +394,7 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
 
     longitudinalPlan.hasLead = sm['radarState'].leadOne.status
     longitudinalPlan.leadDistance = get_lead_distance(sm['radarState'])
+    self._fill_stop_offset(longitudinalPlan.stopOffset)
     longitudinalPlan.longitudinalPlanSource = self.mpc.source
     longitudinalPlan.fcw = self.fcw
 

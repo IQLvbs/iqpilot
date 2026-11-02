@@ -6,12 +6,12 @@ from enum import IntEnum
 from collections.abc import Callable
 from itertools import zip_longest
 from typing import Union
-import pyray as rl
+import numpy as np
+import raylib_nb as rl
 
-from iqpilot.system.ui.lib.application import gui_app, FontWeight, DEFAULT_TEXT_SIZE, DEFAULT_TEXT_COLOR, FONT_SCALE
+from iqpilot.system.ui.lib.application import gui_app, FontWeight, DEFAULT_TEXT_SIZE, DEFAULT_TEXT_COLOR, FONT_SCALE, TextAlignment, TextAlignmentVertical
 from iqpilot.system.ui.widgets import Widget
 from iqpilot.system.ui.lib.text_measure import measure_text_cached
-from iqpilot.system.ui.lib.utils import GuiStyleContext, gui_style_color
 from iqpilot.system.ui.lib.emoji import find_emoji, emoji_tex
 from iqpilot.system.ui.lib.wrap_text import wrap_text
 
@@ -39,8 +39,8 @@ class MiciLabel(Widget):
                width: int | None = None,
                color: rl.Color = DEFAULT_TEXT_COLOR,
                font_weight: FontWeight = FontWeight.NORMAL,
-               alignment: int = rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
-               alignment_vertical: int = rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP,
+               alignment: int = TextAlignment.LEFT,
+               alignment_vertical: int = TextAlignmentVertical.TOP,
                spacing: int = 0,
                line_height: int | None = None,
                elide_right: bool = True,
@@ -126,7 +126,7 @@ class MiciLabel(Widget):
     text_y_offset = 0
     # Draw the text in the specified rectangle
     lines = self.wrapped_text or [self.text]
-    if self.alignment_vertical == rl.GuiTextAlignmentVertical.TEXT_ALIGN_BOTTOM:
+    if self.alignment_vertical == TextAlignmentVertical.BOTTOM:
       lines = lines[::-1]
 
     for display_text in lines:
@@ -178,21 +178,21 @@ class MiciLabel(Widget):
         text_x = rect.x + self._scroll_offset
       else:
         text_x = rect.x + {
-          rl.GuiTextAlignment.TEXT_ALIGN_LEFT: 0,
-          rl.GuiTextAlignment.TEXT_ALIGN_CENTER: (rect.width - text_size.x) / 2,
-          rl.GuiTextAlignment.TEXT_ALIGN_RIGHT: rect.width - text_size.x,
+          TextAlignment.LEFT: 0,
+          TextAlignment.CENTER: (rect.width - text_size.x) / 2,
+          TextAlignment.RIGHT: rect.width - text_size.x,
         }.get(self.alignment, 0) + self._scroll_offset
 
       # Calculate vertical position based on alignment
       text_y = rect.y + {
-        rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP: 0,
-        rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE: (rect.height - text_size.y) / 2,
-        rl.GuiTextAlignmentVertical.TEXT_ALIGN_BOTTOM: rect.height - text_size.y,
+        TextAlignmentVertical.TOP: 0,
+        TextAlignmentVertical.MIDDLE: (rect.height - text_size.y) / 2,
+        TextAlignmentVertical.BOTTOM: rect.height - text_size.y,
       }.get(self.alignment_vertical, 0)
       text_y += text_y_offset
 
       rl.draw_text_ex(font, display_text, rl.Vector2(round(text_x), text_y), self.font_size, self.spacing, self.color)
-      if self.alignment_vertical == rl.GuiTextAlignmentVertical.TEXT_ALIGN_BOTTOM:
+      if self.alignment_vertical == TextAlignmentVertical.BOTTOM:
         text_y_offset -= self.line_height
       else:
         text_y_offset += self.line_height
@@ -216,8 +216,8 @@ def gui_label(
   font_size: int = DEFAULT_TEXT_SIZE,
   color: rl.Color = DEFAULT_TEXT_COLOR,
   font_weight: FontWeight = FontWeight.NORMAL,
-  alignment: int = rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
-  alignment_vertical: int = rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE,
+  alignment: int = TextAlignment.LEFT,
+  alignment_vertical: int = TextAlignmentVertical.MIDDLE,
   elide_right: bool = True
 ):
   font = gui_app.font(font_weight)
@@ -241,16 +241,16 @@ def gui_label(
 
   # Calculate horizontal position based on alignment
   text_x = rect.x + {
-    rl.GuiTextAlignment.TEXT_ALIGN_LEFT: 0,
-    rl.GuiTextAlignment.TEXT_ALIGN_CENTER: (rect.width - text_size.x) / 2,
-    rl.GuiTextAlignment.TEXT_ALIGN_RIGHT: rect.width - text_size.x,
+    TextAlignment.LEFT: 0,
+    TextAlignment.CENTER: (rect.width - text_size.x) / 2,
+    TextAlignment.RIGHT: rect.width - text_size.x,
   }.get(alignment, 0)
 
   # Calculate vertical position based on alignment
   text_y = rect.y + {
-    rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP: 0,
-    rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE: (rect.height - text_size.y) / 2,
-    rl.GuiTextAlignmentVertical.TEXT_ALIGN_BOTTOM: rect.height - text_size.y,
+    TextAlignmentVertical.TOP: 0,
+    TextAlignmentVertical.MIDDLE: (rect.height - text_size.y) / 2,
+    TextAlignmentVertical.BOTTOM: rect.height - text_size.y,
   }.get(alignment_vertical, 0)
 
   # Draw the text in the specified rectangle
@@ -263,27 +263,197 @@ def gui_text_box(
   text: str,
   font_size: int = DEFAULT_TEXT_SIZE,
   color: rl.Color = DEFAULT_TEXT_COLOR,
-  alignment: int = rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
-  alignment_vertical: int = rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP,
+  alignment: int = TextAlignment.LEFT,
+  alignment_vertical: int = TextAlignmentVertical.TOP,
   font_weight: FontWeight = FontWeight.NORMAL,
   line_scale: float = 1.0,
 ):
-  styles = [
-    (rl.GuiControl.DEFAULT, rl.GuiControlProperty.TEXT_COLOR_NORMAL, gui_style_color(color)),
-    (rl.GuiControl.DEFAULT, rl.GuiDefaultProperty.TEXT_SIZE, round(font_size * FONT_SCALE)),
-    (rl.GuiControl.DEFAULT, rl.GuiDefaultProperty.TEXT_LINE_SPACING, round(font_size * FONT_SCALE * line_scale)),
-    (rl.GuiControl.DEFAULT, rl.GuiControlProperty.TEXT_ALIGNMENT, alignment),
-    (rl.GuiControl.DEFAULT, rl.GuiDefaultProperty.TEXT_ALIGNMENT_VERTICAL, alignment_vertical),
-    (rl.GuiControl.DEFAULT, rl.GuiDefaultProperty.TEXT_WRAP_MODE, rl.GuiTextWrapMode.TEXT_WRAP_WORD)
-  ]
-  if font_weight != FontWeight.NORMAL:
-    rl.gui_set_font(gui_app.font(font_weight))
+  if not text:
+    return
+  font = gui_app.font(font_weight)
+  text_size = round(font_size * FONT_SCALE)
+  line_spacing = round(font_size * FONT_SCALE * line_scale)
+  key = (text, rect.x, rect.y, rect.width, rect.height, font.texture.id, font.baseSize, font.glyphCount,
+         text_size, line_spacing, int(alignment), int(alignment_vertical))
+  glyphs = _text_box_layouts.get(key)
+  if glyphs is None:
+    glyphs = _layout_text_box(font, text, rect, text_size, line_spacing, int(alignment), int(alignment_vertical))
+    if len(_text_box_layouts) >= 32:
+      _text_box_layouts.pop(next(iter(_text_box_layouts)))
+    _text_box_layouts[key] = glyphs
+  draw_text_ex = getattr(rl, "_orig_draw_text_ex", rl.draw_text_ex)
+  for glyph, x, y in glyphs:
+    draw_text_ex(font, glyph, rl.Vector2(x, y), text_size, 0, color)
 
-  with GuiStyleContext(styles):
-    rl.gui_label(rect, text)
 
-  if font_weight != FontWeight.NORMAL:
-    rl.gui_set_font(gui_app.font(FontWeight.NORMAL))
+_WRAP_CHAR = 1
+_WRAP_WORD = 2
+_text_box_layouts: dict[tuple, list[tuple[str, float, float]]] = {}
+
+
+def _codepoint(buf: bytes, i: int) -> int:
+  octet = buf[i]
+  if octet <= 0x7f:
+    return octet
+  if (octet & 0xe0) == 0xc0:
+    octet1 = buf[i + 1]
+    if octet1 == 0 or (octet1 >> 6) != 2 or not 0xc2 <= octet <= 0xdf:
+      return 0x3f
+    return ((octet & 0x1f) << 6) | (octet1 & 0x3f)
+  if (octet & 0xf0) == 0xe0:
+    octet1, octet2 = buf[i + 1], buf[i + 2]
+    if octet1 == 0 or (octet1 >> 6) != 2 or octet2 == 0 or (octet2 >> 6) != 2:
+      return 0x3f
+    if (octet == 0xe0 and not 0xa0 <= octet1 <= 0xbf) or (octet == 0xed and not 0x80 <= octet1 <= 0x9f):
+      return 0x3f
+    return ((octet & 0xf) << 12) | ((octet1 & 0x3f) << 6) | (octet2 & 0x3f)
+  if (octet & 0xf8) == 0xf0 and octet <= 0xf4:
+    octet1, octet2, octet3 = buf[i + 1], buf[i + 2], buf[i + 3]
+    if any(o == 0 or (o >> 6) != 2 for o in (octet1, octet2, octet3)):
+      return 0x3f
+    if (octet == 0xf0 and not 0x90 <= octet1 <= 0xbf) or (octet == 0xf4 and not 0x80 <= octet1 <= 0x8f):
+      return 0x3f
+    codepoint = ((octet & 0x7) << 18) | ((octet1 & 0x3f) << 12) | ((octet2 & 0x3f) << 6) | (octet3 & 0x3f)
+    return codepoint if codepoint <= 0x10ffff else 0x3f
+  return 0x3f
+
+
+def _codepoint_next(buf: bytes, i: int) -> tuple[int, int]:
+  octet = buf[i]
+  if (octet & 0xf8) == 0xf0:
+    if any((buf[i + k] & 0xc0) != 0x80 for k in (1, 2, 3)):
+      return 0x3f, 1
+    return ((octet & 0x07) << 18) | ((buf[i + 1] & 0x3f) << 12) | ((buf[i + 2] & 0x3f) << 6) | (buf[i + 3] & 0x3f), 4
+  if (octet & 0xf0) == 0xe0:
+    if any((buf[i + k] & 0xc0) != 0x80 for k in (1, 2)):
+      return 0x3f, 1
+    return ((octet & 0x0f) << 12) | ((buf[i + 1] & 0x3f) << 6) | (buf[i + 2] & 0x3f), 3
+  if (octet & 0xe0) == 0xc0:
+    if (buf[i + 1] & 0xc0) != 0x80:
+      return 0x3f, 1
+    return ((octet & 0x1f) << 6) | (buf[i + 1] & 0x3f), 2
+  if (octet & 0x80) == 0:
+    return octet, 1
+  return 0x3f, 1
+
+
+def _layout_text_box(font, text: str, rect, text_size: int, line_spacing: int, alignment: int, alignment_vertical: int):
+  # Mirrors raygui 4.5 GuiLabel word-wrap layout in float32 so text lands on the same pixels the raygui renderer used.
+  f32 = np.float32
+  spacing = f32(1)
+  scale = f32(text_size) / f32(font.baseSize)
+  metrics: dict[int, tuple[np.float32, np.float32]] = {}
+
+  def glyph_metrics(codepoint: int) -> tuple[np.float32, np.float32]:
+    metric = metrics.get(codepoint)
+    if metric is None:
+      advance = rl.get_glyph_info(font, codepoint).advanceX
+      unscaled = f32(rl.get_glyph_atlas_rec(font, codepoint).width) if advance == 0 else f32(advance)
+      # raygui's cursor advance compiles to a fused multiply-add on arm64; the exact double product rounds once like fmaf.
+      metric = (unscaled * scale, f32(float(unscaled) * float(scale) + float(spacing)))
+      metrics[codepoint] = metric
+    return metric
+
+  def glyph_width(codepoint: int) -> np.float32:
+    return glyph_metrics(codepoint)[0]
+
+  def text_width(start: int) -> int:
+    size = 0
+    while size < 256 and buf[start + size] not in (0, 10):
+      size += 1
+    width = f32(0)
+    i = 0
+    while i < size:
+      codepoint, codepoint_size = _codepoint_next(buf, start + i)
+      width = width + (glyph_width(codepoint) + spacing)
+      i += codepoint_size
+    return int(width)
+
+  def next_space_width(start: int) -> np.float32:
+    width = f32(0)
+    i = start
+    while buf[i] != 0 and buf[i] != 32:
+      width = width + (glyph_width(_codepoint(buf, i)) + spacing)
+      i += 1
+    return width
+
+  encoded = text.encode()
+  buf = encoded + b"\0\0\0\0"
+  starts = [0]
+  for index, byte in enumerate(encoded):
+    if byte == 10 and len(starts) < 128:
+      starts.append(index + 1)
+
+  bounds_x, bounds_y, bounds_width, bounds_height = f32(rect.x), f32(rect.y), f32(rect.width), f32(rect.height)
+  height_int = int(bounds_height)
+  valign_offset = f32(height_int - int(height_int / 2) * 2)
+  line_count = len(starts)
+  total_height = f32(line_count * text_size + (line_count - 1) * text_size // 2)
+  wrap_mode = _WRAP_WORD
+  pos_offset_y = f32(0)
+  glyphs: list[tuple[str, float, float]] = []
+
+  for start in starts:
+    text_size_x = text_width(start)
+    position_x = bounds_x
+    if alignment == TextAlignment.CENTER:
+      position_x = bounds_x + bounds_width / f32(2) - f32(text_size_x // 2)
+    elif alignment == TextAlignment.RIGHT:
+      position_x = bounds_x + bounds_width - f32(text_size_x)
+    if f32(text_size_x) > bounds_width and buf[start] != 0:
+      position_x = bounds_x
+
+    position_y = bounds_y
+    if alignment_vertical == TextAlignmentVertical.TOP:
+      position_y = bounds_y + pos_offset_y
+    elif alignment_vertical == TextAlignmentVertical.MIDDLE:
+      position_y = bounds_y + pos_offset_y + bounds_height / f32(2) - total_height / f32(2) + valign_offset
+    elif alignment_vertical == TextAlignmentVertical.BOTTOM:
+      position_y = bounds_y + pos_offset_y + bounds_height - total_height + valign_offset
+    position_x = f32(int(position_x))
+    position_y = f32(int(position_y))
+
+    line_size = 0
+    while buf[start + line_size] not in (0, 10, 13):
+      line_size += 1
+    last_space_index = 0
+    temp_wrap_char_mode = False
+    offset_y = 0
+    offset_x = f32(0)
+    c = 0
+    while c < line_size:
+      codepoint, codepoint_size = _codepoint_next(buf, start + c)
+      if codepoint == 0x3f:
+        codepoint_size = 1
+      width, advance = glyph_metrics(codepoint)
+
+      if wrap_mode == _WRAP_CHAR:
+        if offset_x + width > bounds_width:
+          offset_x = f32(0)
+          offset_y += line_spacing
+          if temp_wrap_char_mode:
+            wrap_mode = _WRAP_WORD
+            temp_wrap_char_mode = False
+      elif wrap_mode == _WRAP_WORD:
+        if codepoint == 32:
+          last_space_index = c
+        next_width = next_space_width(start + c)
+        next_word_width = next_space_width(start + last_space_index + 1)
+        if next_word_width > bounds_width:
+          temp_wrap_char_mode = True
+          wrap_mode = _WRAP_CHAR
+        elif offset_x + next_width > bounds_width:
+          offset_x = f32(0)
+          offset_y += line_spacing
+
+      if codepoint not in (32, 9) and position_y + f32(offset_y) <= bounds_y + bounds_height - f32(text_size):
+        glyphs.append((chr(codepoint), float(position_x + offset_x), float(position_y + f32(offset_y))))
+      offset_x = offset_x + advance
+      c += codepoint_size
+
+    pos_offset_y = pos_offset_y + (f32(offset_y) + f32(line_spacing))
+
+  return glyphs
 
 
 # Non-interactive text area. Can render emojis and an optional specified icon.
@@ -292,8 +462,8 @@ class Label(Widget):
                text: str | Callable[[], str],
                font_size: int = DEFAULT_TEXT_SIZE,
                font_weight: FontWeight = FontWeight.NORMAL,
-               text_alignment: int = rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
-               text_alignment_vertical: int = rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE,
+               text_alignment: int = TextAlignment.CENTER,
+               text_alignment_vertical: int = TextAlignmentVertical.MIDDLE,
                text_padding: int = 0,
                text_color: rl.Color = DEFAULT_TEXT_COLOR,
                icon: Union[rl.Texture, None] = None,
@@ -367,7 +537,7 @@ class Label(Widget):
     self._update_text(self._text)
 
     text_size = self._text_size[0] if self._text_size else rl.Vector2(0.0, 0.0)
-    if self._text_alignment_vertical == rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE:
+    if self._text_alignment_vertical == TextAlignmentVertical.MIDDLE:
       total_text_height = sum(ts.y for ts in self._text_size) or self._font_size * FONT_SCALE
       text_pos = rl.Vector2(self._rect.x, (self._rect.y + (self._rect.height - total_text_height) // 2))
     else:
@@ -376,10 +546,10 @@ class Label(Widget):
     if self._icon:
       icon_y = self._rect.y + (self._rect.height - self._icon.height) / 2
       if len(self._text_wrapped) > 0:
-        if self._text_alignment == rl.GuiTextAlignment.TEXT_ALIGN_LEFT:
+        if self._text_alignment == TextAlignment.LEFT:
           icon_x = self._rect.x + self._text_padding
           text_pos.x = self._icon.width + ICON_PADDING
-        elif self._text_alignment == rl.GuiTextAlignment.TEXT_ALIGN_CENTER:
+        elif self._text_alignment == TextAlignment.CENTER:
           total_width = self._icon.width + ICON_PADDING + text_size.x
           icon_x = self._rect.x + (self._rect.width - total_width) / 2
           text_pos.x = self._icon.width + ICON_PADDING
@@ -391,11 +561,11 @@ class Label(Widget):
 
     for text, text_size, emojis in zip_longest(self._text_wrapped, self._text_size, self._emojis, fillvalue=[]):
       line_pos = rl.Vector2(text_pos.x, text_pos.y)
-      if self._text_alignment == rl.GuiTextAlignment.TEXT_ALIGN_LEFT:
+      if self._text_alignment == TextAlignment.LEFT:
         line_pos.x += self._text_padding
-      elif self._text_alignment == rl.GuiTextAlignment.TEXT_ALIGN_CENTER:
+      elif self._text_alignment == TextAlignment.CENTER:
         line_pos.x += (self._rect.width - text_size.x) // 2
-      elif self._text_alignment == rl.GuiTextAlignment.TEXT_ALIGN_RIGHT:
+      elif self._text_alignment == TextAlignment.RIGHT:
         line_pos.x += self._rect.width - text_size.x - self._text_padding
 
       prev_index = 0
@@ -430,8 +600,8 @@ class UnifiedLabel(Widget):
                font_size: int = DEFAULT_TEXT_SIZE,
                font_weight: FontWeight = FontWeight.NORMAL,
                text_color: rl.Color = DEFAULT_TEXT_COLOR,
-               alignment: int = rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
-               alignment_vertical: int = rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP,
+               alignment: int = TextAlignment.LEFT,
+               alignment_vertical: int = TextAlignmentVertical.TOP,
                text_padding: int = 0,
                max_width: int | None = None,
                elide: bool = True,
@@ -510,13 +680,6 @@ class UnifiedLabel(Widget):
     if self._font_size != size:
       self._font_size = size
       self._spacing_pixels = size * self._letter_spacing  # Recalculate spacing
-      self._cached_text = None  # Invalidate cache
-
-  def set_letter_spacing(self, letter_spacing: float):
-    """Update letter spacing (as percentage, e.g., 0.1 = 10%)."""
-    if self._letter_spacing != letter_spacing:
-      self._letter_spacing = letter_spacing
-      self._spacing_pixels = self._font_size * letter_spacing
       self._cached_text = None  # Invalidate cache
 
   def set_font_weight(self, font_weight: FontWeight):
@@ -752,9 +915,9 @@ class UnifiedLabel(Widget):
         total_visible_height += size.y * self._line_height
 
     # Calculate vertical alignment offset
-    if self._alignment_vertical == rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP:
+    if self._alignment_vertical == TextAlignmentVertical.TOP:
       start_y = self._rect.y
-    elif self._alignment_vertical == rl.GuiTextAlignmentVertical.TEXT_ALIGN_BOTTOM:
+    elif self._alignment_vertical == TextAlignmentVertical.BOTTOM:
       start_y = self._rect.y + self._rect.height - total_visible_height
     else:  # TEXT_ALIGN_MIDDLE
       start_y = self._rect.y + (self._rect.height - total_visible_height) / 2
@@ -826,11 +989,11 @@ class UnifiedLabel(Widget):
     # Calculate horizontal position
     if self._needs_scroll:
       line_x = self._rect.x + self._text_padding
-    elif self._alignment == rl.GuiTextAlignment.TEXT_ALIGN_LEFT:
+    elif self._alignment == TextAlignment.LEFT:
       line_x = self._rect.x + self._text_padding
-    elif self._alignment == rl.GuiTextAlignment.TEXT_ALIGN_CENTER:
+    elif self._alignment == TextAlignment.CENTER:
       line_x = self._rect.x + (self._rect.width - size.x) / 2
-    elif self._alignment == rl.GuiTextAlignment.TEXT_ALIGN_RIGHT:
+    elif self._alignment == TextAlignment.RIGHT:
       line_x = self._rect.x + self._rect.width - size.x - self._text_padding
     else:
       line_x = self._rect.x + self._text_padding

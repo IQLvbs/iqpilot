@@ -3,13 +3,12 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 """
 
 import atexit
-import cffi
 import os
 import queue
 import time
 import signal
 import sys
-import pyray as rl
+import raylib_nb as rl
 import threading
 import platform
 import subprocess
@@ -17,7 +16,7 @@ from contextlib import contextmanager
 from collections.abc import Callable
 from collections import deque
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import IntEnum, StrEnum
 from pathlib import Path
 from typing import NamedTuple
 from importlib.resources import as_file, files
@@ -28,7 +27,6 @@ from iqpilot.common.realtime import Ratekeeper
 
 from iqpilot.system.ui.iqwidgets.lib.application import IQAppHooks
 from iqpilot.system.ui.lib.screen_recorder import ScreenRecorder
-from iqpilot.system.ui.lib.utils import gui_style_color
 
 _DEFAULT_FPS = int(os.getenv("FPS", {'tizi': 20, 'tici': 20}.get(HARDWARE.get_device_type(), 60)))
 # Benign raylib warnings emitted on the headless DRM/EGL target (no window manager / monitor).
@@ -129,6 +127,18 @@ class FontWeight(StrEnum):
   DISPLAY = "Inter-Bold.fnt"
 
 
+class TextAlignment(IntEnum):
+  LEFT = 0
+  CENTER = 1
+  RIGHT = 2
+
+
+class TextAlignmentVertical(IntEnum):
+  TOP = 0
+  MIDDLE = 1
+  BOTTOM = 2
+
+
 FONT_SOURCE_FILES = {
   FontWeight.LIGHT: "Inter-Light.ttf",
   FontWeight.NORMAL: "Inter-Regular.ttf" if BIG_UI else "Inter-Medium.ttf",
@@ -154,9 +164,7 @@ def font_fallback(font: rl.Font) -> rl.Font:
 def _release_font_cpu_images(font: rl.Font) -> None:
   if font.texture.id == rl.get_font_default().texture.id:
     return
-  for index in range(font.glyphCount):
-    rl.unload_image(font.glyphs[index].image)
-    font.glyphs[index].image = rl.Image()
+  rl.unload_font_glyph_images(font)
 
 
 @dataclass
@@ -472,7 +480,6 @@ class GuiApplication(IQAppHooks):
       self._apply_target_fps(fps)
       if screen_recordable and not OFFSCREEN and not RECORD:
         self._screen_recorder = ScreenRecorder(self._width, self._height, fps)
-      self._set_styles()
       self._load_fonts()
       self._patch_text_functions()
       if BURN_IN_MODE and self._burn_in_shader is None:
@@ -786,8 +793,9 @@ class GuiApplication(IQAppHooks):
 
         # Store all mouse events for the current frame
         self._mouse_events = self._mouse.get_events()
-        if len(self._mouse_events) > 0:
-          self._last_mouse_event = self._mouse_events[-1]
+        for mouse_event in self._mouse_events:
+          if mouse_event.slot == 0:
+            self._last_mouse_event = mouse_event
 
         # Skip rendering when screen is off
         if not self._should_render:
@@ -893,7 +901,7 @@ class GuiApplication(IQAppHooks):
         if RECORD:
           image = rl.load_image_from_texture(self._render_texture.texture)
           data_size = image.width * image.height * 4
-          data = bytes(rl.ffi.buffer(image.data, data_size))
+          data = image.to_bytes(data_size)
           self._ffmpeg_queue.put(data)  # Async write via background thread
           rl.unload_image(image)
 
@@ -970,17 +978,9 @@ class GuiApplication(IQAppHooks):
     for font_weight in FontWeight:
       if font_weight not in (FontWeight.LIGHT, FontWeight.AUDIOWIDE):
         self._fonts[font_weight] = self._load_font(font_weight)
-    rl.gui_set_font(self._fonts[FontWeight.NORMAL])
-
-  def _set_styles(self):
-    rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiControlProperty.BORDER_WIDTH, 0)
-    rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiDefaultProperty.TEXT_SIZE, DEFAULT_TEXT_SIZE)
-    rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiDefaultProperty.BACKGROUND_COLOR, gui_style_color(rl.BLACK))
-    rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiControlProperty.TEXT_COLOR_NORMAL, gui_style_color(DEFAULT_TEXT_COLOR))
-    rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiControlProperty.BASE_COLOR_NORMAL, gui_style_color(rl.Color(50, 50, 50, 255)))
 
   def _patch_text_functions(self):
-    # Wrap pyray text APIs to apply a global text size scale so our px sizes match Qt
+    # Wrap raylib text APIs to apply a global text size scale so our px sizes match Qt
     if not hasattr(rl, "_orig_draw_text_ex"):
       rl._orig_draw_text_ex = rl.draw_text_ex
 
@@ -991,30 +991,7 @@ class GuiApplication(IQAppHooks):
     rl.draw_text_ex = _draw_text_ex_scaled
 
   def _set_log_callback(self):
-    ffi_libc = cffi.FFI()
-    ffi_libc.cdef("""
-      int vasprintf(char **strp, const char *fmt, void *ap);
-      void free(void *ptr);
-    """)
-    libc = ffi_libc.dlopen(None)
-
-    @rl.ffi.callback("void(int, char *, void *)")
-    def trace_log_callback(log_level, text, args):
-      try:
-        text_addr = int(rl.ffi.cast("uintptr_t", text))
-        args_addr = int(rl.ffi.cast("uintptr_t", args))
-        text_libc = ffi_libc.cast("char *", text_addr)
-        args_libc = ffi_libc.cast("void *", args_addr)
-
-        out = ffi_libc.new("char **")
-        if libc.vasprintf(out, text_libc, args_libc) >= 0 and out[0] != ffi_libc.NULL:
-          text_str = ffi_libc.string(out[0]).decode("utf-8", "replace")
-          libc.free(out[0])
-        else:
-          text_str = rl.ffi.string(text).decode("utf-8", "replace")
-      except Exception as e:
-        text_str = f"[Log decode error: {e}]"
-
+    def trace_log_callback(log_level, text_str):
       text_str = text_str.replace("COMMA:", "IQ:")
 
       # raylib emits a fixed set of benign "not implemented on target platform" warnings on the

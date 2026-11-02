@@ -3,7 +3,7 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 """
 
 from enum import IntEnum
-import pyray as rl
+import raylib_nb as rl
 import numpy as np
 from iqpilot.system.ui.lib.application import gui_app, FontWeight, MousePos, MouseEvent
 from iqpilot.system.ui.lib.raylib_compat import draw_circle_gradient
@@ -90,7 +90,7 @@ class Key(Widget):
     text_size = measure_text_cached(self._font, self.char, self._get_font_size())
     x = self._rect.x + self._rect.width / 2 - text_size.x / 2
     y = self._rect.y + self._rect.height / 2 - text_size.y / 2
-    rl.draw_text_ex(self._font, self.char, (x, y), self._get_font_size(), 0, self._color)
+    rl.draw_text_ex(self._font, self.char, rl.Vector2(x, y), self._get_font_size(), 0, self._color)
 
     if DEBUG:
       rl.draw_circle(int(self._rect.x), int(self._rect.y), 5, rl.RED)  # Debug: draw circle around key
@@ -207,10 +207,12 @@ class MiciKeyboard(Widget):
 
     self._load_images()
 
+    self._multi_touch = True
+    self._active_slot: int | None = None
+
     self._closest_key: tuple[Key | None, float] = None, float('inf')
     self._selected_key_t: float | None = None  # time key was initially selected
     self._unselect_key_t: float | None = None  # time to unselect key after release
-    self._dragging_on_keyboard = False
 
     self._text: str = ""
 
@@ -220,7 +222,7 @@ class MiciKeyboard(Widget):
   def get_candidate_character(self) -> str:
     # return str of character about to be added to text
     key = self._closest_key[0]
-    return key.char if key is not None and key.__class__ is Key and self._dragging_on_keyboard else ""
+    return key.char if key is not None and key.__class__ is Key and self._active_slot is not None else ""
 
   def get_keyboard_height(self) -> int:
     return int(self._txt_bg.height)
@@ -253,12 +255,20 @@ class MiciKeyboard(Widget):
     keyboard_pos_y = self._rect.y + self._rect.height - self._txt_bg.height
     if mouse_event.left_pressed:
       if mouse_event.pos.y > keyboard_pos_y:
-        self._dragging_on_keyboard = True
-    elif mouse_event.left_released:
-      self._dragging_on_keyboard = False
+        if self._active_slot is not None:
+          self._commit_key()
 
-    if mouse_event.left_down and self._dragging_on_keyboard:
-      self._closest_key = self._get_closest_key()
+        self._closest_key = (None, float('inf'))
+        self._selected_key_t = None
+        self._unselect_key_t = None
+        self._active_slot = mouse_event.slot
+
+    elif mouse_event.left_released and mouse_event.slot == self._active_slot:
+      self._active_slot = None
+      self._commit_key()
+
+    if mouse_event.left_down and mouse_event.slot == self._active_slot:
+      self._closest_key = self._get_closest_key(mouse_event.pos)
       if self._selected_key_t is None:
         self._selected_key_t = rl.get_time()
 
@@ -269,11 +279,10 @@ class MiciKeyboard(Widget):
     if DEBUG:
       print('HANDLE MOUSE EVENT', mouse_event, self._closest_key[0].char if self._closest_key[0] else 'None')
 
-  def _get_closest_key(self) -> tuple[Key | None, float]:
+  def _get_closest_key(self, mouse_pos: MousePos) -> tuple[Key | None, float]:
     closest_key: tuple[Key | None, float] = (None, float('inf'))
     for row in self._current_keys:
       for key in row:
-        mouse_pos = gui_app.last_mouse_event.pos
         # approximate distance for comparison is accurate enough
         dist = abs(key.original_position.x - mouse_pos.x) + abs(key.original_position.y - mouse_pos.y)
         if dist < closest_key[1]:
@@ -296,7 +305,7 @@ class MiciKeyboard(Widget):
       else:
         self._set_uppercase(False)
 
-  def _handle_mouse_release(self, mouse_pos: MousePos):
+  def _commit_key(self):
     if self._closest_key[0] is not None:
       if self._closest_key[0] == self._caps_key:
         self._set_uppercase(True)
@@ -333,7 +342,7 @@ class MiciKeyboard(Widget):
     self._selected_key_filter.update(self._closest_key[0] is not None)
 
     # unselect key after animation plays
-    if self._unselect_key_t is not None and rl.get_time() > self._unselect_key_t:
+    if (self._unselect_key_t is not None and rl.get_time() > self._unselect_key_t) or not self.enabled:
       self._closest_key = (None, float('inf'))
       self._unselect_key_t = None
       self._selected_key_t = None

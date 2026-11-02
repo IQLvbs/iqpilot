@@ -1,6 +1,6 @@
 import os
 import math
-import pyray as rl
+import raylib_nb as rl
 from collections.abc import Callable
 from enum import Enum
 from typing import cast
@@ -16,18 +16,20 @@ AUTO_SCROLL_TC = 0.18
 BOUNCE_RETURN_RATE = 10.0
 REJECT_DECELERATION_FACTOR = 3
 MAX_SPEED = 10000.0  # px/s
+FLING_VELOCITY_SAMPLES = 6
 
 DEBUG = os.getenv("DEBUG_SCROLL", "0") == "1"
 
 
-def weighted_velocity(buffer: deque[float]) -> float:
-  if len(buffer) >= 3:
-    return buffer[-3] * 0.6 + buffer[-2] * 0.35 + buffer[-1] * 0.05
-  if len(buffer) == 2:
-    return buffer[-2] * 0.7 + buffer[-1] * 0.3
-  if len(buffer) == 1:
-    return buffer[-1]
-  return 0.0
+def fit_velocity(samples: deque[tuple[float, float]]) -> float:
+  if len(samples) < 2:
+    return 0.0
+  mean_t = sum(t for t, _ in samples) / len(samples)
+  mean_pos = sum(pos for _, pos in samples) / len(samples)
+  var_t = sum((t - mean_t) ** 2 for t, _ in samples)
+  if var_t == 0.0:
+    return 0.0
+  return sum((t - mean_t) * (pos - mean_pos) for t, pos in samples) / var_t
 
 
 # from https://ariya.io/2011/10/flick-list-with-its-momentum-scrolling-and-deceleration
@@ -49,6 +51,7 @@ class GuiScrollPanel2:
     self._previous_mouse_event: MouseEvent | None = None
     self._velocity = 0.0  # pixels per second
     self._velocity_buffer: deque[float] = deque(maxlen=12 if TICI else 6)
+    self._position_buffer: deque[tuple[float, float]] = deque(maxlen=FLING_VELOCITY_SAMPLES)
     self._enabled: bool | Callable[[], bool] = True
 
   def set_enabled(self, enabled: bool | Callable[[], bool]) -> None:
@@ -65,8 +68,9 @@ class GuiScrollPanel2:
     bounds_size = bounds.width if self._horizontal else bounds.height
 
     for mouse_event in gui_app.mouse_events:
-      self._handle_mouse_event(mouse_event, bounds, bounds_size, content_size)
-      self._previous_mouse_event = mouse_event
+      if mouse_event.slot == 0:
+        self._handle_mouse_event(mouse_event, bounds, bounds_size, content_size)
+        self._previous_mouse_event = mouse_event
 
     self._update_state(bounds_size, content_size)
 
@@ -128,9 +132,10 @@ class GuiScrollPanel2:
       self._state = ScrollState.STEADY
       self._velocity = 0.0
       self._velocity_buffer.clear()
+      self._position_buffer.clear()
 
     elif self._state == ScrollState.STEADY:
-      if rl.check_collision_point_rec(mouse_event.pos, bounds):
+      if rl.check_collision_point_rec(rl.Vector2(mouse_event.pos.x, mouse_event.pos.y), bounds):
         if mouse_event.left_pressed:
           self._state = ScrollState.PRESSED
           self._initial_click_event = mouse_event
@@ -165,7 +170,7 @@ class GuiScrollPanel2:
               print('deceleration too high, going to STEADY')
             high_decel = True
 
-        self._velocity = weighted_velocity(self._velocity_buffer)
+        self._velocity = max(-MAX_SPEED, min(MAX_SPEED, fit_velocity(self._position_buffer)))
         low_speed = abs(self._velocity) <= MIN_VELOCITY_FOR_CLICKING * 1.5  # plus some margin
 
         if out_of_bounds or not (high_decel or low_speed):
@@ -175,6 +180,7 @@ class GuiScrollPanel2:
           self._velocity = 0.0
           self._state = ScrollState.STEADY
         self._velocity_buffer.clear()
+        self._position_buffer.clear()
       else:
         # Update velocity for when we release the mouse button.
         # Do not update velocity on the same frame the mouse was released
@@ -183,7 +189,11 @@ class GuiScrollPanel2:
         delta_t = max((mouse_event.t - cast(MouseEvent, self._previous_mouse_event).t), 1e-6)
         self._velocity = delta_x / delta_t
         self._velocity = max(-MAX_SPEED, min(MAX_SPEED, self._velocity))
-        self._velocity_buffer.append(self._velocity)
+        self._velocity_buffer.append(delta_x)
+
+        if len(self._position_buffer) == 0:
+          self._position_buffer.append((cast(MouseEvent, self._previous_mouse_event).t, previous_mouse_pos))
+        self._position_buffer.append((mouse_event.t, mouse_pos))
 
         # rubber-banding: reduce dragging when out of bounds
         # TODO: this drifts when dragging quickly

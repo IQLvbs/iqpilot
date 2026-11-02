@@ -4,10 +4,10 @@ import weakref
 import math
 import os
 import numpy as np
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.common.filter_simple import FirstOrderFilter
 from iqpilot.system.hardware import HARDWARE, PC
-from iqpilot.system.ui.lib.application import FontWeight, gui_app
+from iqpilot.system.ui.lib.application import FontWeight, gui_app, TextAlignment
 from iqpilot.system.ui.widgets import Widget
 from iqpilot.system.ui.widgets.button import SmallButton, SmallCircleIconButton
 from iqpilot.system.ui.widgets.label import UnifiedLabel
@@ -43,7 +43,7 @@ class DriverCameraSetupDialog(DriverCameraDialog):
 
     if not self._camera_view.frame:
       gui_label(rect, tr("camera starting"), font_size=64, font_weight=FontWeight.BOLD,
-                alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+                alignment=TextAlignment.CENTER)
       rl.end_scissor_mode()
       return -1
 
@@ -274,7 +274,7 @@ class TrainingGuideDMTutorial(Widget):
         tr("No camera detected in dev mode. Tap check to continue."),
         font_size=34,
         font_weight=FontWeight.MEDIUM,
-        alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+        alignment=TextAlignment.CENTER,
       )
 
     # rounded border

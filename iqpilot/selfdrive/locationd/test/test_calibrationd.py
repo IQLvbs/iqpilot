@@ -2,11 +2,14 @@ import random
 
 import numpy as np
 
+import pytest
+
 import iqpilot.cereal.messaging as messaging
-from iqpilot.cereal import log
+from iqpilot.cereal import car, log
 from iqpilot.common.params import Params
 from iqpilot.selfdrive.locationd.calibrationd import Calibrator, INPUTS_NEEDED, INPUTS_WANTED, BLOCK_SIZE, MIN_SPEED_FILTER, \
-                                                         MAX_YAW_RATE_FILTER, SMOOTH_CYCLES, HEIGHT_INIT, MAX_ALLOWED_PITCH_SPREAD, MAX_ALLOWED_YAW_SPREAD
+                                                         MAX_YAW_RATE_FILTER, SMOOTH_CYCLES, HEIGHT_INIT, MAX_ALLOWED_PITCH_SPREAD, MAX_ALLOWED_YAW_SPREAD, \
+                                                         discard_calibration_from_other_car
 
 
 def process_messages(c, cam_odo_calib, cycles,
@@ -28,6 +31,51 @@ def process_messages(c, cam_odo_calib, cycles,
                         [cam_odo_speed_std, cam_odo_speed_std, cam_odo_speed_std],
                         [0.0, 0.0, HEIGHT_INIT.item()],
                         [cam_odo_height_std, cam_odo_height_std, cam_odo_height_std])
+
+class FakeParams:
+  def __init__(self, values: dict[str, bytes]):
+    self.values = dict(values)
+
+  def get(self, key: str):
+    return self.values.get(key)
+
+  def remove(self, key: str) -> None:
+    self.values.pop(key, None)
+
+
+def car_params(fingerprint: str, brand: str):
+  CP = car.CarParams.new_message()
+  CP.carFingerprint = fingerprint
+  CP.brand = brand
+  return CP
+
+
+@pytest.mark.parametrize("prev, current, kept", [
+  (("HONDA_PILOT", "honda"), ("HONDA_PILOT", "honda"), True),
+  (("HONDA_PILOT", "honda"), ("HONDA_ACCORD", "honda"), False),
+  (("TOYOTA_RAV4", "toyota"), ("HONDA_ACCORD", "honda"), False),
+  (("HONDA_PILOT", "honda"), ("MOCK", "mock"), True),
+  (("MOCK", "mock"), ("HONDA_PILOT", "honda"), True),
+  (None, ("HONDA_PILOT", "honda"), True),
+])
+def test_discard_calibration_from_other_car(prev, current, kept):
+  values = {"CalibrationParams": b"saved"}
+  if prev is not None:
+    values["CarParamsPrevRoute"] = car_params(*prev).to_bytes()
+  params = FakeParams(values)
+
+  discard_calibration_from_other_car(params, car_params(*current))
+
+  assert (params.get("CalibrationParams") == b"saved") == kept
+
+
+def test_discard_calibration_keeps_it_when_prev_route_unreadable():
+  params = FakeParams({"CalibrationParams": b"saved", "CarParamsPrevRoute": b"not a capnp message"})
+
+  discard_calibration_from_other_car(params, car_params("HONDA_PILOT", "honda"))
+
+  assert params.get("CalibrationParams") == b"saved"
+
 
 class TestCalibrationd:
   def test_read_saved_params(self):

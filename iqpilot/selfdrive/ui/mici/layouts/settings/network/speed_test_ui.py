@@ -1,7 +1,7 @@
 """
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos/
 """
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.selfdrive.ui.ui_state import ui_state
 from iqpilot.system.ui.lib.application import FontWeight, MousePos, gui_app
@@ -69,8 +69,8 @@ class SpeedTestMici(NavWidget):
     if press is None or self._dragging_down or self._playing_dismiss_animation:
       return
     if (abs(mouse_pos.x - press.x) <= TAP_SLOP_PX and abs(mouse_pos.y - press.y) <= TAP_SLOP_PX
-        and rl.check_collision_point_rec(press, self._action_rect)
-        and rl.check_collision_point_rec(mouse_pos, self._action_rect)):
+        and rl.check_collision_point_rec(rl.Vector2(press.x, press.y), self._action_rect)
+        and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._action_rect)):
       self.toggle()
 
   def _draw_text(self, text: str, weight: FontWeight, size: int, x: float, y: float, color: rl.Color,
@@ -98,7 +98,7 @@ class SpeedTestMici(NavWidget):
     subtitle = tr("Metered - data capped") if metered else tr("Network performance")
     self._draw_text(subtitle, FontWeight.ROMAN, 19, left, rect.y + 57, GREY, width - 150)
 
-    pressed = self._press_pos is not None and rl.check_collision_point_rec(self._press_pos, self._action_rect)
+    pressed = self._press_pos is not None and rl.check_collision_point_rec(rl.Vector2(self._press_pos.x, self._press_pos.y), self._action_rect)
     background = NeonTheme.glow(55 if pressed else 30) if not state.running else CARD
     rl.draw_rectangle_rounded(self._action_rect, 0.45, 12, background)
     button_text = tr("Stop") if state.running else {Phase.DONE: tr("Retest"), Phase.FAILED: tr("Retry")}.get(state.phase, tr("Start"))

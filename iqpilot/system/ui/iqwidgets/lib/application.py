@@ -3,7 +3,7 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 """
 import os
 
-import pyray as rl
+import raylib_nb as rl
 
 _UI_MODE_IQ = os.getenv("IQPILOT_UI", "1") == "1"
 
@@ -30,7 +30,8 @@ class IQAppHooks:
     return self._pointer_probe
 
   def draw_pointer_probe(self, font):
-    readout = f"X:{rl.get_mouse_x()}, Y:{rl.get_mouse_y()}"
+    mouse = rl.get_mouse_position()
+    readout = f"X:{int(mouse.x)}, Y:{int(mouse.y)}"
     width = rl.measure_text_ex(font, readout, _PROBE_FS, 0).x
     canvas_w = self._scaled_width if self._scale != 1.0 else self._width
     rl.draw_text_ex(font, readout, rl.Vector2(canvas_w - width - _PROBE_MARGIN, 6), _PROBE_FS, 0, _PROBE_COLOR)

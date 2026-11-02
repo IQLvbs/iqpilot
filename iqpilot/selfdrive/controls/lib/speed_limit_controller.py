@@ -549,7 +549,6 @@ class SpeedLimitController:
 
     def make_request():
       try:
-        self.calling_mapbox = True
         successful = False
 
         if not is_url_pingable(self.mapbox_host):
@@ -653,6 +652,9 @@ class SpeedLimitController:
         self.mapbox_limit = 0.0
         self.segment_distance = v_ego
 
+    # in flight from the moment it's queued: the single worker is shared with TomTom, so while a request
+    # there hangs on a dead network, flagging only once the worker starts queued one request per frame
+    self.calling_mapbox = True
     future = self.executor.submit(make_request)
     future.add_done_callback(complete_request)
 
@@ -689,7 +691,6 @@ class SpeedLimitController:
     def make_request():
       successful = False
       try:
-        self.calling_tomtom = True
         url = f"{self.tomtom_host}/routing/1/calculateRoute/{lat},{lon}:{future_lat},{future_lon}/json"
         self._log_mapbox_diag(
           f"SLC TomTom request: lat={round(float(lat), 6)} lon={round(float(lon), 6)} bearing={round(float(bearing), 2)} v_ego={round(float(v_ego), 2)}",
@@ -748,6 +749,8 @@ class SpeedLimitController:
       finally:
         self.tomtom_segment_distance = 250.0
 
+    # in flight from the moment it's queued, as for Mapbox above
+    self.calling_tomtom = True
     future = self.executor.submit(make_request)
     future.add_done_callback(complete_request)
 

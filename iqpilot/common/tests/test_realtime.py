@@ -49,6 +49,41 @@ def test_ratekeeper_reset_preserves_frame_count(monkeypatch):
   assert rk.frame == frame
 
 
+def test_ratekeeper_resyncs_after_stall_without_catch_up_frames(monkeypatch):
+  clock = MonotonicClock()
+  monkeypatch.setattr("iqpilot.common.realtime.time.monotonic", clock)
+  monkeypatch.setattr("iqpilot.common.realtime.time.sleep", clock.advance)
+  rk = Ratekeeper(100, print_delay_threshold=None)
+
+  rk.keep_time()
+  clock.advance(0.5)
+  rk.keep_time()
+  assert rk.lag == pytest.approx(0.49)
+
+  for _ in range(5):
+    start = clock.now
+    rk.keep_time()
+    assert clock.now - start == pytest.approx(0.01)
+    assert rk.lag == 0.
+
+
+def test_ratekeeper_keeps_schedule_within_one_frame_of_lag(monkeypatch):
+  clock = MonotonicClock()
+  monkeypatch.setattr("iqpilot.common.realtime.time.monotonic", clock)
+  monkeypatch.setattr("iqpilot.common.realtime.time.sleep", clock.advance)
+  rk = Ratekeeper(100, print_delay_threshold=None)
+
+  rk.keep_time()
+  clock.advance(0.015)
+  rk.keep_time()
+  assert rk.lag == pytest.approx(0.005)
+
+  start = clock.now
+  rk.keep_time()
+  assert clock.now - start == pytest.approx(0.005)
+  assert rk.remaining == pytest.approx(0.005)
+
+
 def test_config_background_thread_restores_normal_scheduling(monkeypatch):
   calls = []
   monkeypatch.setattr("iqpilot.common.realtime.sys.platform", "linux")

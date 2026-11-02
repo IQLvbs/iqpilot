@@ -1,6 +1,6 @@
 import os
 import threading
-import pyray as rl
+import raylib_nb as rl
 from enum import IntEnum
 from collections.abc import Callable
 

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.system.hardware.base import Profile
 from iqpilot.system.hardware.tici.esim_manager import EsimManager, EsimUiState, get_esim_manager
-from iqpilot.system.ui.lib.application import gui_app
+from iqpilot.system.ui.lib.application import gui_app, TextAlignment
 from iqpilot.system.ui.widgets import DialogResult, NavWidget
 from iqpilot.system.ui.widgets.esim_scanner import EsimQrScannerDialog
 from iqpilot.selfdrive.ui.mici.widgets.button import NeonBigButton
@@ -184,6 +184,6 @@ class EsimUIMici(NavWidget):
   def _render(self, rect: rl.Rectangle):
     if not self._manager.is_supported():
       from iqpilot.system.ui.widgets.label import gui_label
-      gui_label(rect, tr("Insert the original comma SIM card that came with the device to use eSIM"), 48, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+      gui_label(rect, tr("Insert the original comma SIM card that came with the device to use eSIM"), 48, alignment=TextAlignment.CENTER)
       return
     self._scroller.render(rect)

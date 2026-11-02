@@ -2,7 +2,7 @@
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos/
 """
 import math
-import pyray as rl
+import raylib_nb as rl
 from collections.abc import Callable
 
 from iqpilot.common.swaglog import cloudlog
@@ -66,11 +66,11 @@ class WifiIcon(Widget):
       strength_icon = self._wifi_medium_txt
     else:
       strength_icon = self._wifi_low_txt
-    rl.draw_texture_ex(strength_icon, (self._rect.x, self._rect.y + self._rect.height - strength_icon.height), 0.0, 1.0, rl.WHITE)
+    rl.draw_texture_ex(strength_icon, rl.Vector2(self._rect.x, self._rect.y + self._rect.height - strength_icon.height), 0.0, 1.0, rl.WHITE)
     if self._network.security_type not in (SecurityType.OPEN, SecurityType.UNSUPPORTED):
       lock_x = self._rect.x + self._rect.width - self._lock_txt.width
       lock_y = self._rect.y + self._rect.height - self._lock_txt.height + 6
-      rl.draw_texture_ex(self._lock_txt, (lock_x, lock_y), 0.0, 1.0, rl.WHITE)
+      rl.draw_texture_ex(self._lock_txt, rl.Vector2(lock_x, lock_y), 0.0, 1.0, rl.WHITE)
 
 
 class ForgetButton(Widget):
@@ -92,11 +92,11 @@ class ForgetButton(Widget):
 
   def _render(self, _):
     bg_txt = self._bg_pressed_txt if self.is_pressed else self._bg_txt
-    rl.draw_texture_ex(bg_txt, (self._rect.x + (self._rect.width - self._bg_txt.width) / 2,
+    rl.draw_texture_ex(bg_txt, rl.Vector2(self._rect.x + (self._rect.width - self._bg_txt.width) / 2,
                                 self._rect.y + (self._rect.height - self._bg_txt.height) / 2), 0, 1.0, rl.WHITE)
     trash_x = self._rect.x + (self._rect.width - self._trash_txt.width) / 2
     trash_y = self._rect.y + (self._rect.height - self._trash_txt.height) / 2
-    rl.draw_texture_ex(self._trash_txt, (trash_x, trash_y), 0, 1.0, rl.WHITE)
+    rl.draw_texture_ex(self._trash_txt, rl.Vector2(trash_x, trash_y), 0, 1.0, rl.WHITE)
 
 
 class DisconnectButton(Widget):
@@ -121,7 +121,7 @@ class DisconnectButton(Widget):
   def _render(self, _):
     center = rl.Vector2(self._rect.x + self._rect.width / 2, self._rect.y + self._rect.height / 2)
     rl.draw_circle_v(center, self.RADIUS, self.BG_PRESSED if self.is_pressed else self.BG)
-    rl.draw_texture_ex(self._slash_txt, (center.x - self._slash_txt.width / 2, center.y - self._slash_txt.height / 2),
+    rl.draw_texture_ex(self._slash_txt, rl.Vector2(center.x - self._slash_txt.width / 2, center.y - self._slash_txt.height / 2),
                        0, 1.0, rl.WHITE)
 
 
@@ -221,9 +221,9 @@ class WifiButton(BigButton):
     return self._is_connected
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
-    if self._show_forget_btn and rl.check_collision_point_rec(mouse_pos, self._forget_btn.rect):
+    if self._show_forget_btn and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._forget_btn.rect):
       return
-    if self._show_disconnect_btn and rl.check_collision_point_rec(mouse_pos, self._disconnect_btn.rect):
+    if self._show_disconnect_btn and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._disconnect_btn.rect):
       return
     super()._handle_mouse_release(mouse_pos)
 

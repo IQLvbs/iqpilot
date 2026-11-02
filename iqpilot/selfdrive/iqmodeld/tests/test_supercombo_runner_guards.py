@@ -372,3 +372,24 @@ def test_wait_for_model_load_memory_raises_when_insufficient(monkeypatch):
 def test_wait_for_model_load_memory_passes_when_enough(monkeypatch):
   monkeypatch.setattr(model_runner_mod, "mem_available_mb", lambda: 4096)
   model_runner_mod.wait_for_model_load_memory(500, timeout_s=0.2)
+
+
+def test_load_big_model_pickle_refuses_before_loading_when_memory_short(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+  pkl = tmp_path / "big.pkl"
+  pkl.write_bytes(b"x" * (1024 * 1024))
+  loaded = []
+  monkeypatch.setattr(model_runner_mod, "mem_available_mb", lambda: 100)
+  monkeypatch.setattr(model_runner_mod, "MODEL_LOAD_MEMORY_FALLBACK_S", 0.0)
+  monkeypatch.setattr(model_runner_mod.time, "sleep", lambda _s: None)
+  monkeypatch.setattr(model_runner_mod, "load_pickle", lambda p: loaded.append(p))
+  with pytest.raises(RuntimeError, match="insufficient memory"):
+    model_runner_mod.load_big_model_pickle(str(pkl))
+  assert loaded == []
+
+
+def test_load_big_model_pickle_loads_when_memory_available(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+  pkl = tmp_path / "big.pkl"
+  pkl.write_bytes(b"x" * (1024 * 1024))
+  monkeypatch.setattr(model_runner_mod, "mem_available_mb", lambda: 8192)
+  monkeypatch.setattr(model_runner_mod, "load_pickle", lambda p: {"ok": p})
+  assert model_runner_mod.load_big_model_pickle(str(pkl)) == {"ok": str(pkl)}

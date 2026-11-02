@@ -2,7 +2,7 @@
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos/
 """
 
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.common.swaglog import cloudlog
 from iqpilot.common.turn_guard_settings import get_turn_guards_enabled, set_turn_guards_enabled

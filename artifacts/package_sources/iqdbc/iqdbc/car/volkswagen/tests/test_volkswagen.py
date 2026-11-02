@@ -6,6 +6,7 @@ import pytest
 
 from iqdbc.can import CANPacker
 from iqdbc.car import Bus, DT_CTRL, structs
+from iqdbc.car.volkswagen.hca_session import EpsSessionClock
 from iqdbc.car.volkswagen.carstate import CarState
 from iqdbc.car.structs import CarParams
 from iqdbc.car.volkswagen.interface import CarInterface
@@ -449,6 +450,7 @@ def test_button_enable_recovers_once_cruise_fault_clears():
 def test_pq_hca_ready_does_not_complete_eps_initialization():
   state = object.__new__(CarState)
   state.eps_init_complete = False
+  state.eps_session = EpsSessionClock(1.1)
 
   state.frame = 0
   assert state.update_hca_state("READY", ready_confirms_init=False) == (True, False)
@@ -522,6 +524,43 @@ def test_mlb_gateway_car_with_a_sparse_fingerprint_snapshot_reads_only_what_an_a
   assert q5.CP.transmissionType == CarParams.TransmissionType.automatic
 
 
+def _jetta_camera_harness_car():
+  fingerprints = {bus: {} for bus in range(7)}
+  fingerprints[2][0x126] = 8
+  car_fw = [CarParams.CarFw.new_message(ecu=Ecu.fwdCamera, address=0x74f)]
+  CP = CarInterface.get_params(CAR.VOLKSWAGEN_JETTA_MK7, fingerprints, car_fw, alpha_long=False, is_release=False, docs=False)
+  CP_IQ = CarInterface.get_params_iq(CP, CAR.VOLKSWAGEN_JETTA_MK7, fingerprints, car_fw, alpha_long=False, is_release_iq=False, docs=False)
+  return CarInterface(CP, CP_IQ)
+
+
+def test_mqb_camera_harness_keeps_can_valid_when_bus_1_never_carries_blinkmodi_02():
+  car = _jetta_camera_harness_car()
+  assert car.CP.networkLocation == CarParams.NetworkLocation.fwdCamera
+
+  subscribed = _subscribed_addresses(car)
+  assert 0x366 in subscribed[Bus.pt]
+  assert set(car.can_parsers) == {Bus.pt, Bus.cam}
+
+  packer = CANPacker(CAR.VOLKSWAGEN_JETTA_MK7.config.dbc_dict[Bus.pt])
+  ret = _run_past_aliveness_timeout(car, lambda: _frames_for(car, packer, subscribed))
+
+  assert ret.canValid
+  assert not ret.canTimeout
+  assert all(parser.can_valid for parser in car.can_parsers.values())
+
+
+def test_mqb_still_reports_can_invalid_when_the_powertrain_bus_loses_blinkmodi_02():
+  car = _jetta_camera_harness_car()
+  subscribed = _subscribed_addresses(car)
+  on_the_wire = {bus: set(addrs) for bus, addrs in subscribed.items()}
+  on_the_wire[Bus.pt] -= {0x366}
+
+  packer = CANPacker(CAR.VOLKSWAGEN_JETTA_MK7.config.dbc_dict[Bus.pt])
+  ret = _run_past_aliveness_timeout(car, lambda: _frames_for(car, packer, on_the_wire))
+
+  assert not ret.canValid
+
+
 def test_mlb_manual_gateway_car_adds_only_the_reverse_switch_on_the_powertrain_bus():
   automatic = _subscribed_addresses(_q5_mk1_car())
   manual = _subscribed_addresses(_sparse_q5(bus1=(MLB_MSG_GATEWAY_05,)))
@@ -577,6 +616,7 @@ def _steering_state(flags, lwi=(0.0, 0), eps=(0.0, 0)):
   state.CCP = SimpleNamespace(STEER_DRIVER_ALLOWANCE=100, hca_status_values={5: "ACTIVE"})
   state.eps_init_complete = True
   state.frame = 0
+  state.eps_session = EpsSessionClock(1.1)
   pt_cp = SimpleNamespace(vl={
     "LWI_01": {"LWI_Lenkradwinkel": lwi[0], "LWI_VZ_Lenkradwinkel": lwi[1],
                "LWI_Lenkradw_Geschw": 4.0, "LWI_VZ_Lenkradw_Geschw": 0},

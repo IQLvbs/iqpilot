@@ -272,6 +272,8 @@ _QUIET_SWAPS = (
    lambda cs: cs.vEgo < 2.5 or cs.gearShifter == _GEAR.reverse),
 )
 
+MAIN_CRUISE_FAULT_HOLD_CYCLES = 1000
+
 _DROP_ON_ENTRY = (_E.speedTooLow, _E.belowEngageSpeed, _E.preEnableStandstill,
                   _E.manualRestart, _E.cruiseDisabled)
 _DROP_ON_EXIT = (_E.wrongCruiseMode, _E.pedalPressed, _E.buttonCancel, _E.pcmDisable)
@@ -286,6 +288,12 @@ class SteeringAssistanceBehavior:
 
     self.enabled = self.active = self.available = False
     self.pause_on_lateral_override = False
+    self._main_live = None
+    self._main_live_prev = False
+    self._fault_hold_cycles = 0
+    self._fault_held = False
+    self._fault_resume = False
+    self._resume_pending = False
     sd.enabled_prev = False
     self.state_machine = GuidanceStateMachine(self)
 
@@ -371,6 +379,27 @@ class SteeringAssistanceBehavior:
       return True
     return bool(getattr(cs, 'cruiseFaultLateralMode', False))
 
+  def _track_main_cruise(self, cs):
+    if self._main_live is None:
+      self._main_live = self._main_cruise_live(self.selfdrive.CS_prev)
+    self._main_live_prev = self._main_live
+    live = self._main_cruise_live(cs)
+    faulted = bool(getattr(cs, 'accFaulted', False))
+    held = False
+    if live or not faulted:
+      self._fault_hold_cycles = 0
+    elif self._main_live and self._fault_hold_cycles < MAIN_CRUISE_FAULT_HOLD_CYCLES:
+      self._fault_hold_cycles += 1
+      live = True
+      held = True
+    if held and not self._fault_held:
+      self._fault_resume = self.enabled
+    if self._fault_held and not held:
+      self._resume_pending = self._fault_resume and live and not self.enabled
+      self._fault_resume = False
+    self._fault_held = held
+    self._main_live = live
+
   def _swap_event(self, stock: int, silent: int):
     self._drop(stock)
     self._emit(silent)
@@ -454,7 +483,9 @@ class SteeringAssistanceBehavior:
         self._drop(_E.buttonEnable)
       return
 
-    if self.main_enabled_toggle and self._main_cruise_live(cs) and not self._main_cruise_live(self.selfdrive.CS_prev):
+    resume = self._resume_pending
+    self._resume_pending = False
+    if self.main_enabled_toggle and self._main_live and (resume or not self._main_live_prev):
       self._emit(_Q.alcEngaged)
 
   def _phase_buttons(self, cs):
@@ -474,8 +505,8 @@ class SteeringAssistanceBehavior:
     return kill_all
 
   def _phase_availability(self, cs):
-    main_off = self.main_enabled_toggle and not self._main_cruise_live(cs)
-    if self.no_main_cruise or (self._lateral_offered(cs) and not main_off):
+    main_off = self.main_enabled_toggle and not self._main_live
+    if self.no_main_cruise or ((self._lateral_offered(cs) or self._main_live) and not main_off):
       return
     self._drop(_E.buttonEnable)
     if self.enabled:
@@ -496,6 +527,7 @@ class SteeringAssistanceBehavior:
       self._emit(_Q.alcEngagedSilent)
 
   def update_events(self, cs):
+    self._track_main_cruise(cs)
     self._phase_joystick(cs)
     self._phase_soften_for_lateral_session(cs)
     self._phase_engagement(cs)

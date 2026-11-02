@@ -55,15 +55,53 @@ def agnos_manifest_path(install_path: str, device_type: str) -> str:
   return os.path.join(_hardware_dir(install_path), fname)
 
 
+def os_version_number(version: str) -> str:
+  return version.strip().removeprefix("IQ.OS").strip()
+
+
 def os_update_needed(install_path: str) -> tuple[bool, str, str]:
   """Returns (needed, current, required)."""
   current = current_os_version()
   required = required_agnos_version(install_path)
-  needed = bool(required and current and required != current)
+  needed = bool(required and current and os_version_number(required) != os_version_number(current))
   return needed, current, required
 
 
 ProgressCb = Callable[[int, str], None]
+
+
+def _supports_check_auth(agnos_py: str) -> bool:
+  try:
+    with open(agnos_py) as f:
+      return "--check-auth" in f.read()
+  except OSError:
+    return False
+
+
+def preflight_os_auth(install_path: str, device_type: str) -> tuple[bool, str]:
+  """Confirm the device can authenticate to the IQ.OS image source before the user
+  confirms a flash, so an unauthenticated device fails fast with a clear reason
+  instead of stalling at 0%. A public manifest needs no auth and passes. Returns
+  (ok, detail); a preflight that cannot even run does not block (the flash will
+  still run and report)."""
+  manifest = agnos_manifest_path(install_path, device_type)
+  agnos_py = os.path.join(_hardware_dir(install_path), "agnos.py")
+  if not os.path.isfile(manifest) or not _supports_check_auth(agnos_py):
+    return True, ""
+  try:
+    proc = subprocess.run(
+      [updater_interpreter(install_path), agnos_py, "--check-auth", manifest],
+      cwd=install_path, env=updater_env(install_path),
+      stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=180)
+  except Exception:
+    return True, ""
+  if proc.returncode == 0:
+    return True, ""
+  detail = ""
+  for line in (proc.stdout or "").splitlines():
+    if line.startswith("Error:"):
+      detail = line[len("Error:"):].strip()
+  return False, detail
 
 
 def run_agnos_update(install_path: str, device_type: str, progress_cb: ProgressCb) -> bool:
@@ -139,7 +177,8 @@ class OsUpdateCoordinator:
   runs the flash. On-screen setup can confirm locally too."""
 
   def __init__(self):
-    self.confirmed = threading.Event()
+    self.decided = threading.Event()
+    self.accepted = False
     self.needed = False
     self.current = ""
     self.required = ""
@@ -148,10 +187,16 @@ class OsUpdateCoordinator:
     self.needed = True
     self.current = current
     self.required = required
-    self.confirmed.clear()
+    self.accepted = False
+    self.decided.clear()
 
   def confirm(self) -> None:
-    self.confirmed.set()
+    self.accepted = True
+    self.decided.set()
 
-  def wait_for_confirm(self, timeout: float) -> bool:
-    return self.confirmed.wait(timeout=timeout)
+  def decline(self) -> None:
+    self.accepted = False
+    self.decided.set()
+
+  def wait_for_confirm(self, timeout: float | None = None) -> bool:
+    return self.decided.wait(timeout=timeout) and self.accepted

@@ -1,4 +1,6 @@
 import os
+import queue
+import threading
 import time
 import datetime
 from iqpilot.common.time_helpers import system_time_valid
@@ -6,7 +8,7 @@ from iqpilot.selfdrive.ui.ui_state import ui_state
 from iqpilot.system.ui.lib.application import gui_app
 from iqpilot.system.ui.lib.multilang import tr, trn
 from iqpilot.system.ui.widgets import Widget, DialogResult
-from iqpilot.system.ui.widgets.confirm_dialog import ConfirmDialog
+from iqpilot.system.ui.widgets.confirm_dialog import ConfirmDialog, alert_dialog
 from iqpilot.system.ui.widgets.list_view import button_item, text_item, ListItem
 from iqpilot.system.ui.widgets.option_dialog import MultiOptionDialog
 from iqpilot.system.ui.widgets.scroller_tici import Scroller
@@ -88,9 +90,9 @@ class SoftwareLayout(Widget):
     self._branch_btn.action_item.set_value(ui_state.params.get("UpdaterTargetBranch") or "")
     self._branch_dialog: MultiOptionDialog | None = None
 
-    # Git auth for private-branch updates (sits with the Target Branch section)
     self._auth_btn = button_item(lambda: tr("Git Auth"), lambda: tr("AUTH"), callback=self._on_auth_branch)
     self._auth_btn.set_visible(not ui_state.params.get_bool("IsTestedBranch"))
+    self._auth_save_results: queue.SimpleQueue[str | None] = queue.SimpleQueue()
 
     self._scroller = Scroller([
       self._onroad_label,
@@ -118,6 +120,16 @@ class SoftwareLayout(Widget):
     self._scroller.render(rect)
 
   def _update_state(self):
+    try:
+      auth_error = self._auth_save_results.get_nowait()
+    except queue.Empty:
+      pass
+    else:
+      self._auth_btn.action_item.set_enabled(True)
+      self._refresh_auth_value()
+      if auth_error is not None:
+        gui_app.set_modal_overlay(alert_dialog(auth_error))
+
     # Show/hide onroad warning
     self._onroad_label.set_visible(ui_state.is_onroad())
 
@@ -250,9 +262,19 @@ class SoftwareLayout(Widget):
       def on_token(token_result, token):
         if token_result != DialogResult.CONFIRM:
           return
-        git_creds.set_credentials(username, token)
-        self._refresh_auth_value()
-        ui_state.params.put("UpdaterManualRequest", "check")
+        self._auth_btn.action_item.set_enabled(False)
+        self._auth_btn.action_item.set_value(tr("checking..."))
+
+        def save_credentials():
+          error = None
+          try:
+            git_creds.set_credentials(username, token)
+            os.system("pkill -SIGUSR1 -f system.updated.updated")
+          except Exception as e:
+            error = str(e)
+          self._auth_save_results.put(error)
+
+        threading.Thread(target=save_credentials, daemon=True).start()
 
       open_text_prompt(tr("Git token / password"),
                        tr("leave username and token blank to clear"),

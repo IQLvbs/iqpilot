@@ -3,7 +3,6 @@ import ast
 import importlib.util
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -15,7 +14,7 @@ SHIMS = {
   "iqpilot.selfdrive.controls.lib.action_engine": "iqpilot_private.navd.action_engine",
   "iqpilot.selfdrive.iqmodeld.cot_decode": "iqpilot_private.context.cot_decode",
   "iqpilot.selfdrive.iqmodeld.drive_profile": "iqpilot_private.context.drive_profile",
-  "iqpilot.selfdrive.iqmodeld.speed_limit_input": "iqpilot_private.context.speed_limit_input",
+  "iqpilot.selfdrive.iqmodeld.iqmodel_io": "iqpilot_private.context.iqmodel_io",
   "iqpilot.selfdrive.iqmodeld.temporal_state": "iqpilot_private.context.temporal_state",
   "iqpilot.ui.reasoning_relay": "iqpilot_private.context.reasoning_relay",
 }
@@ -90,12 +89,6 @@ def test_feature_fallbacks_feed_zeros_only_to_declared_inputs(monkeypatch):
   assert profile.compose_drive_profile_inputs({}, None, None, 0, 10.0)[0] == {}
   assert not profile.active_model_declares_drive_profile(None)
   assert profile.drive_profile_name(None) == "neutral"
-
-  speed = load_fallback(monkeypatch, "iqpilot.selfdrive.iqmodeld.speed_limit_input")
-  declared = speed.device_speed_limit_input({"speed_limit_input": np.ones((1, 4))}, None, None, 0)
-  np.testing.assert_array_equal(declared["speed_limit_input"], np.zeros((1, 4), np.float32))
-  assert speed.device_speed_limit_input({}, None, None, 0) == {}
-  assert speed.speed_limit_unit_is_mph(SimpleNamespace(get_bool=lambda key: False))
 
 
 def test_temporal_fallback_keeps_the_stock_policy_contract(monkeypatch):

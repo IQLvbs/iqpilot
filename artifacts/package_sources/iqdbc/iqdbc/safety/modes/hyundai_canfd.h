@@ -47,6 +47,7 @@ const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
   {0x1AA, 2, 16}, // CRUISE_ALT_BUTTONS , carrot
   {0x2A4, 0, 24}, // CAM_0x2A4
   {0x51, 0, 32},  // ADRV_0x51
+  {0x51, 2, 32},
   {0x730, 1, 8},  // tester present for ADAS ECU disable
   {0x12A, 1, 16}, // LFA
   {0x160, 1, 16}, // ADRV_0x160
@@ -118,8 +119,14 @@ const CanMsg HYUNDAI_CANFD_HDA1_TX_MSGS[] = {
   HYUNDAI_CANFD_HDA1_TX_MSGS_COMMON(false)
 };
 
+#define HYUNDAI_CANFD_HDA1_RADAR_KEEPALIVE_TX_MSGS \
+  {0x140, 2, 8, .check_relay = false}, \
+  {0x160, 2, 16, .check_relay = false}, \
+  {0x1A0, 2, 32, .check_relay = false}, \
+
 const CanMsg HYUNDAI_CANFD_HDA1_LONG_TX_MSGS[] = {
   HYUNDAI_CANFD_HDA1_TX_MSGS_COMMON(true)
+  HYUNDAI_CANFD_HDA1_RADAR_KEEPALIVE_TX_MSGS
 };
 
 const CanMsg HYUNDAI_CANFD_HDA1_CAMERA_SCC_TX_MSGS[] = {

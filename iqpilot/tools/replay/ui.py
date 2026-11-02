@@ -5,7 +5,7 @@ import sys
 
 import cv2
 import numpy as np
-import pyray as rl
+import raylib_nb as rl
 
 import iqpilot.cereal.messaging as messaging
 from iqpilot.common.basedir import BASEDIR
@@ -215,7 +215,7 @@ def ui_thread(addr):
     # *** blits ***
     # Update camera texture from numpy array
     img_rgba = cv2.cvtColor(img, cv2.COLOR_RGB2RGBA)
-    rl.update_texture(camera_texture, rl.ffi.cast("void *", img_rgba.ctypes.data))
+    rl.update_texture(camera_texture, img_rgba)
     rl.draw_texture(camera_texture, 0, 0, rl.WHITE)
 
     # display alerts
@@ -232,7 +232,7 @@ def ui_thread(addr):
     # Convert lid_overlay to RGBA and update top_down texture
     # lid_overlay is (384, 960), need to transpose to (960, 384) for row-major RGBA buffer
     lid_rgba = palette[lid_overlay.T]
-    rl.update_texture(top_down_texture, rl.ffi.cast("void *", np.ascontiguousarray(lid_rgba).ctypes.data))
+    rl.update_texture(top_down_texture, np.ascontiguousarray(lid_rgba))
     rl.draw_texture(top_down_texture, 640, 0, rl.WHITE)
 
     SPACING = 25

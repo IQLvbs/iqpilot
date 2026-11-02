@@ -3,7 +3,7 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 """
 import time
 
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.cereal import log
 
 from iqpilot.selfdrive.ui import UI_BORDER_SIZE

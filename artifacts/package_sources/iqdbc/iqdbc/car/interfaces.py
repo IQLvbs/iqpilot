@@ -436,6 +436,8 @@ class CarControllerBase(ABC):
     self.frame = 0
     self.secoc_key: bytes = b"00" * 16
     self.model = None
+    self.hca_reset_count = 0
+    self.eps_timer_soft_disable_alert = False
 
   @abstractmethod
   def update(self, CC: structs.CarControl, CC_IQ: structs.IQCarControl, CS: CarStateBase, now_nanos: int) -> tuple[structs.CarControl.Actuators, list[CanData]]:

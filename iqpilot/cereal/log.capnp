@@ -137,6 +137,8 @@ struct OnroadEvent @0xc4fa6047f024e718 {
     audioFeedback @97;
     bigModelLoading @101;
     bigModelFailed @102;
+    accFaultedHardDecel @103;
+    accFaultedHardDecelLateral @104;
 
     soundsUnavailableDEPRECATED @47;
   }
@@ -697,6 +699,7 @@ struct PandaState @0xa7649e2575e4591e {
     interruptRateUart7 @24;
     sirenMalfunction @25;
     heartbeatLoopWatchdog @26;
+    interruptRateSoundDma @27;
     # Update max fault type in boardd when adding faults
   }
 
@@ -1377,6 +1380,23 @@ struct LongitudinalPlan @0xe00b5b3eba12876c {
   leadTrajectoryV0 @42 :List(Float32);
   leadTrajectoryX1 @43 :List(Float32);
   leadTrajectoryV1 @44 :List(Float32);
+
+  # Comfort target in the ego path-distance reference; leadDistance stays raw.
+  stopOffset @45 :StopOffset;
+  struct StopOffset {
+    version @0 :UInt16;
+    valid @1 :Bool;
+    configurationValid @2 :Bool;
+    eventId @3 :UInt64;
+    source @4 :Text;
+    state @5 :Text;
+    requestedOffset @6 :Float32;
+    baselineDistance @7 :Float32;
+    distance @8 :Float32;  # signed remaining distance, including overshoot
+    uncertainty @9 :Float32;
+    shortfall @10 :Float32;
+    supportedSources @11 :List(Text);
+  }
 
   enum LongitudinalPlanSource {
     cruise @0;

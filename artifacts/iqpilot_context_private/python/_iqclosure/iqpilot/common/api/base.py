@@ -84,7 +84,7 @@ class BaseApi:
     return transport.request(**options)
 
   def _get_token(self, payload_extra=None, expiry_hours=1, **extra_payload):
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = datetime.now(UTC)
     payload = {
       'identity': self.dongle_id,
       'nbf': now,

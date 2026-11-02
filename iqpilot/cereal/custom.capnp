@@ -335,6 +335,24 @@ struct IQCarParams @0xd4189b5c8aca9f78 {
   longitudinalStoppingSpeedOverride @5 :Float32;  # m/s; zero keeps the upstream default
   stoppingDecelRateOverride @6 :Float32;          # m/s^3; zero keeps the upstream default
   longActiveWithGasOverride @7 :Bool;             # keep long control active while the driver is on the gas
+  longitudinalActuation @8 :LongitudinalActuation;
+
+  struct LongitudinalActuation {
+    jerkControl @0 :JerkControl;
+    comfortBand @1 :ComfortBand;
+    maxJerkUp @2 :Float32;   # m/s^3
+    maxJerkDown @3 :Float32; # positive m/s^3
+
+    enum JerkControl {
+      software @0;
+      nativeAsymmetric @1;
+    }
+
+    enum ComfortBand {
+      none @0;
+      asymmetric @1;
+    }
+  }
 
   struct LateralNet {
     fuzzyFingerprint @0 :Bool;
@@ -360,6 +378,19 @@ struct IQCarControl @0xdc6c97009c7ba28f {
   useRadarAccel @8 :Bool;        # chill mode + radar active -> pass radar ACS_Sollbeschl as ACC_System payload
   radarSetSpeedKph @9 :Float32;  # OP set speed (km/h) to sync radar ACA_V_Wunsch toward via GRA_Up/Down
   radarGapBars @10 :UInt8;       # OP follow-distance bars to mirror to radar GRA_Zeitluecke
+  longitudinalComfort @11 :LongitudinalComfort;
+
+  struct LongitudinalComfort {
+    valid @0 :Bool; # false selects legacy actuation
+    jerkUp @1 :Float32;   # positive m/s^3
+    jerkDown @2 :Float32; # positive m/s^3
+    # requested - below <= actual <= requested + above (m/s^2)
+    accelDeviationAbove @3 :Float32;
+    accelDeviationBelow @4 :Float32;
+    comfortEnabled @5 :Bool;
+    bypassJerkLimit @6 :Bool;     # FCW
+    bypassJerkDownLimit @7 :Bool; # lead/hard braking
+  }
 
   struct Param {
     key @0 :Text;
@@ -433,6 +464,13 @@ struct IQCarState @0xb1c39318bb6bc2b3 {
   slcSetSpeedRequestId @6 :UInt32;
   slcSetSpeedGestureId @7 :UInt32;
   slcSetSpeedRequestKph @8 :Float32;
+
+  epsHcaStatus @9 :UInt8;         # raw EPS_HCA_Status / LH2_Sta_HCA nibble as received
+  epsSessionSec @10 :Float32;     # seconds since the EPS last spent >= 1.1 s out of ACTIVE (feedback-derived)
+  epsSessionResets @11 :UInt16;   # times the feedback-derived session closed this drive
+  hcaSessionSec @12 :Float32;     # controller's own EPS-timer estimate
+  hcaResetCount @13 :UInt16;      # times the controller's timer reset this drive
+  hcaTimerAlert @14 :Bool;        # either clock passed the pre-expiry threshold
 }
 
 struct IQLiveData @0xf2e2b608e51f4b0e {

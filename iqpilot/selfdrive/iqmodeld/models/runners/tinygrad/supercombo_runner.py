@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 
 from iqpilot.common.params import Params
-from iqpilot.selfdrive.iqmodeld.models.runners.model_runner import CUSTOM_MODEL_PATH, NumpyDict, ShapeDict, SliceDict, _META_MAX_BYTES, wait_for_model_load_memory
+from iqpilot.selfdrive.iqmodeld.models.runners.model_runner import CUSTOM_MODEL_PATH, NumpyDict, ShapeDict, SliceDict, _META_MAX_BYTES, load_big_model_pickle
 from iqpilot.selfdrive.iqmodeld.models.runners.model_runner import ModelRunner
 from iqpilot.selfdrive.iqmodeld.models.split_model_constants import SplitModelConstants
 from iqpilot.selfdrive.iqmodeld.parser import PhaseParser
@@ -77,8 +77,7 @@ class TinygradSupercomboRunner(TinygradSupercomboRuntime, ModelRunner):
         self._pkl_path = pkl_path
         self._expected_sha256 = getattr(getattr(self._model_data.model.artifact, "downloadUri", None), "sha256", "") or ""
         self._verify_artifact_file()
-        wait_for_model_load_memory(int(os.path.getsize(pkl_path) / (1024 * 1024) * 2.5) + 256)
-        self._m: dict[Any, Any] = load_pickle(pkl_path)
+        self._m: dict[Any, Any] = load_big_model_pickle(pkl_path)
 
         self._meta = self._load_meta()
         self._ish = self._meta['input_shapes']

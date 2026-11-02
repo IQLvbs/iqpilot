@@ -103,7 +103,6 @@ Panda *connect(std::string serial="", uint32_t index=0) {
   if (getenv("BOARDD_LOOPBACK")) {
     panda->set_loopback(true);
   }
-  //panda->enable_deepsleep();
 
   for (int i = 0; i < PANDA_CAN_CNT; i++) {
     panda->set_can_fd_auto(i, true);
@@ -145,9 +144,7 @@ void can_send_thread(std::vector<Panda *> pandas, bool fake_send) {
     // Don't send if older than 1 second
     if ((nanos_since_boot() - event.getLogMonoTime() < 1e9) && !fake_send) {
       for (const auto& panda : pandas) {
-        LOGT("sending sendcan to panda: %s", (panda->hw_serial()).c_str());
         panda->can_send(event.getSendcan());
-        LOGT("sendcan sent to panda: %s", (panda->hw_serial()).c_str());
       }
     } else {
       LOGE("sendcan too old to send: %" PRIu64 ", %" PRIu64, nanos_since_boot(), event.getLogMonoTime());
@@ -327,12 +324,13 @@ std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> 
     }
 
     // Convert faults bitset to capnp list
-    std::bitset<sizeof(health.faults_pkt) * 8> fault_bits(health.faults_pkt);
+    // bits above the last named fault type would leave unset list entries, which read as relayMalfunction
+    std::bitset<sizeof(health.faults_pkt) * 8> fault_bits(health.faults_pkt & ((2U << size_t(cereal::PandaState::FaultType::INTERRUPT_RATE_SOUND_DMA)) - 1U));
     auto faults = ps.initFaults(fault_bits.count());
 
     size_t j = 0;
     for (size_t f = size_t(cereal::PandaState::FaultType::RELAY_MALFUNCTION);
-         f <= size_t(cereal::PandaState::FaultType::HEARTBEAT_LOOP_WATCHDOG); f++) {
+         f <= size_t(cereal::PandaState::FaultType::INTERRUPT_RATE_SOUND_DMA); f++) {
       if (fault_bits.test(f)) {
         faults.set(j, cereal::PandaState::FaultType(f));
         j++;

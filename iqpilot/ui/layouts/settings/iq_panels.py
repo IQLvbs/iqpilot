@@ -14,7 +14,7 @@ from enum import Enum, IntEnum
 from functools import partial
 from pathlib import Path
 
-import pyray as rl
+import raylib_nb as rl
 from iqdbc.car.subaru.values import CAR as SUBARU_CAR
 from iqdbc.car.subaru.values import SubaruFlags
 from iqdbc.car.volkswagen.values import CAR as VOLKSWAGEN_CAR
@@ -1221,14 +1221,14 @@ class IQSettingsLayout(OP.SettingsLayout):
     self._sidebar_scroller.render(nav_rect)
 
   def _handle_mouse_release(self, mouse_pos: MousePos) -> bool:
-    if rl.check_collision_point_rec(mouse_pos, self._close_btn_rect):
+    if rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._close_btn_rect):
       if self._close_callback:
         self._close_callback()
       return True
 
     if self._sidebar_scroller.scroll_panel.is_touch_valid():
       for panel_type, panel_info in self._panels.items():
-        if rl.check_collision_point_rec(mouse_pos, panel_info.button_rect):
+        if rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), panel_info.button_rect):
           self.set_current_panel(panel_type)
           return True
     return False

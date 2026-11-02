@@ -6,7 +6,7 @@ import re
 import threading
 import time
 
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.cereal import custom
 

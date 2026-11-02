@@ -2,7 +2,7 @@
 import ctypes
 import os
 import time
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.system.hardware import TICI
 from iqpilot.common.realtime import CycleCollector, Priority, config_realtime_process, set_core_affinity

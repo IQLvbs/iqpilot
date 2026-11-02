@@ -135,7 +135,7 @@ def test_master_switch_hides_live_guidance_and_can_reenable_it(scene):
 
 
 def test_navigation_taps_are_consumed_before_home_callback(scene, mocker):
-  import pyray as rl
+  import raylib_nb as rl
   from iqpilot.selfdrive.ui.mici.onroad.augmented_road_view import AugmentedRoadView
   from iqpilot.system.ui.lib.application import MousePos
 

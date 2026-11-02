@@ -5,7 +5,7 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 import threading
 import time
 
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.common.api import api_get
 from iqpilot.common.constants import CV

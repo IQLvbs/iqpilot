@@ -11,7 +11,7 @@ try:
 except Exception:
   sqlite3 = None  # type: ignore[assignment]
 
-import pyray as rl
+import raylib_nb as rl
 import requests
 
 from iqpilot.common.basedir import BASEDIR

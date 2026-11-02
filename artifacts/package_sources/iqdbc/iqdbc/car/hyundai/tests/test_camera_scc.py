@@ -311,7 +311,7 @@ def scc2(CS, enabled=True, accel=1.0, stopping=False, gas_override=False, stop_c
   CP = ev6_params(camera_scc=True)
   packer = CANPacker(DBC_NAME)
   CAN = CanBus(CP)
-  jerk = SimpleNamespace(carrot_cruise=0, carrot_cruise_accel=0.0, jerk_u=5.0, jerk_l=5.0)
+  jerk = SimpleNamespace(carrot_cruise=0, carrot_cruise_accel=0.0, jerk_u=5.0, jerk_l=5.0, comfort_active=False)
   hud = SimpleNamespace(leadDistanceBars=2, leadVisible=False, leadRelSpeed=0.0, leadRadar=0, leadDistance=0.0)
   msg, last = hyundaicanfd.create_acc_control_scc2(packer, CAN, enabled, 0.0, accel, stopping, gas_override,
                                                    30 * CV.MS_TO_KPH, hud, jerk, CS, stop_controller)

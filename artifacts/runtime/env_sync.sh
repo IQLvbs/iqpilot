@@ -21,6 +21,20 @@ _iq_maybe_sudo() {
   fi
 }
 
+# a package_runtime left behind by a release tree outranks the installed packages, so only a prebuilt tree may use it
+iq_package_runtime_root() {
+  if [ -f "$1/prebuilt" ] && [ -d "$1/artifacts/package_runtime" ]; then
+    printf '%s\n' "$1/artifacts/package_runtime"
+  fi
+}
+
+IQOS_SERVICE_DROPINS_HELPER="/usr/libexec/iqos/iq-service-dropins"
+
+# IQ.OS boot-prepare writes the hephaestusd/ble-transportd/flockd drop-ins (package PYTHONPATH, iqpilot_t domain) only for a tree present at boot, so a tree installed after boot runs those units bare: degraded and denied the iqkeeperd signer.
+iq_service_dropins_missing() {
+  [ -f "${1:-/run/iqpilot-boot-prepare.done}" ] && [ ! -f "${2:-/run/systemd/system/hephaestusd.service.d/iqpilot-packages.conf}" ]
+}
+
 sync_python_env() {
   local DIR
   DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." >/dev/null && pwd )"
@@ -61,7 +75,7 @@ sync_python_env() {
   fi
   VENV_SITE_PACKAGES="$("$DIR/.venv/bin/python3" -c 'import site; print(site.getsitepackages()[0])' 2>/dev/null || true)"
   PACKAGES_READY=0
-  if [ -d "$DIR/artifacts/package_runtime" ] && PYTHONPATH="$DIR/artifacts/package_runtime" /usr/local/venv/bin/python3 -c "import iqdbc, msgq, panda, tinygrad, capnp" 2>/dev/null \
+  if [ -n "$(iq_package_runtime_root "$DIR")" ] && PYTHONPATH="$DIR/artifacts/package_runtime" /usr/local/venv/bin/python3 -c "import iqdbc, msgq, panda, tinygrad, capnp" 2>/dev/null \
       && PYTHONPATH="$DIR/artifacts/package_runtime" /usr/local/venv/bin/python3 "$DIR/iqpilot/system/runtime_packages_verify.py" 2>/dev/null; then
     PACKAGES_READY=1
   elif [ "$PACKAGE_LOCK_SHA" = "$INSTALLED_PACKAGE_LOCK_SHA" ] && "$DIR/.venv/bin/python3" -c "import iqdbc, msgq, panda, tinygrad, capnp" 2>/dev/null \
@@ -71,7 +85,7 @@ sync_python_env() {
     PACKAGES_READY=1
   fi
   RUNTIME_WHEELS_READY=0
-  if [ -d "$DIR/artifacts/package_runtime" ] && PYTHONPATH="$DIR/artifacts/package_runtime" /usr/local/venv/bin/python3 -c "import libdatachannel" 2>/dev/null \
+  if [ -n "$(iq_package_runtime_root "$DIR")" ] && PYTHONPATH="$DIR/artifacts/package_runtime" /usr/local/venv/bin/python3 -c "import libdatachannel" 2>/dev/null \
       && PYTHONPATH="$DIR:$DIR/artifacts/package_runtime" /usr/local/venv/bin/python3 "$DIR/iqpilot/system/runtime_wheels_verify.py" 2>/dev/null; then
     RUNTIME_WHEELS_READY=1
   elif [ "$RUNTIME_WHEEL_LOCK_SHA" = "$INSTALLED_RUNTIME_WHEEL_LOCK_SHA" ] && "$DIR/.venv/bin/python3" -c "import libdatachannel" 2>/dev/null \

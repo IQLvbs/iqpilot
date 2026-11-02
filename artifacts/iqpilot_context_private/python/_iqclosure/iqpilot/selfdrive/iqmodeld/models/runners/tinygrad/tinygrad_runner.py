@@ -19,7 +19,7 @@ from iqpilot.selfdrive.iqmodeld.models.runners.model_runner import (
   ShapeDict,
   SliceDict,
 )
-from iqpilot.selfdrive.iqmodeld.models.runners.model_runner import ModelRunner
+from iqpilot.selfdrive.iqmodeld.models.runners.model_runner import ModelRunner, load_big_model_pickle
 from iqpilot.selfdrive.iqmodeld.models.runners.tinygrad.model_types import (
   OffPolicyTinygrad,
   OnPolicyTinygrad,
@@ -31,7 +31,6 @@ from iqpilot.selfdrive.iqmodeld.models.split_model_constants import SplitModelCo
 from iqpilot.selfdrive.iqmodeld.config import ModelConstants
 from iqpilot.selfdrive.iqmodeld.runtime.tinygrad import qcom_tensor_from_opencl_address
 from iqpilot.system.hardware import TICI
-from iqpilot.selfdrive.iqmodeld.models.iqc import load_pickle
 
 
 @dataclass(frozen=True)
@@ -46,7 +45,7 @@ def _artifact_path(filename: str) -> str:
 
 def _load_program_blob(filename: str):
   try:
-    return load_pickle(_artifact_path(filename))
+    return load_big_model_pickle(_artifact_path(filename))
   except FileNotFoundError as exc:
     assert "/dev/kgsl-3d0" not in str(exc), "Model was built on C3 or C3X, but is being loaded on PC"
     raise

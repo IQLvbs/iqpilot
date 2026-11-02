@@ -4,8 +4,8 @@ from collections.abc import Callable
 from typing import cast
 import threading
 
-import pyray as rl
-from iqpilot.system.ui.lib.application import gui_app
+import raylib_nb as rl
+from iqpilot.system.ui.lib.application import gui_app, TextAlignment
 from iqpilot.system.ui.lib.multilang import tr
 from iqpilot.system.ui.lib.scroll_panel import GuiScrollPanel
 from iqpilot.system.ui.lib.wifi_manager import WifiManager, SecurityType, Network, MeteredType
@@ -82,7 +82,7 @@ class NavButton(Widget):
     color = rl.Color(70, 74, 82, 255) if self.is_pressed else rl.Color(52, 55, 62, 255)
     rl.draw_rectangle_rounded(self._rect, 0.6, 10, color)
     text = self.text() if callable(self.text) else self.text
-    gui_label(self.rect, text, font_size=60, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+    gui_label(self.rect, text, font_size=60, alignment=TextAlignment.CENTER)
 
 
 class NetworkUI(Widget):
@@ -428,10 +428,10 @@ class WifiManagerUI(Widget):
       if self._wifi_manager.is_scanning:
         draw_spinner(cx, cy - 50, 46)
         gui_label(rl.Rectangle(rect.x, cy + 2, rect.width, 90), tr("Scanning Wi-Fi networks..."), 60,
-                  color=rl.Color(190, 190, 195, 255), alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+                  color=rl.Color(190, 190, 195, 255), alignment=TextAlignment.CENTER)
       else:
         gui_label(rl.Rectangle(rect.x, cy - 45, rect.width, 90), tr("No Wi-Fi networks found"), 60,
-                  color=rl.Color(150, 150, 155, 255), alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+                  color=rl.Color(150, 150, 155, 255), alignment=TextAlignment.CENTER)
       return
 
     if self.state == UIState.NEEDS_AUTH and self._state_network:
@@ -510,7 +510,7 @@ class WifiManagerUI(Widget):
 
     if status_text:
       status_text_rect = rl.Rectangle(security_icon_rect.x - 410, rect.y, 410, ITEM_HEIGHT)
-      gui_label(status_text_rect, status_text, font_size=48, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+      gui_label(status_text_rect, status_text, font_size=48, alignment=TextAlignment.CENTER)
     else:
       # If the network is saved, show the "Forget" button
       if network.is_saved:
@@ -594,7 +594,7 @@ class WifiManagerUI(Widget):
     self._networks = networks
     for n in self._networks:
       self._networks_buttons[n.ssid] = Button(n.ssid, partial(self._networks_buttons_callback, n), font_size=55,
-                                              text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT, button_style=ButtonStyle.TRANSPARENT_WHITE_TEXT)
+                                              text_alignment=TextAlignment.LEFT, button_style=ButtonStyle.TRANSPARENT_WHITE_TEXT)
       self._networks_buttons[n.ssid].set_touch_valid_callback(lambda: self.scroll_panel.is_touch_valid())
       self._forget_networks_buttons[n.ssid] = Button(tr("Forget"), partial(self._forget_networks_buttons_callback, n), button_style=ButtonStyle.FORGET_WIFI,
                                                      font_size=45)

@@ -1,5 +1,5 @@
 import numpy as np
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.cereal import car
 from dataclasses import dataclass, field
 from iqpilot.common.params import Params

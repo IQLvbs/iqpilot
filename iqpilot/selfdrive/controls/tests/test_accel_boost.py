@@ -130,12 +130,14 @@ def test_planner_latches_model_limit_after_cruise_update(monkeypatch, e2e, a_mod
   planner.accel_boost = AccelBoost(True, DT_MDL)
   planner.distance_control = SimpleNamespace(enabled=False, update=lambda *args, **kwargs: kwargs["a_model"])
   planner.is_e2e = lambda sm: e2e
-  planner.apply_e2e_stop_distance = lambda sm, v, a, stop: (a, stop)
+  planner.stop_plan = lp.StopOffsetPlan()
+  planner.update_stop_offset = lambda *args: None
   planner.parse_model = lambda model: (None, np.full(len(lp.T_IDXS_MPC), FAST), np.zeros(len(lp.T_IDXS_MPC)), None, 1.0)
+  weight_updates = []
   planner.mpc = SimpleNamespace(
     status=True, crash_cnt=0, source=lp.LongitudinalPlanSource.lead0,
     v_solution=np.full(len(lp.T_IDXS_MPC), FAST), a_solution=np.zeros(len(lp.T_IDXS_MPC)),
-    j_solution=np.zeros(len(lp.T_IDXS_MPC) - 1), set_weights=lambda **kwargs: None,
+    j_solution=np.zeros(len(lp.T_IDXS_MPC) - 1), set_weights=lambda prev_accel_constraint, personality: weight_updates.append((prev_accel_constraint, personality)),
     set_cur_state=lambda *args: None, update=lambda *args, **kwargs: None,
   )
   sm = {
@@ -151,6 +153,7 @@ def test_planner_latches_model_limit_after_cruise_update(monkeypatch, e2e, a_mod
   assert planner.accel_boost.model_limited is eligible
   sm["carState"].gasPressed = True
   planner.update(sm)
+  assert weight_updates == [(True, 0), (True, 0)]
   assert planner.accel_boost.value == pytest.approx(ACCEL_BOOST_RATE * DT_MDL if eligible else 0.0)
   assert planner.output_a_target == pytest.approx(min(a_mpc, a_cruise, planner.accel_boost.apply(a_model)) if e2e else min(a_mpc, a_cruise))
   assert cruise_calls[-1][-1] == lp.A_CRUISE_MIN

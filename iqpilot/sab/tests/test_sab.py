@@ -89,7 +89,7 @@ def make_car_state():
   )
 
 
-def make_vw_car_state(cruise_available: bool, cruise_fault_lateral: bool = False):
+def make_vw_car_state(cruise_available: bool, cruise_fault_lateral: bool = False, acc_faulted: bool = False):
   return SimpleNamespace(
     started=True,
     standstill=False,
@@ -102,6 +102,7 @@ def make_vw_car_state(cruise_available: bool, cruise_fault_lateral: bool = False
     cruiseState=SimpleNamespace(available=cruise_available),
     lateralAvailable=cruise_available or cruise_fault_lateral,
     cruiseFaultLateralMode=cruise_fault_lateral,
+    accFaulted=acc_faulted,
     buttonEvents=[],
   )
 
@@ -243,3 +244,111 @@ def test_main_cruise_rising_edge_engages_when_toggle_is_on():
 
   assert selfdrive.events_iq.has(EventNameIQ.alcEngaged)
   assert guidance.active
+
+
+HARD_STOP_TSK_FAULT = (
+  [dict(cruise_available=True)] * 50
+  + [dict(cruise_available=False, acc_faulted=True)] * 5
+  + [dict(cruise_available=False, cruise_fault_lateral=True, acc_faulted=True)] * 400
+  + [dict(cruise_available=True, cruise_fault_lateral=True)] * 20
+  + [dict(cruise_available=True)] * 50
+)
+
+
+def replay_cruise_states(guidance, selfdrive, cycles):
+  seen = []
+  for kwargs in cycles:
+    car_state = make_vw_car_state(**kwargs)
+    selfdrive.events.clear()
+    selfdrive.events_iq.clear()
+    guidance.update_events(car_state)
+    seen.append((selfdrive.events_iq.has(EventNameIQ.alcEngaged), selfdrive.events_iq.has(EventNameIQ.alcDisengaged)))
+    selfdrive.CS_prev = car_state
+  return seen
+
+
+def test_hard_stop_cruise_fault_does_not_engage_guidance_the_driver_turned_off():
+  selfdrive = make_selfdrive(0, brand="volkswagen", main_cruise_allowed=True)
+  selfdrive.CS_prev = make_vw_car_state(cruise_available=True)
+  guidance = SteeringAssistanceBehavior(selfdrive)
+
+  seen = replay_cruise_states(guidance, selfdrive, HARD_STOP_TSK_FAULT)
+
+  assert not any(engaged for engaged, _ in seen)
+
+
+def test_hard_stop_cruise_fault_does_not_cycle_guidance_the_driver_left_on():
+  selfdrive = make_selfdrive(0, brand="volkswagen", main_cruise_allowed=True)
+  selfdrive.CS_prev = make_vw_car_state(cruise_available=True)
+  guidance = SteeringAssistanceBehavior(selfdrive)
+  guidance.enabled = True
+
+  seen = replay_cruise_states(guidance, selfdrive, HARD_STOP_TSK_FAULT)
+
+  assert seen == [(False, False)] * len(HARD_STOP_TSK_FAULT)
+
+
+def test_main_switch_cycled_without_a_fault_still_engages_guidance():
+  selfdrive = make_selfdrive(0, brand="volkswagen", main_cruise_allowed=True)
+  selfdrive.CS_prev = make_vw_car_state(cruise_available=True)
+  guidance = SteeringAssistanceBehavior(selfdrive)
+  cycles = [dict(cruise_available=True)] * 10 + [dict(cruise_available=False)] * 200 + [dict(cruise_available=True)]
+
+  seen = replay_cruise_states(guidance, selfdrive, cycles)
+
+  assert [engaged for engaged, _ in seen].index(True) == len(cycles) - 1
+
+
+def test_main_switch_turned_off_during_a_stuck_fault_still_releases_guidance():
+  selfdrive = make_selfdrive(0, brand="volkswagen", main_cruise_allowed=True)
+  selfdrive.CS_prev = make_vw_car_state(cruise_available=True)
+  guidance = SteeringAssistanceBehavior(selfdrive)
+  guidance.enabled = True
+  cycles = [dict(cruise_available=True)] * 10 + [dict(cruise_available=False, acc_faulted=True)] * 3000
+
+  seen = replay_cruise_states(guidance, selfdrive, cycles)
+
+  assert any(disengaged for _, disengaged in seen)
+
+
+def run_update_cycles(guidance, selfdrive, cycles, fault_event):
+  engaged_events = 0
+  for kwargs in cycles:
+    car_state = make_vw_car_state(**kwargs)
+    selfdrive.events.clear()
+    selfdrive.events_iq.clear()
+    if kwargs.get("acc_faulted") and fault_event:
+      selfdrive.events.add(EventName.accFaulted)
+    guidance.update(car_state)
+    engaged_events += selfdrive.events_iq.has(EventNameIQ.alcEngaged)
+    selfdrive.CS_prev = car_state
+  return engaged_events
+
+
+GATED_FAULT_STOP = (
+  [dict(cruise_available=True)] * 50
+  + [dict(cruise_available=False, acc_faulted=True)] * 400
+  + [dict(cruise_available=True)] * 50
+)
+
+
+def test_guidance_cut_by_a_cruise_fault_resumes_once_when_the_fault_clears():
+  guidance, selfdrive = make_engaged_guidance(False)
+  selfdrive.params.main_cruise_allowed = True
+  guidance.main_enabled_toggle = True
+
+  engaged_events = run_update_cycles(guidance, selfdrive, GATED_FAULT_STOP, fault_event=True)
+
+  assert engaged_events == 1
+  assert guidance.state_machine.state == GuidanceState.enabled
+
+
+def test_guidance_the_driver_turned_off_stays_off_through_a_cruise_fault():
+  selfdrive = make_selfdrive(0, brand="volkswagen", main_cruise_allowed=True)
+  selfdrive.CS_prev = make_vw_car_state(cruise_available=True)
+  guidance = SteeringAssistanceBehavior(selfdrive)
+
+  engaged_events = run_update_cycles(guidance, selfdrive, GATED_FAULT_STOP, fault_event=True)
+
+  assert engaged_events == 0
+  assert guidance.state_machine.state == GuidanceState.disabled

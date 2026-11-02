@@ -2,12 +2,12 @@ import math
 import time
 from dataclasses import dataclass
 
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.cereal import messaging, log
 from iqpilot.selfdrive.ui.ui_state import ui_state
 from iqpilot.system.hardware import TICI
-from iqpilot.system.ui.lib.application import gui_app, FontWeight
+from iqpilot.system.ui.lib.application import gui_app, FontWeight, TextAlignment, TextAlignmentVertical
 from iqpilot.system.ui.lib.multilang import tr
 from iqpilot.system.ui.lib.text_measure import measure_text_cached
 from iqpilot.system.ui.widgets import Widget
@@ -89,10 +89,10 @@ class AlertRenderer(Widget):
     self._maps_visible = False
 
     # font size is set dynamically
-    self._full_text1_label = Label("", font_size=0, font_weight=FontWeight.BOLD, text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
-                                   text_alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP)
-    self._full_text2_label = Label("", font_size=56, text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
-                                   text_alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP)
+    self._full_text1_label = Label("", font_size=0, font_weight=FontWeight.BOLD, text_alignment=TextAlignment.CENTER,
+                                   text_alignment_vertical=TextAlignmentVertical.TOP)
+    self._full_text2_label = Label("", font_size=56, text_alignment=TextAlignment.CENTER,
+                                   text_alignment_vertical=TextAlignmentVertical.TOP)
 
   def get_alert(self, sm: messaging.SubMaster) -> Alert | None:
     """Generate the current alert based on selfdrive state."""

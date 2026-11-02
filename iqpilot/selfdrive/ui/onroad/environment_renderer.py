@@ -1,5 +1,5 @@
 import numpy as np
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.cereal import custom
 
 from iqpilot.selfdrive.ui.ui_state import ui_state

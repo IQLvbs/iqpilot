@@ -1,9 +1,9 @@
 {
-  "bundle_version": 1793124704,
+  "bundle_version": 1793477705,
   "python/_iqclosure/_vendored.json": {
     "mode": 420,
-    "sha256": "00a3c1ea8d86878488abd7ee5ae5dce065c4b3d0fcf43072999303067807bc63",
-    "size": 3668
+    "sha256": "0742a16e3ac1c08bc69c96f463792a03f86bfe593f5a93be8ffb2a4c19a1aeb2",
+    "size": 3610
   },
   "python/_iqclosure/iqpilot/__init__.py": {
     "mode": 420,
@@ -22,8 +22,8 @@
   },
   "python/_iqclosure/iqpilot/common/api/base.py": {
     "mode": 420,
-    "sha256": "d0b7174ff824c4af68424b4a89edaa4de9d8315b8c04925e2572853a8d5bda53",
-    "size": 4926
+    "sha256": "8ba35a9bfeffa7a2555c526eefe9a9d75c3db9f3a1e1a74014524ee073153b4a",
+    "size": 4905
   },
   "python/_iqclosure/iqpilot/common/api/konn3kt.py": {
     "mode": 420,
@@ -112,8 +112,8 @@
   },
   "python/_iqclosure/iqpilot/konn3kt/registration.py": {
     "mode": 420,
-    "sha256": "5a2b06d919adce513fb8a7e4e6f26d48e502e92dbd89f9af7a0e67e9114ab3be",
-    "size": 2683
+    "sha256": "b34dac4087b49678c921c00813391d6a690f5274c8e024cb582f516f4135abe5",
+    "size": 2188
   },
   "python/_iqclosure/iqpilot/selfdrive/__init__.py": {
     "mode": 420,
@@ -137,8 +137,8 @@
   },
   "python/_iqclosure/iqpilot/selfdrive/controls/lib/drive_helpers.py": {
     "mode": 420,
-    "sha256": "94e202959eb80d841720ecd0581206fc4ac9d50ad2e2a6cf19f0de9914913988",
-    "size": 3159
+    "sha256": "5d1077a19250f3b268a322ca59aa2b91718e14e0368c237b08a880996ba9a9d0",
+    "size": 3341
   },
   "python/_iqclosure/iqpilot/selfdrive/iqlocd/__init__.py": {
     "mode": 420,
@@ -187,13 +187,8 @@
   },
   "python/_iqclosure/iqpilot/selfdrive/iqmodeld/daemon.py": {
     "mode": 420,
-    "sha256": "2f94719d06907c4ac729b8aba063ad43079fde966813d55b6190af8d6c7da679",
-    "size": 37375
-  },
-  "python/_iqclosure/iqpilot/selfdrive/iqmodeld/drive_profile.py": {
-    "mode": 420,
-    "sha256": "fb6178b300bdeeb74ac502552d3eebf0ffe4f5dd44448f00f8e2cc5c5b7140bd",
-    "size": 1631
+    "sha256": "4b0b78a68a2f8f9e669c0d8165a3f78880844149db5b6535a0fd75c0f0ab2dfd",
+    "size": 34113
   },
   "python/_iqclosure/iqpilot/selfdrive/iqmodeld/driving_action.py": {
     "mode": 420,
@@ -215,15 +210,15 @@
     "sha256": "e47406eabf9c96bdf393ddaba8936fbd01755b2728ebe9413b2ab24b94de5d48",
     "size": 377
   },
-  "python/_iqclosure/iqpilot/selfdrive/iqmodeld/feature_inputs.py": {
+  "python/_iqclosure/iqpilot/selfdrive/iqmodeld/iqmodel_io.py": {
     "mode": 420,
-    "sha256": "d36674f2af08009528778a58b3d698630594e289188561d19a2011c2207459a1",
-    "size": 1071
+    "sha256": "efc20aa6002f1ed87f62765a3635ee2c86d02f9581dd18c904373bf118c7c5fb",
+    "size": 875
   },
   "python/_iqclosure/iqpilot/selfdrive/iqmodeld/messaging.py": {
     "mode": 420,
-    "sha256": "488b390f4801e0c1b8d8450141f1da636528e39c290d2c42620e1daeb7754f53",
-    "size": 13944
+    "sha256": "efee9ba01a97992127643bb0db8f54751d35c6a72cc0bf5ecdaba2c4525a3cb2",
+    "size": 12159
   },
   "python/_iqclosure/iqpilot/selfdrive/iqmodeld/metadata.py": {
     "mode": 420,
@@ -287,8 +282,8 @@
   },
   "python/_iqclosure/iqpilot/selfdrive/iqmodeld/models/runners/model_runner.py": {
     "mode": 420,
-    "sha256": "2f6be01d780f384d01b885e49c12a0aa6c9be401d67c850abf426e7725161379",
-    "size": 8640
+    "sha256": "d47d6b603b14af6a059d4ec6f58f6e3bd1449c2040857a3befae7a09066b7429",
+    "size": 10391
   },
   "python/_iqclosure/iqpilot/selfdrive/iqmodeld/models/runners/tinygrad/__init__.py": {
     "mode": 420,
@@ -297,13 +292,13 @@
   },
   "python/_iqclosure/iqpilot/selfdrive/iqmodeld/models/runners/tinygrad/combined_split_runner.py": {
     "mode": 420,
-    "sha256": "3d6cd89b8a45b246c0fea6dfc760d22cfdfc91557f95fff115bd186da7b76678",
-    "size": 10897
+    "sha256": "cdd8925fab0cc5f99ceabb5bcbcf60bce5aac1be13511bd79cc1e9a57aa3985d",
+    "size": 10868
   },
   "python/_iqclosure/iqpilot/selfdrive/iqmodeld/models/runners/tinygrad/fused_runner.py": {
     "mode": 420,
-    "sha256": "314023341e6fb0201c49975f1e3ed11ff074348e78bd42e893d2317e5c36ea14",
-    "size": 7896
+    "sha256": "a8d2529ee0c6214356f47706e4150587d69efacc5fbcb81cec3246fbedf22693",
+    "size": 7867
   },
   "python/_iqclosure/iqpilot/selfdrive/iqmodeld/models/runners/tinygrad/model_types.py": {
     "mode": 420,
@@ -312,8 +307,8 @@
   },
   "python/_iqclosure/iqpilot/selfdrive/iqmodeld/models/runners/tinygrad/supercombo_runner.py": {
     "mode": 420,
-    "sha256": "1051ad30c14d3a0ecb1757fb0f9c377759b398440cc201d8a9a36e118723bb4d",
-    "size": 11999
+    "sha256": "a1adf812064552244837dc4c861ee1a088635423779a202d29e834ee9286e632",
+    "size": 11837
   },
   "python/_iqclosure/iqpilot/selfdrive/iqmodeld/models/runners/tinygrad/supercombo_runtime.py": {
     "mode": 420,
@@ -322,8 +317,8 @@
   },
   "python/_iqclosure/iqpilot/selfdrive/iqmodeld/models/runners/tinygrad/tinygrad_runner.py": {
     "mode": 420,
-    "sha256": "175410433d287cfd3ac93e8fae19a5da409af61dab1d1a48731eb8aa7043c18c",
-    "size": 7702
+    "sha256": "415d685987e8fdec6a0f6674771e8aedd1e64400a0d9029b4318555898d18a17",
+    "size": 7673
   },
   "python/_iqclosure/iqpilot/selfdrive/iqmodeld/models/split_model_constants.py": {
     "mode": 420,
@@ -344,11 +339,6 @@
     "mode": 420,
     "sha256": "316988acf63f98aca83c5662ffb2c6028ef1f8b94fd8d6fcc15e96d9ac0d8181",
     "size": 779
-  },
-  "python/_iqclosure/iqpilot/selfdrive/iqmodeld/speed_limit_input.py": {
-    "mode": 420,
-    "sha256": "97ce32365d39ba13394fd47ccb23036308e2ef946edacadc961000adae9b670f",
-    "size": 763
   },
   "python/_iqclosure/iqpilot/selfdrive/iqmodeld/temporal_state.py": {
     "mode": 420,
@@ -417,8 +407,13 @@
   },
   "python/_iqclosure/iqpilot/selfdrive/selfdrived/events.py": {
     "mode": 420,
-    "sha256": "4bfd7819dd214464ee0ee6ac54fff12740f688b624bdd41d8fa86d0a70331a9c",
-    "size": 32040
+    "sha256": "f743acb1cb3c02a5c90882b8c1e3798a66114dfdb8049760c88046ac9e389cf8",
+    "size": 32824
+  },
+  "python/_iqclosure/iqpilot/selfdrive/selfdrived/helpers.py": {
+    "mode": 420,
+    "sha256": "a3209e0d9d19bcc116237a7dec1b4f80d49d0a288394c5f82eb7f3b3e86530de",
+    "size": 4411
   },
   "python/_iqclosure/iqpilot/selfdrive/state_estimation/__init__.py": {
     "mode": 420,
@@ -557,48 +552,48 @@
   },
   "python/iqpilot_private/emac/bulk_transport.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "1810b59bb040d9e4a46d29aefcf337d880d6e61a42097011e7d2ca807a235fab",
-    "size": 1393144
+    "sha256": "92dcc7c594b034c4ed203ceb175bf90b41c06ab68a87c56fe8449560f9c03694",
+    "size": 1262168
   },
   "python/iqpilot_private/emac/ffs_holder.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "a50d528e60cea79c15bce0640b0f15c7d23ae96de1293a9858e9feeb214f2a0c",
-    "size": 1130824
+    "sha256": "21b0d929a9c261292949800e4f96ded855db55d306a3c2255645e8e3452dfcee",
+    "size": 1065368
   },
   "python/iqpilot_private/emac/mac_client.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "90aa20bebf4f27683009f8b0c2406e9bacf7a5ff94b090561390c127bfe34ab6",
-    "size": 1327544
+    "sha256": "c9e1b860378eb6d263d56798b23037a31d03faf716b3b927d35351e44d180a52",
+    "size": 1327528
   },
   "python/iqpilot_private/emac/mac_protocol.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "7c09cb32925de0905e6e7eeabfd28261ccdf8d1fd1872c41e4a7d8da48a8d6d9",
-    "size": 1590136
+    "sha256": "ec8d98eb240f3d17a83a236b4849e1d71886e2360ea9b86949c5fe5518c5fff3",
+    "size": 1589928
   },
   "python/iqpilot_private/emac/maciqmodeld.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "b10f182eccc84d294306c5e2ba40d5f22b8f2ce427ef94ce7967beddf65e5f07",
-    "size": 1721272
+    "sha256": "06cd8fd89d4f8beaf8f0ce06e5e75fd04b589dbcb84a38ed42a075a3a0de064f",
+    "size": 1721048
   },
   "python/iqpilot_private/emac/model_context.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "fbc9ffeeb295c564a1fb1eb3f5df2b0a55dbe04e34042d13b97ca346d870277f",
-    "size": 1393272
+    "sha256": "99f5ab78f364edf001bc5560460d25e7361b29609e7785344e7c5f7215160251",
+    "size": 1458872
   },
   "python/iqpilot_private/emac/native_launcher.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "e801a56dc3cd0da5f4fab8413d2b5657797251bdb3b31be221531f1581a57a11",
-    "size": 1130872
+    "sha256": "b7ef3b2eebeea5f5d1b620b813fad7fb0cba71ab9f0a1b0714aff5c0b098cc6e",
+    "size": 1196456
   },
   "python/iqpilot_private/emac/rh_images.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "557753ea0c70e748b8478a0b93673ee4a595e7e40e5a66fc11338ae4a089292d",
-    "size": 1130888
+    "sha256": "ea7ded8c76e8cd322fd900bbab1f4230b5f1ddc5ab84f781cf206420f1cc856b",
+    "size": 1196264
   },
   "python/iqpilot_private/emac/wire_codec.cpython-312-aarch64-linux-gnu.so": {
     "mode": 416,
-    "sha256": "ff8f1b1632f7d4f8681d067d29a8b193a1a8f5c3ac13f582f1c5c0f90eccd29b",
-    "size": 1065320
+    "sha256": "68e54da0bc699289cfc81cef9b610e76eb51e16e368ca06b280e19793fcb35ae",
+    "size": 1130792
   },
   "runtime": {
     "entries": {
@@ -609,14 +604,14 @@
     }
   },
   "signatures": {
-    "python/iqpilot_private/emac/bulk_transport.cpython-312-aarch64-linux-gnu.so": "OScUOQjmU0JEgDJz5o+kKMnCL8dNDFRC3H2aa4sT3Bd1UtjvmYHnacLJt8fq4jGTeSlOysGuipyGZrtQS+ntDQ==",
-    "python/iqpilot_private/emac/ffs_holder.cpython-312-aarch64-linux-gnu.so": "JxvYCGoDpW2PZYE6ft7nLtiGiCjD+ZWxTJ3dm3E6zBVy0G21DHRAkcIyVYdsStuNWCuKzj/+El//9sWlkaVwAA==",
-    "python/iqpilot_private/emac/mac_client.cpython-312-aarch64-linux-gnu.so": "beAyUgJ4vQmo3gB61sRzUPbc95MLwZY/9XnE1ZSRK9aAGE5YDt4BHv2qVbe5MHvszixtsHjlriXHQ59aYvdPAA==",
-    "python/iqpilot_private/emac/mac_protocol.cpython-312-aarch64-linux-gnu.so": "FbT2URRxrup5/1wduma7jgRFkikv9nDGV5WBzVUR1SsZ6SXqbJmv6iZIhoQdEtZkWD3bclwVl4ePhA5iUWYPBg==",
-    "python/iqpilot_private/emac/maciqmodeld.cpython-312-aarch64-linux-gnu.so": "4zxxmOzsl+QMOzFI8dyJOkMP6kzxwTiskroUxFBgaFyfxtgev9klzOnfzbmii40Gl0/5DiVqQ21rHsZkTP10CQ==",
-    "python/iqpilot_private/emac/model_context.cpython-312-aarch64-linux-gnu.so": "6JlP8zoFrma/soEgI+QbkeI8uu4GXVVqhytbXal8hQdC8uBl+3P/74KCqKbRSrCNGQm1WQVIGmrPHyEYxFbQAw==",
-    "python/iqpilot_private/emac/native_launcher.cpython-312-aarch64-linux-gnu.so": "f7o9TpJLwThrsSgUTFFRR2lIGE/wvRVzpn5D/6jBtMLqmSwVOr1buq6BVg+zuo2Yj9K7LoT/U3Q0GuJOoYiDDA==",
-    "python/iqpilot_private/emac/rh_images.cpython-312-aarch64-linux-gnu.so": "EMerg8QYqq/qcYc9l/2M0lBdexZjNWhr3T35WpCgptXPgbq5TUWW1MrEP6iuXRj4xdjeC7nW4Npkws5grQA/Cw==",
-    "python/iqpilot_private/emac/wire_codec.cpython-312-aarch64-linux-gnu.so": "iFfdLbbC9+Mb8Rd8yH/SWagF+Fd51gUGYraYX3GnXrMJNcCVSfpON1BvO3IqYm1xtJ1NewTr7PEG3bgxNYCRCg=="
+    "python/iqpilot_private/emac/bulk_transport.cpython-312-aarch64-linux-gnu.so": "3aZye9FDKbhDQlPC9Pgpf/vXGnp+BlOzSPL7MJXt5Cy9WWrCqFj6F1L9GV5mrbDL78eieyG3oGvlvJEI0r5aBg==",
+    "python/iqpilot_private/emac/ffs_holder.cpython-312-aarch64-linux-gnu.so": "qrJc81fmQG955jHXY55OS9vIMLfQ8gOUhJew8Fc6FaRqU4NUjFPnHW6zuCsvEzjNncO1JG1VFXRK/Yy5gY+mDQ==",
+    "python/iqpilot_private/emac/mac_client.cpython-312-aarch64-linux-gnu.so": "1aB6bbY8BaS0PSs84Pr+b2GUUcYbL2Iov95ht8+A5WYqJ+eDyPjpgjwgPM/Iv6sUrc+4bpugBkVpLTo0IebbCA==",
+    "python/iqpilot_private/emac/mac_protocol.cpython-312-aarch64-linux-gnu.so": "kmfTrT3eSnCvKeYnTY4PH/dbkMQGZG4TemZviSutBqlK0gJ8kFvJBUY5+DsA1vy0+mD9bqf45lPX6d0dDN3tCw==",
+    "python/iqpilot_private/emac/maciqmodeld.cpython-312-aarch64-linux-gnu.so": "o3Ctz5v+w2ADprktq+HcqtsYJfY9Y5C7zNTp3OdHFQBfk4eYxA+EHwRo3OuBcRbHiYT9jXr6Z37VJmqGAbbnAA==",
+    "python/iqpilot_private/emac/model_context.cpython-312-aarch64-linux-gnu.so": "JNri4Wh0nK5QdxSXNTz06KT3Sr/HiIbMcN4PHtAmPhSfR8Kfkjmrc1r2Eo3/VA8cTKMjmN6u7USRHwJnuvCmDA==",
+    "python/iqpilot_private/emac/native_launcher.cpython-312-aarch64-linux-gnu.so": "bXDsHUxTrkxCFs9FjiuI0A3K9Jd8kitg8Nbct5u5mYZmEhy/eMRqtzur2lpT2Gecj3YeIYx1w5D1b77NOYeBAw==",
+    "python/iqpilot_private/emac/rh_images.cpython-312-aarch64-linux-gnu.so": "Ah6ya/3A91MtN4uVS8SGzGrx0+rY3aHrKmbMug7vep8kXZXFr0STb1fWGXzn6x6NXvOXW4Y6qwaSOgjH+JXSAw==",
+    "python/iqpilot_private/emac/wire_codec.cpython-312-aarch64-linux-gnu.so": "JgWL+XZYLhd5P9JY6mm5+/ODCCPql+z0bPkVKBav953xE5nb0eTcvEWwvwpDvTNxp8w7Ue+QT2uLw2U2Oy9TCA=="
   }
 }

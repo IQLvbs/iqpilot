@@ -36,3 +36,31 @@ def test_explicit_basedir_is_preserved(tmp_path):
   env["OPENPILOT_BASEDIR"] = str(tmp_path)
   env["IQPILOT_PROPRIETARY_ROOT"] = str(tmp_path / "bundles")
   assert _runtime_paths(env) == [str(tmp_path), str(tmp_path / "bundles")]
+
+
+def _bundle(root, name):
+  path = root / name
+  path.mkdir(parents=True)
+  (path / "manifest.json").write_text("{}")
+  return str(path)
+
+
+def test_bundle_root_falls_back_to_the_tree_by_default(tmp_path, monkeypatch):
+  from iqpilot.system.proprietary_runtime.bundle_modes import bundle_root
+  tree = tmp_path / "tree"
+  in_tree = _bundle(tree / "artifacts", "iqpilot_x_private")
+  monkeypatch.setenv("IQPILOT_PROPRIETARY_ROOT", str(tmp_path / "store"))
+  monkeypatch.delenv("IQPILOT_PROPRIETARY_STRICT", raising=False)
+  assert bundle_root("iqpilot_x_private", str(tree)) == in_tree
+
+
+def test_strict_bundle_root_never_falls_back_to_the_tree(tmp_path, monkeypatch):
+  from iqpilot.system.proprietary_runtime.bundle_modes import bundle_root
+  tree = tmp_path / "tree"
+  _bundle(tree / "artifacts", "iqpilot_x_private")
+  _bundle(tree / ".iqpilot" / "bundles", "iqpilot_x_private")
+  stored = _bundle(tmp_path / "store", "iqpilot_y_private")
+  monkeypatch.setenv("IQPILOT_PROPRIETARY_ROOT", str(tmp_path / "store"))
+  monkeypatch.setenv("IQPILOT_PROPRIETARY_STRICT", "1")
+  assert bundle_root("iqpilot_x_private", str(tree)) is None
+  assert bundle_root("iqpilot_y_private", str(tree)) == stored

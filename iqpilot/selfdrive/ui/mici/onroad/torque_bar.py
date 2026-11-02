@@ -4,7 +4,7 @@ from functools import wraps
 from collections import OrderedDict
 
 import numpy as np
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.selfdrive.ui.mici.onroad import blend_colors
 from iqpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from iqpilot.system.ui.lib.application import gui_app

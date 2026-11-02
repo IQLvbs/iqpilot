@@ -9,7 +9,7 @@ from typing import Any
 import iqpilot.cereal.messaging as messaging
 import numpy as np
 
-from iqpilot.cereal import car, custom, log
+from iqpilot.cereal import car, log
 from iqpilot.cereal.messaging import PubMaster, SubMaster
 from iqpilot.cereal.visionipc import VisionStreamType
 from msgq.visionipc import VisionBuf, VisionIpcClient
@@ -43,22 +43,10 @@ from iqpilot.selfdrive.iqmodeld.messaging import (
   DrivePacketMemory,
   pick_curvature,
   populate_drive_messages,
-  populate_iq_model_reasoning,
-  populate_iq_model_nav_turn,
-  populate_iq_model_speed_limit,
   populate_odometry_message,
 )
-from iqpilot.selfdrive.iqmodeld.cot_decode import ReasoningWire
 from iqpilot.selfdrive.iqmodeld.metadata import select_meta_layout
-from iqpilot.selfdrive.iqmodeld.model_context import context_model, device_context_inputs
-from iqpilot.selfdrive.iqmodeld.drive_profile import (
-  DriveProfileState,
-  compose_drive_profile_inputs,
-  drive_profile_requests_speed_limit_compliance,
-  populate_drive_profile_message,
-)
-from iqpilot.selfdrive.iqmodeld.speed_limit_input import device_speed_limit_input
-from iqpilot.selfdrive.iqmodeld.feature_inputs import FeatureInputComposer
+from iqpilot.selfdrive.iqmodeld.iqmodel_io import IQModelIO
 
 try:
   from iqpilot.selfdrive.iqmodeld.native.iqmodel_pyx import RoadProjector, WarpContext
@@ -73,8 +61,6 @@ except ModuleNotFoundError:
 
 
 PROCESS_NAME = "iqpilot.selfdrive.iqmodeld.daemon"
-IQP_NAV_MODEL_INFLUENCE_ENABLED = False
-TurnDirection = custom.IQTurnSignalDirection
 IQMODEL_EVAL_WARN_US = int(DT_MDL * 1_000_000)
 IQMODEL_EVAL_ERROR_US = IQMODEL_EVAL_WARN_US * 2
 _FRAME_STARVED_BACKOFF_POLLS = 5
@@ -288,17 +274,10 @@ class NeuralEngineState(InferenceStateBase):
 
     self._ledger = ReplayLedger(runner.input_shapes, runner.vision_input_names, getattr(runner, "input_dtypes", {}))
     self.numpy_inputs = self._ledger.inputs
-    self.has_context = context_model(runner.input_shapes)
     self.temporal_buffers = self._ledger.archive
     self.temporal_idxs_map = self._ledger.selectors
-    self.has_memory_carry = "memory_state" in self.numpy_inputs
-    memory_output = "memory_state_out" in getattr(runner, 'output_slices', {})
-    if self.has_memory_carry != memory_output:
-      raise ValueError("Memory carry requires memory_state and memory_state_out")
-    if self.has_memory_carry:
-      if (self.numpy_inputs["memory_state"].shape != (1, 192)
-          or runner.output_slices["memory_state_out"] != slice(2578, 2770)):
-        raise ValueError("Invalid memory carry wire contract")
+    self.io = IQModelIO(runner)
+    self.carry = dict(self.io.carry)
 
   @property
   def mlsim(self) -> bool:
@@ -327,16 +306,20 @@ class NeuralEngineState(InferenceStateBase):
       self._ledger.note_hidden_state(result["hidden_state"])
     return result
 
+  @property
+  def has_memory_carry(self) -> bool:
+    return bool(self.carry)
+
   def _note_memory_feedback(self, outputs: dict[str, np.ndarray] | None) -> None:
-    if not self.has_memory_carry:
-      return
-    if outputs is None or "memory_state_out" not in outputs:
-      self.reset_memory()
-      raise ValueError("Memory model returned no memory_state_out")
-    self._ledger.note_feedback("memory_state", outputs["memory_state_out"])
+    for input_name, output_name in self.carry.items():
+      if outputs is None or output_name not in outputs:
+        self.reset_memory()
+        raise ValueError(f"Carry model returned no {output_name}")
+      self._ledger.note_feedback(input_name, outputs[output_name])
 
   def reset_memory(self) -> None:
-    self._ledger.reset_feedback("memory_state")
+    for input_name in self.carry:
+      self._ledger.reset_feedback(input_name)
 
   def _write_curvature_memory(self, outputs: dict[str, np.ndarray]) -> None:
     if "desired_curvature" not in outputs:
@@ -354,8 +337,8 @@ class NeuralEngineState(InferenceStateBase):
   def run(self, vision_bufs: dict[str, VisionBuf], transform_map: dict[str, np.ndarray],
           fresh_inputs: dict[str, np.ndarray]) -> dict[str, np.ndarray] | None:
     if not getattr(self.model_runner, "uses_opencl_warp", True):
-      if self.has_memory_carry:
-        fresh_inputs = {**fresh_inputs, "memory_state": self.numpy_inputs["memory_state"].copy()}
+      if self.carry:
+        fresh_inputs = {**fresh_inputs, **{name: self.numpy_inputs[name].copy() for name in self.carry}}
       outputs = self.model_runner.run_fused(vision_bufs, transform_map, fresh_inputs)
       self._note_memory_feedback(outputs)
       return outputs
@@ -548,18 +531,6 @@ class FrameDropMeter:
     self._last_frame_id = frame_id
 
 
-class MemoryResetTracker:
-  def __init__(self):
-    self._previous: tuple[int, int, bool, bool] | None = None
-
-  def update(self, frame_id: int, timestamp_ns: int, engaged: bool, nav_active: bool) -> bool:
-    current = (frame_id, timestamp_ns, bool(engaged), bool(nav_active))
-    previous, self._previous = self._previous, current
-    return bool(previous is None or frame_id != previous[0] + 1 or
-                not 0 < timestamp_ns - previous[1] <= 100_000_000 or
-                current[2] != previous[2] or previous[3] and not current[3])
-
-
 class InferenceDaemon:
   def __init__(self, demo: bool = False, channel_path: str | None = None):
     cloudlog.warning("iqmodeld init")
@@ -573,9 +544,7 @@ class InferenceDaemon:
     cloudlog.warning("CL context ready; loading model")
     self._runtime = NeuralEngineState(self._gpu)
     Params().put_bool("IqModelLoaded", True)
-    self._reasoning_wire = ReasoningWire(getattr(self._runtime.model_runner, "reasoning_metadata", {}))
-    self._feature_inputs = FeatureInputComposer({**getattr(self._runtime.model_runner, "reasoning_metadata", {}),
-                                                "input_shapes": self._runtime.model_runner.input_shapes})
+    self._io = self._runtime.io
     self._meta_layout = select_meta_layout()
     cloudlog.warning("models loaded, iqmodeld starting")
 
@@ -588,10 +557,11 @@ class InferenceDaemon:
     pub_services = ["iqPerfTrace"] if self._channel is not None else [
       "modelV2", "drivingModelData", "cameraOdometry", "iqDriveModelData", "iqPerfTrace"]
     self._pub = PubMaster(pub_services)
-    self._sub = SubMaster([
+    self._sub = SubMaster(list(dict.fromkeys([
       "deviceState", "carState", "roadCameraState", "extrinsicsCalibration",
-      "driverMonitoringState", "carControl", "controlsState", "lateralDelay", "iqNavState", "navInstruction", "radarState",
-    ] + self._feature_inputs.services)
+      "driverMonitoringState", "carControl", "controlsState", "lateralDelay", "iqNavState", "radarState",
+      *self._io.services,
+    ])))
     self._message_memory = DrivePacketMemory()
     self._params = Params()
     self._frame_meter = FrameDropMeter(self._runtime.constants.MODEL_FREQ)
@@ -604,8 +574,6 @@ class InferenceDaemon:
     self._previous_action = log.ModelDataV2.Action()
     self._desire_logic = ActionEngine()
     self._lat_smooth_extra_sec = 0.0
-    self._drive_profile_state = DriveProfileState()
-    self._memory_resets = MemoryResetTracker()
 
   def _load_car_params(self, demo: bool):
     if not demo and self._params.get_bool("IQBenchIgnition") and self._params.get("CarParams") is None:
@@ -652,24 +620,7 @@ class InferenceDaemon:
       inputs["lateral_control_params"] = np.array([vehicle_speed, lat_horizon], dtype=np.float32)
     if "action_t" in self._runtime.numpy_inputs:
       inputs["action_t"] = np.array([lat_horizon, long_horizon], dtype=np.float32)
-    if self._runtime.has_context:
-      inputs.update(device_context_inputs(self._runtime.numpy_inputs, self._sub, frame_timestamp_eof_ns))
-    if not self._feature_inputs.uses_resolver:
-      inputs.update(device_speed_limit_input(
-        self._runtime.numpy_inputs, self._sub, self._params, frame_timestamp_eof_ns,
-        drive_profile_requests_speed_limit_compliance(self._runtime.numpy_inputs, self._params),
-      ))
-    if not self._feature_inputs.uses_drive_profile:
-      profile_inputs, self._drive_profile_state = compose_drive_profile_inputs(
-        self._runtime.numpy_inputs, self._params, self._sub, frame_timestamp_eof_ns, vehicle_speed, inputs
-      )
-      inputs.update(profile_inputs)
-    extra_inputs, profile_state = self._feature_inputs.compose(
-      self._sub, self._params, frame_timestamp_eof_ns, vehicle_speed, inputs
-    )
-    inputs.update(extra_inputs)
-    if profile_state is not None:
-      self._drive_profile_state = profile_state
+    inputs.update(self._io.compose(self._runtime.numpy_inputs, self._sub, self._params, frame_timestamp_eof_ns, vehicle_speed))
     return inputs
 
   def _publish(self, outputs: dict[str, np.ndarray], main_stamp: CaptureStamp, extra_stamp: CaptureStamp,
@@ -723,12 +674,7 @@ class InferenceDaemon:
     driving_msg.drivingModelData.meta.laneChangeDirection = self._desire_logic.lane_change_direction
     iq_msg.iqDriveModelData.turnSignalDirection = self._desire_logic.lane_turn_direction
     iq_msg.iqDriveModelData.lateralEdgeBlock = self._desire_logic.lateral_edge_block
-    populate_iq_model_speed_limit(iq_msg.iqDriveModelData, outputs)
-    populate_iq_model_nav_turn(iq_msg.iqDriveModelData, outputs)
-    populate_drive_profile_message(iq_msg.iqDriveModelData, self._drive_profile_state)
-    populate_iq_model_reasoning(
-      iq_msg.iqDriveModelData, outputs, self._reasoning_wire, main_stamp.frame_id, main_stamp.timestamp_eof
-    )
+    self._io.publish(model_msg.modelV2, iq_msg.iqDriveModelData, outputs, main_stamp.frame_id, main_stamp.timestamp_eof)
     iq_msg.valid = driving_msg.valid
 
     populate_odometry_message(
@@ -800,12 +746,8 @@ class InferenceDaemon:
         for stream_name in self._runtime.model_runner.vision_input_names
       }
       fresh_inputs = self._compose_inputs(vehicle_speed, lat_horizon, long_horizon, main_stamp.timestamp_eof)
-      if self._runtime.has_memory_carry:
-        engaged = bool(self._sub["carControl"].latActive or self._sub["carControl"].longActive)
-        nav_active = bool(self._sub.seen["iqNavState"] and self._sub.valid["iqNavState"]
-                          and self._sub["iqNavState"].active)
-        if self._memory_resets.update(main_stamp.frame_id, main_stamp.timestamp_eof, engaged, nav_active):
-          self._runtime.reset_memory()
+      if self._runtime.has_memory_carry and self._io.memory_reset(self._sub, main_stamp.frame_id, main_stamp.timestamp_eof):
+        self._runtime.reset_memory()
 
       started_at = time.perf_counter()
       outputs = self._runtime.run(vision_bufs, warp_map, fresh_inputs)
@@ -870,15 +812,12 @@ def main(demo: bool = False, channel_path: str | None = "auto"):
 
 __all__ = [
   "PROCESS_NAME",
-  "IQP_NAV_MODEL_INFLUENCE_ENABLED",
-  "TurnDirection",
   "CaptureStamp",
   "ReplayLedger",
   "NeuralEngineState",
   "CameraIngress",
   "CalibrationAtlas",
   "FrameDropMeter",
-  "MemoryResetTracker",
   "InferenceDaemon",
   "main",
 ]

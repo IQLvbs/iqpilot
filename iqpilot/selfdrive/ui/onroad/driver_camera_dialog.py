@@ -1,10 +1,10 @@
 import numpy as np
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.cereal.visionipc import VisionStreamType
 from iqpilot.selfdrive.ui.onroad.cameraview import CameraView
 from iqpilot.selfdrive.ui.onroad.driver_state import DriverStateRenderer
 from iqpilot.selfdrive.ui.ui_state import ui_state, device
-from iqpilot.system.ui.lib.application import gui_app, FontWeight
+from iqpilot.system.ui.lib.application import gui_app, FontWeight, TextAlignment
 from iqpilot.system.ui.lib.multilang import tr
 from iqpilot.system.ui.widgets.label import gui_label
 
@@ -42,7 +42,7 @@ class DriverCameraDialog(CameraView):
         tr("camera starting"),
         font_size=100,
         font_weight=FontWeight.BOLD,
-        alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+        alignment=TextAlignment.CENTER,
       )
       return -1
 

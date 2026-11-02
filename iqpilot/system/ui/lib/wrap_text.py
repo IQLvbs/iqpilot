@@ -1,6 +1,6 @@
 from collections import OrderedDict
 
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.system.ui.lib.text_measure import measure_text_cached
 from iqpilot.system.ui.lib.application import font_fallback
 

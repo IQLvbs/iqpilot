@@ -11,7 +11,7 @@ import subprocess
 import threading
 import time
 
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.common.params import Params
 from iqpilot.common.swaglog import cloudlog
@@ -259,7 +259,7 @@ class ScreenRecorder:
 
     image = rl.load_image_from_texture(self._small_rt.texture)
     try:
-      data = bytes(rl.ffi.buffer(image.data, self._rec_width * self._rec_height * 4))
+      data = image.to_bytes(self._rec_width * self._rec_height * 4)
     finally:
       rl.unload_image(image)
     try:

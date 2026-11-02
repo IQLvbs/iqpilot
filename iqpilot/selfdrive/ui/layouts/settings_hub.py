@@ -1,4 +1,4 @@
-import pyray as rl
+import raylib_nb as rl
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -10,7 +10,7 @@ from iqpilot.selfdrive.ui.ui_state import ui_state
 from iqpilot.ui.onroad.big_model_status import DockStatus, egpu_dock_status
 from iqpilot.ui.layouts.settings.iq_panels import OP
 from iqpilot.selfdrive.ui.widgets.screen_header import ScreenHeader, HEADER_HEIGHT, BACK_BTN_SIZE
-from iqpilot.system.ui.lib.application import gui_app, FontWeight, MouseEvent, MousePos
+from iqpilot.system.ui.lib.application import gui_app, FontWeight, MouseEvent, MousePos, TextAlignmentVertical
 from iqpilot.system.ui.lib.multilang import tr
 from iqpilot.system.ui.lib.text_measure import measure_text_cached
 from iqpilot.system.ui.widgets import Widget, DialogResult
@@ -150,7 +150,7 @@ class SettingsHubLayout(Widget):
     self._version_text = _format_updater_description(self._params.get("UpdaterCurrentDescription"))
     self._version_label = UnifiedLabel("", font_size=44, font_weight=FontWeight.MEDIUM,
                                        text_color=rl.Color(185, 185, 190, 255),
-                                       alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE,
+                                       alignment_vertical=TextAlignmentVertical.MIDDLE,
                                        wrap_text=False, scroll=True)
     self._transition = MenuTransition()
 
@@ -511,17 +511,17 @@ class SettingsHubLayout(Widget):
   def _handle_mouse_release(self, mouse_pos: MousePos):
     if self._mode != "grid" or self._transition.active:
       return
-    if rl.check_collision_point_rec(mouse_pos, self._restart_rect):
+    if rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._restart_rect):
       self._reboot_prompt()
-    elif rl.check_collision_point_rec(mouse_pos, self._power_rect):
+    elif rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._power_rect):
       self._power_off_prompt()
-    elif rl.check_collision_point_rec(mouse_pos, self._offroad_rect):
+    elif rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._offroad_rect):
       self._toggle_offroad_prompt()
-    elif rl.check_collision_point_rec(mouse_pos, self._night_rect):
+    elif rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._night_rect):
       ui_state.params.put_bool("NightMode", not ui_state.params.get_bool("NightMode"))
-    elif rl.check_collision_point_rec(mouse_pos, self._silent_rect):
+    elif rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._silent_rect):
       ui_state.params.put_bool("IQAlertSilence", not ui_state.params.get_bool("IQAlertSilence"))
-    elif rl.check_collision_point_rec(mouse_pos, self._dock_rect):
+    elif rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._dock_rect):
       self._open_panel(OP.PanelType.MODELS)
 
   def _draw_dock_bubble(self, status: DockStatus, progress: float, cy: float, pressed: bool):

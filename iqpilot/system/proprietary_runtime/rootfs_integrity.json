@@ -4,7 +4,7 @@
       "mode": 493,
       "path": "iqpilot_bundle_runner",
       "relative_to": "runtime_root",
-      "sha256": "88292e63a6d296fa6635c7a66ae46e9e3890af9bb0247f36bb5316f20122ce6b",
+      "sha256": "f58be0b685affc964416e8507065546abea0007cac0358524b49ade67944aaad",
       "size": 134160
     },
     {
@@ -32,7 +32,7 @@
       "mode": 493,
       "path": "python/openpilot/system/proprietary_runtime/_verified_import.so",
       "relative_to": "runtime_root",
-      "sha256": "11c5614c340268001c1f5562ca3faa29e1956aed5a6a7d394bd27c7321f49083",
+      "sha256": "910a3ff01ae0d74579c618eabfc0144a742e88ba98706b79fe04f3f680a17896",
       "size": 200424
     },
     {

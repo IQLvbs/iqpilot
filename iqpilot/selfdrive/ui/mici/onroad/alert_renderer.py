@@ -1,7 +1,7 @@
 import time
 from enum import StrEnum
 from typing import NamedTuple
-import pyray as rl
+import raylib_nb as rl
 import random
 import string
 from dataclasses import dataclass
@@ -9,7 +9,7 @@ from iqpilot.cereal import messaging, log, car
 from iqpilot.selfdrive.ui.ui_state import ui_state
 from iqpilot.common.filter_simple import BounceFilter, FirstOrderFilter
 from iqpilot.system.hardware import TICI
-from iqpilot.system.ui.lib.application import gui_app, FontWeight
+from iqpilot.system.ui.lib.application import gui_app, FontWeight, TextAlignment
 from iqpilot.system.ui.widgets import Widget
 from iqpilot.system.ui.widgets.label import UnifiedLabel
 
@@ -333,7 +333,7 @@ class AlertRenderer(Widget):
     self._alert_text1_label.set_text(alert_text1)
     self._alert_text1_label.set_text_color(color)
     self._alert_text1_label.set_font_size(font_size)
-    self._alert_text1_label.set_alignment(rl.GuiTextAlignment.TEXT_ALIGN_LEFT if icon_side != 'left' else rl.GuiTextAlignment.TEXT_ALIGN_RIGHT)
+    self._alert_text1_label.set_alignment(TextAlignment.LEFT if icon_side != 'left' else TextAlignment.RIGHT)
     self._alert_text1_label.render(text_rect1)
 
     alert_text2 = alert.text2.lower()
@@ -365,5 +365,5 @@ class AlertRenderer(Widget):
       self._alert_text2_label.set_text(alert_text2)
       self._alert_text2_label.set_text_color(color)
       self._alert_text2_label.set_font_size(small_font_size)
-      self._alert_text2_label.set_alignment(rl.GuiTextAlignment.TEXT_ALIGN_LEFT if icon_side != 'left' else rl.GuiTextAlignment.TEXT_ALIGN_RIGHT)
+      self._alert_text2_label.set_alignment(TextAlignment.LEFT if icon_side != 'left' else TextAlignment.RIGHT)
       self._alert_text2_label.render(text_rect2)

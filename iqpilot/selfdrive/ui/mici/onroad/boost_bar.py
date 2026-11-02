@@ -1,7 +1,7 @@
 """
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos/
 """
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.selfdrive.controls.lib.accel_boost import ACCEL_BOOST_MAX
 from iqpilot.selfdrive.ui.mici.onroad import SIDE_PANEL_WIDTH
 from iqpilot.selfdrive.ui.ui_state import ui_state

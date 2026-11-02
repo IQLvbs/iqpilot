@@ -27,10 +27,10 @@ NavProvider = custom.IQNavState.LongitudinalProvider
 NavLongitudinalState = custom.IQNavState.LongitudinalState
 
 class LongitudinalPlannerIQ:
-  def __init__(self, CP: structs.CarParams, CP_IQ: structs.IQCarParams, mpc):
+  def __init__(self, CP: structs.CarParams, CP_IQ: structs.IQCarParams, mpc, stop_offset_m=None):
     self.events_iq = IQEvents()
     self.iq_dynamic = IQDynamicController(CP, mpc)
-    self.custom_stop_distance = CustomStopDistance()
+    self.custom_stop_distance = CustomStopDistance(distance=stop_offset_m)
     self.slimit = SLCVCruise()
     self.generation = int(model_bundle.generation) if (model_bundle := get_active_bundle()) else None
     self.source = LongitudinalPlanSource.cruise
@@ -135,15 +135,10 @@ class LongitudinalPlannerIQ:
     self.events_iq.clear()
     for event_name in getattr(self.slimit, 'pending_events', []):
       self.events_iq.add(event_name)
-    self.custom_stop_distance.update()
+    self.custom_stop_distance.update(active=bool(sm['selfdriveState'].enabled))
     self.e2e_alerts.update(sm, self.events_iq)
     if bool(getattr(sm["iqCarState"], "alcOverrideAlert", False)):
       self.events_iq.add(custom.IQOnroadEvent.EventName.steeringOverrideReengageAlc)
-
-  def apply_e2e_stop_distance(self, sm: messaging.SubMaster, v_ego: float, a_target: float, should_stop: bool) -> tuple[float, bool]:
-    if not self.is_e2e(sm):
-      return a_target, should_stop
-    return self.custom_stop_distance.adjust_e2e_stop(a_target, should_stop, v_ego, sm['modelV2'])
 
   def _apply_force_stop(self, v_target: float, v_ego: float, sm: messaging.SubMaster, apply_enabled: bool) -> float:
     force_stop = self.iq_dynamic.force_stop_requested() and apply_enabled and self.override_force_stop_timer <= 0.0

@@ -1,118 +1,45 @@
-"""
-Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
-
-Original concept ("Increased Stop Distance") by SpysyWeeb (github.com/SpysyWeeb)
-"""
 from types import SimpleNamespace
 
-from iqdbc.car.interfaces import ACCEL_MIN
-from iqpilot.selfdrive.iqmodeld.config import ModelConstants
-from iqpilot.selfdrive.controls.lib.custom_stop_distance import (
-  CustomStopDistance,
-  MIN_ADJUSTED_D_REL,
-)
+import pytest
+
+from iqpilot.selfdrive.controls.lib.custom_stop_distance import CustomStopDistance
 
 
-def _build(distance):
-  c = CustomStopDistance.__new__(CustomStopDistance)
-  c.frame = 0
-  c.distance = float(distance)
-  return c
+@pytest.mark.parametrize('offset', (0, 1, 2, 4, 10))
+@pytest.mark.parametrize('speed,distance', ((0.0, 0.5), (0.0, 10.0), (1.0, 10.0), (15.0, 40.0)))
+def test_nonnegative_offsets_preserve_raw_perception(offset, speed, distance):
+  controller = CustomStopDistance(distance=offset)
+  lead = {'status': True, 'dRel': distance, 'vLead': speed, 'aLeadK': -1.0}
+  assert controller.apply_lead(dict(lead)) == lead
 
 
-def _model_msg(stop_distance, end_velocity):
-  x = [0.0] * (ModelConstants.IDX_N - 1) + [stop_distance]
-  v = [0.0] * (ModelConstants.IDX_N - 1) + [end_velocity]
-  return SimpleNamespace(position=SimpleNamespace(x=x), velocity=SimpleNamespace(x=v))
+@pytest.mark.parametrize('offset', (0, 1, 2, 5, 10))
+def test_production_range_accepts_supported_requests(offset):
+  params = SimpleNamespace(get=lambda *args, **kwargs: offset)
+  controller = CustomStopDistance(params=params)
+  assert controller.valid
+  assert controller.distance == offset
 
 
-def test_zero_distance_is_a_no_op():
-  c = _build(0)
-  lead = {'status': True, 'dRel': 10.0, 'vLead': 0.0}
-  assert c.apply_lead(dict(lead)) == lead
+@pytest.mark.parametrize('offset', (-2, -1, 11, float('nan'), float('inf'), 'invalid'))
+def test_invalid_production_request_is_not_silently_clamped_or_rewritten(offset):
+  params = SimpleNamespace(get=lambda *args, **kwargs: offset)
+  controller = CustomStopDistance(params=params)
+  assert not controller.valid
+  assert controller.distance == 0.0
 
 
-def test_positive_distance_reduces_reported_lead_distance():
-  c = _build(2)
-  lead = {'status': True, 'dRel': 10.0, 'vLead': 0.0}
-  out = c.apply_lead(dict(lead))
-  assert out['dRel'] == 8.0
+@pytest.mark.parametrize('offset', (-2, -1, 11))
+def test_explicit_offset_uses_the_same_supported_range(offset):
+  with pytest.raises(ValueError, match='unsupported stopping offset'):
+    CustomStopDistance(distance=offset)
 
 
-def test_negative_distance_increases_reported_lead_distance():
-  c = _build(-2)
-  lead = {'status': True, 'dRel': 10.0, 'vLead': 0.0}
-  out = c.apply_lead(dict(lead))
-  assert out['dRel'] == 12.0
-
-
-def test_positive_distance_never_reports_below_floor():
-  c = _build(2)
-  lead = {'status': True, 'dRel': 1.5, 'vLead': 0.0}
-  out = c.apply_lead(dict(lead))
-  assert out['dRel'] == MIN_ADJUSTED_D_REL
-
-
-def test_positive_distance_never_reports_further_than_reality():
-  c = _build(2)
-  lead = {'status': True, 'dRel': 0.5, 'vLead': 0.0}
-  out = c.apply_lead(dict(lead))
-  assert out['dRel'] == 0.5
-
-
-def test_offset_fades_out_as_lead_speeds_up():
-  c = _build(2)
-  lead = {'status': True, 'dRel': 10.0, 'vLead': 3.0}
-  out = c.apply_lead(dict(lead))
-  assert out['dRel'] == 10.0
-
-
-def test_no_lead_is_untouched():
-  c = _build(2)
-  lead = {'status': False, 'dRel': 10.0, 'vLead': 0.0}
-  out = c.apply_lead(dict(lead))
-  assert out['dRel'] == 10.0
-
-
-def test_e2e_negative_distance_is_a_no_op():
-  c = _build(-2)
-  a_target, should_stop = c.adjust_e2e_stop(-0.5, False, 0.2, _model_msg(3.0, 0.0))
-  assert (a_target, should_stop) == (-0.5, False)
-
-
-def test_e2e_zero_distance_is_a_no_op():
-  c = _build(0)
-  a_target, should_stop = c.adjust_e2e_stop(-0.5, False, 0.2, _model_msg(3.0, 0.0))
-  assert (a_target, should_stop) == (-0.5, False)
-
-
-def test_e2e_stop_sign_plans_are_untouched():
-  c = _build(2)
-  # model plan still moving at the end -> proceeding through (stop sign), not held
-  a_target, should_stop = c.adjust_e2e_stop(-0.5, False, 0.2, _model_msg(3.0, 5.0))
-  assert (a_target, should_stop) == (-0.5, False)
-
-
-def test_e2e_holds_short_of_model_stop_when_already_stopped():
-  c = _build(2)
-  a_target, should_stop = c.adjust_e2e_stop(0.0, False, 0.1, _model_msg(stop_distance=3.0, end_velocity=0.0))
-  assert should_stop is True
-
-
-def test_e2e_does_not_hold_once_past_offset_and_buffer():
-  c = _build(2)
-  a_target, should_stop = c.adjust_e2e_stop(0.0, False, 0.1, _model_msg(stop_distance=10.0, end_velocity=0.0))
-  assert should_stop is False
-
-
-def test_e2e_deepens_braking_already_in_progress():
-  c = _build(2)
-  a_target, should_stop = c.adjust_e2e_stop(-0.5, False, 5.0, _model_msg(stop_distance=10.0, end_velocity=0.0))
-  assert a_target < -0.5
-  assert a_target >= ACCEL_MIN
-
-
-def test_e2e_never_relaxes_braking():
-  c = _build(2)
-  a_target, should_stop = c.adjust_e2e_stop(0.0, False, 5.0, _model_msg(stop_distance=10.0, end_velocity=0.0))
-  assert a_target == 0.0
+def test_configuration_is_not_reread_during_engagement():
+  value = [2]
+  params = SimpleNamespace(get=lambda *args, **kwargs: value[0])
+  controller = CustomStopDistance(params=params)
+  value[0] = 0
+  for _ in range(100):
+    controller.update(active=True)
+    assert controller.distance == 2.0

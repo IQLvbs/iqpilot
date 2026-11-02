@@ -64,7 +64,7 @@ os.environ.setdefault("IQPILOT_UI", "1")
 # Use offscreen mode for screenshot/video (no FPS cap → fast capture)
 # Live mode overrides this below.
 
-import pyray as rl  # noqa: E402 — must come after env setup
+import raylib_nb as rl  # noqa: E402 — must come after env setup
 
 # ── MICI canvas dimensions ─────────────────────────────────────────────────
 MICI_W = 536
@@ -501,11 +501,8 @@ def run_video(panel_name: str, args, out_dir: Path) -> Path:
 
     # Queue raw RGBA from MICI-res texture for ffmpeg
     if frame >= settle:
-      import ctypes
       img = rl.load_image_from_texture(render_tex.texture)
-      colors = rl.load_image_colors(img)
-      raw = bytes(ctypes.string_at(colors, MICI_W * MICI_H * 4))
-      rl.unload_image_colors(colors)
+      raw = img.to_bytes(MICI_W * MICI_H * 4)
       rl.unload_image(img)
       try:
         frame_queue.put(raw, timeout=1.0)

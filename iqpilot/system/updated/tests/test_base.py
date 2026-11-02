@@ -52,6 +52,8 @@ class BaseUpdateTest:
     self.mock_update_path = pathlib.Path(self.tmpdir)
 
     self.params = Params()
+    # Downloads require the parked state normally published by the manager.
+    self.params.put_bool("IsOnroad", False)
 
     self.basedir = self.mock_update_path / "openpilot"
     self.basedir.mkdir()

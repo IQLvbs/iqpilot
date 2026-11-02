@@ -82,7 +82,7 @@ def replay(name):
       if recorded_params.get('IQCustomStopDistance') != '0' or recorded_params.get('IQDynamicMode') != '0':
         raise ValueError('Replay requires the recorded pure E2E mode and unmodified stop distance')
       solver._read_new_lead_mpc = lambda params=recorded_params: params.get('newLeadMpc') == '1'
-      solver.set_weights(ss.personality)
+      solver.set_weights(personality=ss.personality)
       solver.set_cur_state(plan.speeds[0], plan.accels[0])
       solver.update(md, sm['radarState'], ss.personality)
       a_mpc, stop_mpc = get_accel_from_plan(plan.speeds, plan.accels, ModelConstants.T_IDXS[:CONTROL_N],
@@ -94,7 +94,7 @@ def replay(name):
       pitch = sm['carControl'].orientationNED
       coast = get_coast_accel(pitch[1]) if len(pitch) == 3 else 2.0
       steer = cs.steeringAngleDeg - sm['vehicleParameters'].angleOffsetDeg
-      cruise_accel, stop_cruise = get_cruise_accel(e2e, v_target, cs.vEgo, cruise_accel, steer, cp, DT_MDL, coast, plan.allowThrottle)
+      cruise_accel, stop_cruise = get_cruise_accel(e2e, v_target, cs.vEgo, cruise_accel, plan.aTarget, steer, cp, DT_MDL, coast, plan.allowThrottle)
       mpc = SimpleNamespace(solution_status=solver.solution_status,
                             lead_xv_0=np.column_stack([plan.leadTrajectoryX0, plan.leadTrajectoryV0]),
                             lead_xv_1=np.column_stack([plan.leadTrajectoryX1, plan.leadTrajectoryV1]))

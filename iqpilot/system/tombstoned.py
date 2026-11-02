@@ -17,7 +17,6 @@ from iqpilot.system.version import get_build_metadata
 MAX_SIZE = 1_000_000 * 100  # allow up to 100M
 MAX_TOMBSTONE_FN_LEN = 62  # 85 - 23 ("<dongle id>/crash/")
 
-TOMBSTONE_DIR = "/data/tombstones/"
 APPORT_DIR = "/var/crash/"
 
 

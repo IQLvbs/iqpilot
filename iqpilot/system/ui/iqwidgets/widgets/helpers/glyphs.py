@@ -3,7 +3,7 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 """
 import math
 
-import pyray as rl
+import raylib_nb as rl
 
 # Unit pentagram vertices, spike up, alternating outer/inner radius, clockwise
 # from the top. Inner radius 0.5 keeps the classic star proportions.

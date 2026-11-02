@@ -1,7 +1,7 @@
 """
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
 """
-import pyray as rl
+import raylib_nb as rl
 
 
 def _hex(rgb: int, alpha: int = 0xFF) -> rl.Color:

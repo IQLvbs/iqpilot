@@ -3,7 +3,7 @@ import os
 import re
 import subprocess
 import sys
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.system.hardware import HARDWARE, PC
 from iqpilot.system.ui.lib.application import BIG_UI, gui_app
 from iqpilot.system.ui.lib.scroll_panel import GuiScrollPanel

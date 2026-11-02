@@ -47,6 +47,7 @@ from iqpilot.selfdrive.iqmodeld.egpu_helpers import (
 )
 from iqpilot.selfdrive.iqmodeld.egpu_model import resolve_egpu_model
 from iqpilot.selfdrive.iqmodeld.aux_inputs import AuxModelInputs
+from iqpilot.selfdrive.iqmodeld.iqmodel_io import publish_outputs
 from iqpilot.selfdrive.iqmodeld.egpu_pipeline import EgpuOutputInvalid, EgpuPipeline, EgpuPipelineError, make_big_channel_payload
 from iqpilot.selfdrive.iqmodeld.egpu_telemetry import EgpuDockTelemetry
 from iqpilot.selfdrive.iqmodeld.messaging import DrivePacketMemory, populate_drive_messages, populate_odometry_message
@@ -610,6 +611,7 @@ def main(demo: bool = False) -> None:
     driving_msg.drivingModelData.meta.laneChangeState = desire_logic.lane_change_state
     driving_msg.drivingModelData.meta.laneChangeDirection = desire_logic.lane_change_direction
     iq_msg.iqDriveModelData.turnSignalDirection = desire_logic.lane_turn_direction
+    publish_outputs(model_msg.modelV2, iq_msg.iqDriveModelData, outputs)
 
     populate_odometry_message(pose_msg, outputs, main_stamp.frame_id, dropped_frames,
                               main_stamp.timestamp_eof, live_calib_seen)

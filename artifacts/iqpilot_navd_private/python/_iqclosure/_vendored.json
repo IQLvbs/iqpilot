@@ -20,7 +20,6 @@
   "iqpilot.selfdrive.controls.lib.helpers.lane_turn",
   "iqpilot.selfdrive.controls.lib.helpers.lateral_edge_guard",
   "iqpilot.selfdrive.iqmodeld.config",
-  "iqpilot.system",
   "iqpilot.system.hardware",
   "iqpilot.system.hardware.base",
   "iqpilot.system.hardware.hw",

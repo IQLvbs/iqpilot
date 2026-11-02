@@ -483,7 +483,7 @@ class CarController(CarControllerBase):
       # LFA and HDA icons
       if self.frame % 5 == 0 and (not hda2 or hda2_long or camera_scc):
         can_sends.extend(hyundaicanfd.create_lfahda_cluster(self.packer, CS, self.CAN, CC.longActive, CC.latActive,
-                                                            synthesize=hda2_long and not camera_scc))
+                                                            synthesize=bool(self.CP.openpilotLongitudinalControl and not camera_scc)))
         if not camera_scc:
           can_sends.extend(hyundaicanfd.create_lfa_icon_non_camera_scc(self.packer, CS, self.CAN, CC))
 
@@ -494,7 +494,7 @@ class CarController(CarControllerBase):
       if self.camera_scc_params in [2, 3]:
         self.canfd_toggle_adas(CC, CS)
       if self.CP.openpilotLongitudinalControl:
-        self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, hud_control)
+        self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, CC, CC_IQ)
         self.hyundai_jerk.check_carrot_cruise(CC, CS, hud_control, stopping, accel, actuators.aTarget)
 
         if True: #not camera_scc:
@@ -503,6 +503,7 @@ class CarController(CarControllerBase):
             can_sends.extend(hyundaicanfd.create_adrv_messages(self.CP, self.packer, self.CAN, self.frame))
           else:
             can_sends.extend(hyundaicanfd.create_fca_warning_light(self.CP, self.packer, self.CAN, self.frame))
+          can_sends.extend(hyundaicanfd.create_camera_keepalive(self.CP, self.packer, self.CAN, self.frame))
         if self.frame % 2 == 0:
           if self.CP.flags & HyundaiFlags.CAMERA_SCC.value:
             msg, self.accel_value_last = hyundaicanfd.create_acc_control_scc2(
@@ -513,9 +514,12 @@ class CarController(CarControllerBase):
               can_sends.append(msg)
             can_sends.extend(hyundaicanfd.create_tcs_messages(self.packer, self.CAN, CS)) # for sorento SCC radar...
           else:
-            can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping,
-                                                             CC.cruiseControl.override, set_speed_in_units, hud_control,
-                                                             self.hyundai_jerk.jerk_u, self.hyundai_jerk.jerk_l, CS, self.canfd_stopping))
+            scc_control = hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping,
+                                                          CC.cruiseControl.override, set_speed_in_units, hud_control,
+                                                          self.hyundai_jerk.jerk_u, self.hyundai_jerk.jerk_l, CS, self.canfd_stopping)
+            can_sends.append(scc_control)
+            if not hda2:
+              can_sends.append((scc_control[0], scc_control[1], self.CAN.CAM))
           self.accel_last = accel
       else:
         # button presses
@@ -540,7 +544,7 @@ class CarController(CarControllerBase):
 
       casper_ev = self.CP.carFingerprint == CAR.HYUNDAI_CASPER_EV
       if self.frame % 2 == 0 and self.CP.openpilotLongitudinalControl:
-        self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, hud_control)
+        self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, CC, CC_IQ)
         self.hyundai_jerk.check_carrot_cruise(CC, CS, hud_control, stopping, accel, actuators.aTarget)
         #jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0
         use_fca = self.CP.flags & HyundaiFlags.USE_FCA.value
@@ -752,6 +756,7 @@ class HyundaiJerk:
     self.jerk = 0.0
     self.jerk_u = self.jerk_l = 0.0
     self.cb_upper = self.cb_lower = 0.0
+    self.comfort_active = False
     self.jerk_u_min = 0.5
     self.carrot_cruise = 1
     self.carrot_cruise_accel = 0.0
@@ -776,7 +781,31 @@ class HyundaiJerk:
     if self.carrot_cruise == 0:
       self.carrot_cruise_accel = CS.out.aEgo
 
-  def make_jerk(self, CP, CS, accel, actuators, hud_control):
+  def make_jerk(self, CP, CS, accel, actuators, CC, CC_IQ):
+    comfort = CC_IQ.longitudinalComfort
+    values = (comfort.jerkUp, comfort.jerkDown, comfort.accelDeviationAbove, comfort.accelDeviationBelow)
+    self.comfort_active = (CC.longComfortMode and comfort.valid and all(np.isfinite(v) for v in values)
+                           and min(values) >= 0 and min(values[:2]) > 0)
+    fcw = str(CC.hudControl.visualAlert) == 'fcw' or comfort.bypassJerkLimit
+    if self.comfort_active and not (fcw or CC.cruiseControl.override):
+      # Stops and soft hold keep the port's own soft jerk: the shared policy
+      # does not shape them. FCW and gas override still take the shared values.
+      self.comfort_active = not (actuators.longControlState == LongCtrlState.stopping or CS.softHoldActive > 0)
+    if self.comfort_active:
+      self.jerk_u = 5.0 if fcw else np.floor(min(comfort.jerkUp, 5.0) / 0.1) * 0.1
+      self.jerk_l = 5.0 if fcw or comfort.bypassJerkDownLimit else np.floor(min(comfort.jerkDown, 5.0) / 0.1) * 0.1
+      self.cb_upper = self.cb_lower = 0.0
+      if comfort.comfortEnabled and not (CP.flags & HyundaiFlags.CANFD or fcw or comfort.bypassJerkDownLimit):
+        # SCC14 defines positive deviations in m/s^2. Stock Santa Fe ACC
+        # (4dbd55df87507948 / 2022-03-01--09-45-38, segments 0-1) closes
+        # Upper toward zero under braking while Lower stays open: physical
+        # above -> Upper, below -> Lower (inferred, not an ECU specification).
+        # Active stock bands reach 0.24 on both sides. Floor to the 0.02 DBC
+        # steps so quantization cannot widen the requested physical band.
+        self.cb_upper = np.floor(min(comfort.accelDeviationAbove, 0.24) / 0.02) * 0.02
+        self.cb_lower = np.floor(min(comfort.accelDeviationBelow, 0.24) / 0.02) * 0.02
+      return
+
     if actuators.longControlState == LongCtrlState.stopping:
       self.jerk = self.jerk_u_min / 2 - CS.out.aEgo
     else:

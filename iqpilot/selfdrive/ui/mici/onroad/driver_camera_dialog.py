@@ -1,11 +1,11 @@
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.cereal import log, messaging
 from iqpilot.cereal.visionipc import VisionStreamType
 from iqpilot.selfdrive.ui.mici.onroad.cameraview import CameraView
 from iqpilot.selfdrive.ui.mici.onroad.driver_state import DriverStateRenderer
 from iqpilot.selfdrive.ui.ui_state import ui_state, device
 from iqpilot.selfdrive.selfdrived.events import EVENTS, ET
-from iqpilot.system.ui.lib.application import gui_app, FontWeight
+from iqpilot.system.ui.lib.application import gui_app, FontWeight, TextAlignment, TextAlignmentVertical
 from iqpilot.system.ui.lib.multilang import tr
 from iqpilot.system.ui.widgets.nav_widget import NavWidget
 from iqpilot.system.ui.widgets.label import gui_label
@@ -99,7 +99,7 @@ class DriverCameraDialog(NavWidget):
 
     if not self._camera_view.frame:
       gui_label(rect, tr("camera starting"), font_size=54, font_weight=FontWeight.BOLD,
-                alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+                alignment=TextAlignment.CENTER)
       rl.end_scissor_mode()
       self._publish_alert_sound(None)
       return -1
@@ -141,12 +141,12 @@ class DriverCameraDialog(NavWidget):
 
     gui_label(rl.Rectangle(rect.x + 2, rect.y + 2, rect.width, rect.height),
               f"Awareness: {dm_state.awarenessStatus * 100:.0f}%", font_size=44, font_weight=FontWeight.MEDIUM,
-              alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT,
-              alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP,
+              alignment=TextAlignment.RIGHT,
+              alignment_vertical=TextAlignmentVertical.TOP,
               color=rl.Color(0, 0, 0, 180))
     gui_label(rect, f"Awareness: {dm_state.awarenessStatus * 100:.0f}%", font_size=44, font_weight=FontWeight.MEDIUM,
-              alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT,
-              alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP,
+              alignment=TextAlignment.RIGHT,
+              alignment_vertical=TextAlignmentVertical.TOP,
               color=rl.Color(255, 255, 255, int(255 * 0.9)))
 
     if not dm_state.events:
@@ -154,16 +154,16 @@ class DriverCameraDialog(NavWidget):
 
     # Show first event (only one should be active at a time)
     event_name_str = str(dm_state.events[0].name).split('.')[-1]
-    alignment = rl.GuiTextAlignment.TEXT_ALIGN_RIGHT if self.driver_state_renderer.is_rhd else rl.GuiTextAlignment.TEXT_ALIGN_LEFT
+    alignment = TextAlignment.RIGHT if self.driver_state_renderer.is_rhd else TextAlignment.LEFT
 
     shadow_rect = rl.Rectangle(rect.x + 2, rect.y + 2, rect.width, rect.height)
     gui_label(shadow_rect, event_name_str, font_size=40, font_weight=FontWeight.BOLD,
               alignment=alignment,
-              alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_BOTTOM,
+              alignment_vertical=TextAlignmentVertical.BOTTOM,
               color=rl.Color(0, 0, 0, 180))
     gui_label(rect, event_name_str, font_size=40, font_weight=FontWeight.BOLD,
               alignment=alignment,
-              alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_BOTTOM,
+              alignment_vertical=TextAlignmentVertical.BOTTOM,
               color=rl.Color(255, 255, 255, int(255 * 0.9)))
 
   def _load_eye_textures(self):
@@ -234,8 +234,8 @@ class DriverCameraDialog(NavWidget):
       fill_opacity = eye_prob
       orange_opacity = 1.0 - eye_prob
 
-      rl.draw_texture_v(self._eye_orange_texture, (eye_x, eye_y), rl.Color(255, 255, 255, int(255 * orange_opacity)))
-      rl.draw_texture_v(self._eye_fill_texture, (eye_x, eye_y), rl.Color(255, 255, 255, int(255 * fill_opacity)))
+      rl.draw_texture_v(self._eye_orange_texture, rl.Vector2(eye_x, eye_y), rl.Color(255, 255, 255, int(255 * orange_opacity)))
+      rl.draw_texture_v(self._eye_fill_texture, rl.Vector2(eye_x, eye_y), rl.Color(255, 255, 255, int(255 * fill_opacity)))
 
     # Draw sunglasses indicator based on sunglasses probability
     # Position glasses centered between the two eyes at top left

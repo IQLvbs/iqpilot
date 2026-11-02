@@ -1,7 +1,7 @@
 import queue
 import threading
 import time
-import pyray as rl
+import raylib_nb as rl
 from collections.abc import Callable
 from iqpilot.common.params import Params
 
@@ -371,6 +371,6 @@ class NavLayout(Widget):
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
     for rect, cb in self._tap_targets:
-      if rl.check_collision_point_rec(mouse_pos, rect):
+      if rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), rect):
         cb()
         return

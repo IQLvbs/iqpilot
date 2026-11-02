@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import pyray as rl
+import raylib_nb as rl
 import select
 import sys
 
@@ -27,7 +27,7 @@ LOGO_Y_OFFSET = int(TEXTURE_SIZE * 0.04)
 MARGIN_H = 100
 FONT_SIZE = 96
 LINE_HEIGHT = 104
-DARKGRAY = (55, 55, 55, 255)
+DARKGRAY = rl.Color(55, 55, 55, 255)
 PROGRESS_START = rl.Color(0x1B, 0x94, 0x88, 0xFF)
 PROGRESS_END = rl.Color(0xA3, 0x0B, 0x8C, 0xFF)
 DOT_REGION_X = 0.83

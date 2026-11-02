@@ -12,7 +12,9 @@ from iqdbc.car.common.conversions import Conversions as CV
 from iqdbc.car.common.filter_simple import FirstOrderFilter
 from iqdbc.car.volkswagen.values import CAR, DBC, CanBus, NetworkLocation, RADAR_DISABLE_STATE, TransmissionType, GearShifter, \
                                                       CarControllerParams, VolkswagenFlags, VolkswagenFlagsIQ
+from iqdbc.car.volkswagen.cluster_ratio import ClusterRatioEstimator
 from iqdbc.car.volkswagen.speed_limit_manager import SpeedLimitManager
+from iqdbc.car.volkswagen.hca_session import EpsSessionClock
 
 iqpilot_path = os.path.join(os.path.dirname(__file__), '..', '..', '..')
 sys.path.insert(0, iqpilot_path)
@@ -42,7 +44,10 @@ class CarState(CarStateBase):
     self.frame = 0
     self.eps_init_complete = False
     self.CCP = CarControllerParams(CP)
+    self.eps_session = EpsSessionClock(self.CCP.STEER_TIME_RESET)
+    self.eps_hca_status_raw = 0
     self.driver_torque_filter = FirstOrderFilter(0.0, self.DRIVER_TORQUE_TAU, DT_CTRL)
+    self.cluster_ratio = ClusterRatioEstimator()
     self.button_states = {button.event_type: False for button in self.CCP.BUTTONS}
     self.esp_hold_confirmation = False
     self.upscale_lead_car_signal = False
@@ -67,6 +72,7 @@ class CarState(CarStateBase):
     self.cruise_faulted_frames = 0
     self.cruise_fault_clear_frames = 0
     self.cruise_fault_lateral_active = False
+    self.lateral_available_prev = False
     self.cruise_faulted = False
     self.grade = 0.0
     self.rolling_backward = False
@@ -116,6 +122,9 @@ class CarState(CarStateBase):
 
   def _apply_iq_private_flags(self, ret_iq: structs.IQCarState) -> None:
     ret_iq.alcOverrideAlert = bool(self.alcOverrideAlert)
+    ret_iq.epsHcaStatus = self.eps_hca_status_raw
+    ret_iq.epsSessionSec = self.eps_session.age_s
+    ret_iq.epsSessionResets = self.eps_session.resets
 
   def update_button_enable(self, buttonEvents: list[structs.CarState.ButtonEvent]):
     if not self.CP.pcmCruise:
@@ -261,8 +270,8 @@ class CarState(CarStateBase):
     # Shared logic
     ret.vEgoCluster = pt_cp.vl["Kombi_01"]["KBI_angez_Geschw"] * CV.KPH_TO_MS
 
+    cluster_ratio = self.cluster_ratio.update(ret.vEgo, ret.aEgo, ret.vEgoCluster)
     if ret.cruiseState.speed > 0 and ret.vEgo > 1.0:
-      cluster_ratio = ret.vEgoCluster / ret.vEgo
       ret.cruiseState.speedCluster = ret.cruiseState.speed * cluster_ratio
 
     self.parse_mlb_mqb_steering_state(ret, pt_cp)
@@ -405,8 +414,8 @@ class CarState(CarStateBase):
       if ret.cruiseState.speed > 90:
         ret.cruiseState.speed = 0
 
+    cluster_ratio = self.cluster_ratio.update(ret.vEgo, ret.aEgo, ret.vEgoCluster)
     if ret.cruiseState.speed > 0 and ret.vEgo > 1.0 and ret.vEgoCluster > 0:
-      cluster_ratio = ret.vEgoCluster / ret.vEgo
       ret.cruiseState.speedCluster = ret.cruiseState.speed * cluster_ratio
 
     raining = pt_cp.vl["RLS_01"]["RS_Regenmenge"] > 0
@@ -443,26 +452,11 @@ class CarState(CarStateBase):
 
     allow_lat_only = self._params.get_bool("AllowLateralWhenLongUnavailable") and self._params.get_bool("AolEnabled")
     cruise_fault_candidate = allow_lat_only and ret.accFaulted and bool(pt_cp.vl["GRA_ACC_01"]["GRA_Hauptschalter"])
-    if cruise_fault_candidate:
-      self.cruise_faulted_frames += 1
-      self.cruise_fault_clear_frames = 0
-      if self.cruise_faulted_frames >= self.CRUISE_FAULT_LATERAL_ENABLE_FRAMES:
-        self.cruise_fault_lateral_active = True
-    else:
-      self.cruise_faulted_frames = 0
-      if self.cruise_fault_lateral_active:
-        self.cruise_fault_clear_frames += 1
-        if self.cruise_fault_clear_frames >= self.CRUISE_FAULT_LATERAL_DISABLE_FRAMES:
-          self.cruise_fault_lateral_active = False
-      else:
-        self.cruise_fault_clear_frames = 0
-    if not allow_lat_only:
-      self.cruise_fault_lateral_active = False
-      self.cruise_faulted_frames = 0
-      self.cruise_fault_clear_frames = 0
+    self.update_cruise_fault_lateral(allow_lat_only, cruise_fault_candidate)
     ret.cruiseFaultLateralMode = self.cruise_fault_lateral_active
     ret.lateralAvailable = ret.cruiseState.available or ret.cruiseFaultLateralMode
     ret.blockPcmEnable = ret.cruiseFaultLateralMode
+    self.lateral_available_prev = ret.lateralAvailable
 
     if self.CP.flags & VolkswagenFlags.MEB:
       ret.batteryDetails.charge = pt_cp.vl["Motor_16"]["MO_Energieinhalt_BMS"]
@@ -503,7 +497,8 @@ class CarState(CarStateBase):
     ret.steeringAngleDeg = pt_cp.vl["Lenkhilfe_3"]["LH3_BLW"] * (1, -1)[int(pt_cp.vl["Lenkhilfe_3"]["LH3_BLWSign"])]
     ret.steeringRateDeg = pt_cp.vl["Lenkwinkel_1"]["LW1_Lenk_Gesch"] * (1, -1)[int(pt_cp.vl["Lenkwinkel_1"]["LW1_Gesch_Sign"])]
     ret.steeringTorque = pt_cp.vl["Lenkhilfe_3"]["LH3_LM"] * (1, -1)[int(pt_cp.vl["Lenkhilfe_3"]["LH3_LMSign"])]
-    hca_status = self.CCP.hca_status_values.get(pt_cp.vl["Lenkhilfe_2"]["LH2_Sta_HCA"])
+    self.eps_hca_status_raw = int(pt_cp.vl["Lenkhilfe_2"]["LH2_Sta_HCA"])
+    hca_status = self.CCP.hca_status_values.get(self.eps_hca_status_raw)
     ret.steerFaultTemporary, ret.steerFaultPermanent = self.update_hca_state(hca_status, ready_confirms_init=False)
 
     # Update gas, brakes, and gearshift.
@@ -783,18 +778,41 @@ class CarState(CarStateBase):
     ret.steeringTorque = pt_cp.vl["LH_EPS_03"]["EPS_Lenkmoment"] * (1, -1)[int(pt_cp.vl["LH_EPS_03"]["EPS_VZ_Lenkmoment"])]
     ret.steeringPressed = abs(ret.steeringTorque) > self.CCP.STEER_DRIVER_ALLOWANCE
 
-    hca_status = self.CCP.hca_status_values.get(pt_cp.vl["LH_EPS_03"]["EPS_HCA_Status"])
+    self.eps_hca_status_raw = int(pt_cp.vl["LH_EPS_03"]["EPS_HCA_Status"])
+    hca_status = self.CCP.hca_status_values.get(self.eps_hca_status_raw)
     ret.steerFaultTemporary, ret.steerFaultPermanent = self.update_hca_state(hca_status, drive_mode)
     return
 
   def update_hca_state(self, hca_status, drive_mode=True, ready_confirms_init=True):
     # Treat FAULT as temporary for worst likely EPS recovery time, for cars without factory Lane Assist
     # DISABLED means the EPS hasn't been configured to support Lane Assist
+    self.eps_session.update(hca_status == "ACTIVE")
     init_statuses = ("DISABLED", "READY", "ACTIVE") if ready_confirms_init else ("DISABLED", "ACTIVE")
     self.eps_init_complete = self.eps_init_complete or hca_status in init_statuses or self.frame > 1000
     perm_fault = drive_mode and hca_status == "DISABLED" or (self.eps_init_complete and hca_status == "FAULT")
     temp_fault = drive_mode and hca_status in ("REJECTED", "PREEMPTED") or not self.eps_init_complete
     return temp_fault, perm_fault
+
+  def update_cruise_fault_lateral(self, allow_lat_only: bool, fault_candidate: bool) -> None:
+    if not allow_lat_only:
+      self.cruise_fault_lateral_active = False
+      self.cruise_faulted_frames = 0
+      self.cruise_fault_clear_frames = 0
+      return
+    if fault_candidate:
+      self.cruise_faulted_frames += 1
+      self.cruise_fault_clear_frames = 0
+      frames_needed = 1 if self.lateral_available_prev else self.CRUISE_FAULT_LATERAL_ENABLE_FRAMES
+      if self.cruise_faulted_frames >= frames_needed:
+        self.cruise_fault_lateral_active = True
+      return
+    self.cruise_faulted_frames = 0
+    if self.cruise_fault_lateral_active:
+      self.cruise_fault_clear_frames += 1
+      if self.cruise_fault_clear_frames >= self.CRUISE_FAULT_LATERAL_DISABLE_FRAMES:
+        self.cruise_fault_lateral_active = False
+    else:
+      self.cruise_fault_clear_frames = 0
 
   def update_acc_fault(self, acc_fault, parking_brake=False, drive_mode=True, recovery_frames_max=100):
     fault = acc_fault
@@ -864,11 +882,13 @@ class CarState(CarStateBase):
 
     pt_bus = CanBus(CP).aux if CP.flags & VolkswagenFlagsIQ.IQ_MLB_NO_ECAN else CanBus(CP).pt
 
-    return {
+    parsers = {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, pt_bus),
-      Bus.aux: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, CanBus(CP).aux),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], cam_messages, CanBus(CP).cam),
     }
+    if CP.flags & VolkswagenFlags.MLB:
+      parsers[Bus.aux] = CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, CanBus(CP).aux)
+    return parsers
 
   @staticmethod
   def get_can_parsers_pq(CP):

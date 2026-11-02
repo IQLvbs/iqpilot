@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import pyray as rl
-
 from iqpilot.system.hardware.base import Profile
 from iqpilot.system.hardware.tici.esim_manager import EsimManager, EsimOperationState, EsimUiState, get_esim_manager
-from iqpilot.system.ui.lib.application import gui_app
+from iqpilot.system.ui.lib.application import gui_app, TextAlignment
 from iqpilot.system.ui.lib.multilang import tr
 from iqpilot.system.ui.widgets import DialogResult, Widget
 from iqpilot.system.ui.widgets.confirm_dialog import ConfirmDialog
@@ -242,6 +240,6 @@ class EsimPanel(Widget):
   def _render(self, _):
     if not self.is_supported():
       from iqpilot.system.ui.widgets.label import gui_label
-      gui_label(self._rect, tr("Insert the original comma SIM card that came with the device to use eSIM"), 64, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+      gui_label(self._rect, tr("Insert the original comma SIM card that came with the device to use eSIM"), 64, alignment=TextAlignment.CENTER)
       return
     self._scroller.render(self._rect)

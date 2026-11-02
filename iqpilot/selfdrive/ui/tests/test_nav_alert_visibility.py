@@ -1,7 +1,7 @@
 # Copyright (c) 2026 IQ.Lvbs. All rights reserved.
 from types import SimpleNamespace
 
-import pyray as rl
+import raylib_nb as rl
 import pytest
 
 from iqpilot.selfdrive.ui.onroad.alert_renderer import AlertRenderer, AlertSize

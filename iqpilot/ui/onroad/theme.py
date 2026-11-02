@@ -1,7 +1,7 @@
 import math
 from functools import lru_cache
 
-import pyray as rl
+import raylib_nb as rl
 
 TEXT = rl.Color(255, 255, 255, 255)
 SECONDARY_TEXT = rl.Color(255, 255, 255, 205)

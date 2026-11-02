@@ -1,6 +1,6 @@
 """Big UI steering arc."""
 import numpy as np
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.selfdrive.ui.mici.onroad import blend_colors
 from iqpilot.selfdrive.ui.mici.onroad.torque_bar import TorqueBar as BaseTorqueBar, arc_bar_pts, TORQUE_ANGLE_SPAN, TORQUE_REST_HEIGHT

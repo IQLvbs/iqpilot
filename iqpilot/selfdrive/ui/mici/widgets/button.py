@@ -4,7 +4,7 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 
 import math
 import time
-import pyray as rl
+import raylib_nb as rl
 from typing import Union
 from enum import Enum
 from collections.abc import Callable
@@ -12,7 +12,7 @@ from iqpilot.system.ui.widgets import Widget
 from iqpilot.system.ui.widgets.label import MiciLabel
 from iqpilot.system.ui.widgets.scroller import DO_ZOOM
 from iqpilot.system.ui.lib.text_measure import measure_text_cached
-from iqpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
+from iqpilot.system.ui.lib.application import gui_app, FontWeight, MousePos, TextAlignmentVertical
 from iqpilot.common.filter_simple import BounceFilter
 
 try:
@@ -61,10 +61,10 @@ class BigButton(Widget):
 
     self._label = MiciLabel(text, font_size=self._get_label_font_size(), width=int(self._rect.width - LABEL_HORIZONTAL_PADDING * 2),
                             font_weight=FontWeight.DISPLAY, color=LABEL_COLOR,
-                            alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_BOTTOM, wrap_text=True)
+                            alignment_vertical=TextAlignmentVertical.BOTTOM, wrap_text=True)
     self._sub_label = MiciLabel(value, font_size=COMPLICATION_SIZE, width=int(self._rect.width - LABEL_HORIZONTAL_PADDING * 2),
                                 font_weight=FontWeight.ROMAN, color=COMPLICATION_GREY,
-                                alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_BOTTOM, wrap_text=True)
+                                alignment_vertical=TextAlignmentVertical.BOTTOM, wrap_text=True)
 
     self._load_images()
 
@@ -160,7 +160,7 @@ class BigButton(Widget):
     scale = self._scale_filter.update(PRESSED_SCALE if self.is_pressed else 1.0)
     btn_x = self._rect.x + (self._rect.width * (1 - scale)) / 2
     btn_y = self._rect.y + (self._rect.height * (1 - scale)) / 2
-    rl.draw_texture_ex(txt_bg, (btn_x, btn_y), 0, scale, rl.WHITE)
+    rl.draw_texture_ex(txt_bg, rl.Vector2(btn_x, btn_y), 0, scale, rl.WHITE)
 
     # LABEL ------------------------------------------------------------------
     lx = self._rect.x + LABEL_HORIZONTAL_PADDING
@@ -267,7 +267,7 @@ class NeonBigButton(Widget):
       width=self.CARD_W - _NEON_CARD_PAD * 2,
       font_weight=FontWeight.DISPLAY,
       color=LABEL_COLOR,
-      alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP,
+      alignment_vertical=TextAlignmentVertical.TOP,
       wrap_text=True,
       elide_right=False,
     )

@@ -1,5 +1,5 @@
-import pyray as rl
-from iqpilot.system.ui.lib.application import FontWeight
+import raylib_nb as rl
+from iqpilot.system.ui.lib.application import FontWeight, TextAlignment
 from iqpilot.system.ui.lib.multilang import tr
 from iqpilot.system.ui.widgets import Widget, DialogResult
 from iqpilot.system.ui.widgets.button import Button, ButtonStyle
@@ -54,7 +54,7 @@ class MultiOptionDialog(Widget):
     # else (CJK, Cyrillic, Arabic, ...) keeps the broad-coverage font passed by the caller.
     self.option_buttons = [_OptionButton(option, click_callback=lambda opt=option: self._on_option_clicked(opt),
                                          font_weight=(FontWeight.MEDIUM if _latin_only(option) else option_font_weight),
-                                         text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT, button_style=ButtonStyle.NORMAL,
+                                         text_alignment=TextAlignment.LEFT, button_style=ButtonStyle.NORMAL,
                                          text_padding=50, elide_right=True) for option in options]
     self.scroller = Scroller(self.option_buttons, spacing=LIST_ITEM_SPACING)
 

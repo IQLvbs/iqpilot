@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 import time
 
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.common.params import Params
 from iqpilot.selfdrive.ui.lib.nav_helpers import active_navigation_route, current_or_last_gps_position
@@ -101,7 +101,7 @@ class InteractiveNavMap(Widget):
     if not self._interactive or mouse_event.slot != 0 or not self._have_center:
       return
     if mouse_event.left_pressed:
-      if rl.check_collision_point_rec(mouse_event.pos, self._rect) and self._control_hit(mouse_event.pos) is None:
+      if rl.check_collision_point_rec(rl.Vector2(mouse_event.pos.x, mouse_event.pos.y), self._rect) and self._control_hit(mouse_event.pos) is None:
         self._drag_start = mouse_event.pos
         self._drag_center = _norm(self._lat, self._lon)
         self._dragging = False
@@ -138,7 +138,7 @@ class InteractiveNavMap(Widget):
 
   def _control_hit(self, pos: MousePos) -> str | None:
     for name, rect in self._controls():
-      if rl.check_collision_point_rec(pos, rect):
+      if rl.check_collision_point_rec(rl.Vector2(pos.x, pos.y), rect):
         return name
     return None
 

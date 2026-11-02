@@ -1,7 +1,7 @@
 from enum import IntEnum
 
-import pyray as rl
-from iqpilot.system.ui.lib.application import FontWeight, gui_app
+import raylib_nb as rl
+from iqpilot.system.ui.lib.application import FontWeight, gui_app, TextAlignment
 from iqpilot.system.ui.lib.multilang import tr
 from iqpilot.system.ui.widgets import Widget
 from iqpilot.system.ui.widgets.button import Button, ButtonStyle
@@ -23,9 +23,9 @@ class TermsPage(Widget):
     self._on_accept = on_accept
     self._on_decline = on_decline
 
-    self._title = Label(tr("Welcome to IQ.Pilot"), font_size=90, font_weight=FontWeight.BOLD, text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT)
+    self._title = Label(tr("Welcome to IQ.Pilot"), font_size=90, font_weight=FontWeight.BOLD, text_alignment=TextAlignment.LEFT)
     self._desc = Label(tr("You must accept the Terms of Service to use IQ.Pilot. Read the latest terms before continuing at https://iqlvbs.com/tos."),
-                       font_size=90, font_weight=FontWeight.MEDIUM, text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT)
+                       font_size=90, font_weight=FontWeight.MEDIUM, text_alignment=TextAlignment.LEFT)
 
     self._decline_btn = Button(tr("Decline"), click_callback=on_decline)
     self._accept_btn = Button(tr("Agree"), button_style=ButtonStyle.PRIMARY, click_callback=on_accept)
@@ -58,7 +58,7 @@ class DeclinePage(Widget):
   def __init__(self, back_callback=None):
     super().__init__()
     self._text = Label(tr("You must accept the Terms of Service in order to use IQ.Pilot."),
-                       font_size=90, font_weight=FontWeight.MEDIUM, text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT)
+                       font_size=90, font_weight=FontWeight.MEDIUM, text_alignment=TextAlignment.LEFT)
     self._back_btn = Button(tr("Back"), click_callback=back_callback)
     self._uninstall_btn = Button(tr("Decline, uninstall IQ.Pilot"), button_style=ButtonStyle.DANGER,
                                  click_callback=self._on_uninstall_clicked)

@@ -1,6 +1,6 @@
 # Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
 import time
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.common.params import Params
 from iqpilot.system.ui.lib.application import gui_app

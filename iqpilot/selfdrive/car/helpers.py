@@ -6,6 +6,19 @@ from iqpilot.cereal import custom
 from iqdbc.car import structs
 
 _FIELDS = '__dataclass_fields__'
+LONGITUDINAL_COMFORT_MAX_AGE_NS = 100_000_000
+
+
+def _convert_longitudinal_comfort(struct) -> structs.IQCarControl.LongitudinalComfort:
+  comfort = struct.longitudinalComfort
+  return structs.IQCarControl.LongitudinalComfort(
+    **{name: getattr(comfort, name) for name in structs.IQCarControl.LongitudinalComfort.__dataclass_fields__}
+  )
+
+
+def invalidate_stale_longitudinal_comfort(control: structs.IQCarControl, now_nanos: int, message_nanos: int, message_valid: bool) -> None:
+  if not message_valid or not 0 <= now_nanos - message_nanos <= LONGITUDINAL_COMFORT_MAX_AGE_NS:
+    control.longitudinalComfort.valid = False
 
 
 def is_dataclass(obj):
@@ -50,6 +63,7 @@ def convert_to_capnp(struct: structs.IQCarParams | structs.IQCarState) -> capnp.
 
 def convert_iq_car_control(struct: capnp.lib.capnp._DynamicStructReader) -> structs.IQCarControl:
   struct_dataclass = structs.IQCarControl()
+  struct_dataclass.longitudinalComfort = _convert_longitudinal_comfort(struct)
 
   aol = struct.aol
   struct_dataclass.aol = structs.AlwaysOnLateral(
@@ -119,6 +133,7 @@ def convert_iq_car_control(struct: capnp.lib.capnp._DynamicStructReader) -> stru
 
 def convert_iq_car_control_compact(struct: capnp.lib.capnp._DynamicStructReader, *, include_leads: bool) -> structs.IQCarControl:
   struct_dataclass = structs.IQCarControl()
+  struct_dataclass.longitudinalComfort = _convert_longitudinal_comfort(struct)
 
   aol = struct.aol
   struct_dataclass.aol = structs.AlwaysOnLateral(

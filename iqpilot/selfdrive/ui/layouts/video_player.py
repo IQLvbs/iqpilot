@@ -9,7 +9,7 @@ import tempfile
 import threading
 import time
 import numpy as np
-import pyray as rl
+import raylib_nb as rl
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -783,7 +783,7 @@ class VideoPlayerLayout(Widget):
       rl.set_texture_filter(self._texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
       self._texture_size = (width, height)
 
-    rl.update_texture(self._texture, rl.ffi.cast("void *", frame.ctypes.data))
+    rl.update_texture(self._texture, frame)
     self._loading = False
     self._last_decoded_idx = result.global_frame
     self._last_uploaded_idx = result.global_frame
@@ -1066,14 +1066,14 @@ class VideoPlayerLayout(Widget):
     self._note_interaction()
     # Camera tabs and header controls are always live.
     for tab, cam in self._cam_tab_rects:
-      if rl.check_collision_point_rec(mouse_pos, tab):
+      if rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), tab):
         self._select_camera(cam)
         return
-    if rl.check_collision_point_rec(mouse_pos, self._share_rect):
+    if rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._share_rect):
       if self._on_share_cb is not None:
         self._on_share_cb()
       return
-    if rl.check_collision_point_rec(mouse_pos, self._speed_rect):
+    if rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._speed_rect):
       speeds = [1.0, 2.0, 4.0, 8.0]
       idx = speeds.index(self._speed) if self._speed in speeds else 0
       self._speed = speeds[(idx + 1) % len(speeds)]
@@ -1081,10 +1081,10 @@ class VideoPlayerLayout(Widget):
     # If this tap only revealed the hidden transport, don't also trigger it.
     if self._press_revealed:
       return
-    if rl.check_collision_point_rec(mouse_pos, self._play_rect):
+    if rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._play_rect):
       self._playing = not self._playing
       self._sync_audio()
-    elif rl.check_collision_point_rec(mouse_pos, self._skip_back_rect):
+    elif rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._skip_back_rect):
       self._seek(-10)
-    elif rl.check_collision_point_rec(mouse_pos, self._skip_fwd_rect):
+    elif rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._skip_fwd_rect):
       self._seek(10)

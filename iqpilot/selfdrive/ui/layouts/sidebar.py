@@ -1,4 +1,4 @@
-import pyray as rl
+import raylib_nb as rl
 import time
 from dataclasses import dataclass
 from collections.abc import Callable
@@ -33,7 +33,6 @@ NetworkType = log.DeviceState.NetworkType
 # Color scheme
 class Colors:
   WHITE = rl.WHITE
-  WHITE_DIM = rl.Color(255, 255, 255, 85)
   GRAY = rl.Color(84, 84, 84, 255)
 
   # Keep these in parity with the offroad home status indicators.
@@ -174,13 +173,13 @@ class Sidebar(Widget):
       self._panda_status.update(tr_noop("VEHICLE"), tr_noop("ONLINE"), Colors.GOOD)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
-    if rl.check_collision_point_rec(mouse_pos, SETTINGS_BTN):
+    if rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), SETTINGS_BTN):
       if self._on_settings_click:
         self._on_settings_click()
-    elif rl.check_collision_point_rec(mouse_pos, HOME_BTN) and ui_state.started:
+    elif rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), HOME_BTN) and ui_state.started:
       if self._on_flag_click:
         self._on_flag_click()
-    elif self._recording_audio and rl.check_collision_point_rec(mouse_pos, self._mic_indicator_rect):
+    elif self._recording_audio and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._mic_indicator_rect):
       if self._open_settings_callback:
         self._open_settings_callback()
 

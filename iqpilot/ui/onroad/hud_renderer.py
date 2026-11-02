@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import time
 
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.ui.onroad.torque_bar import TorqueBar
 from iqpilot.selfdrive.ui.ui_state import ui_state

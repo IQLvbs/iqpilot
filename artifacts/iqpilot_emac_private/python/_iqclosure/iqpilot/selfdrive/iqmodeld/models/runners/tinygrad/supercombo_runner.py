@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 
 from iqpilot.common.params import Params
-from iqpilot.selfdrive.iqmodeld.models.runners.model_runner import CUSTOM_MODEL_PATH, NumpyDict, ShapeDict, SliceDict, _META_MAX_BYTES
+from iqpilot.selfdrive.iqmodeld.models.runners.model_runner import CUSTOM_MODEL_PATH, NumpyDict, ShapeDict, SliceDict, _META_MAX_BYTES, load_big_model_pickle
 from iqpilot.selfdrive.iqmodeld.models.runners.model_runner import ModelRunner
 from iqpilot.selfdrive.iqmodeld.models.split_model_constants import SplitModelConstants
 from iqpilot.selfdrive.iqmodeld.parser import PhaseParser
@@ -77,7 +77,7 @@ class TinygradSupercomboRunner(TinygradSupercomboRuntime, ModelRunner):
         self._pkl_path = pkl_path
         self._expected_sha256 = getattr(getattr(self._model_data.model.artifact, "downloadUri", None), "sha256", "") or ""
         self._verify_artifact_file()
-        self._m: dict[Any, Any] = load_pickle(pkl_path)
+        self._m: dict[Any, Any] = load_big_model_pickle(pkl_path)
 
         self._meta = self._load_meta()
         self._ish = self._meta['input_shapes']
@@ -100,8 +100,6 @@ class TinygradSupercomboRunner(TinygradSupercomboRuntime, ModelRunner):
     def _load_meta(self) -> dict[Any, Any]:
         if 'metadata' in self._m:
             return self._m['metadata']
-        # some models ship metadata as a separate sealed .iqc artifact rather than embedding it in
-        # the model pkl; load it through the same sealed path, verified like the model artifact
         meta_art = getattr(self._model_data.model, "metadata", None)
         meta_name = getattr(meta_art, "fileName", "") or ""
         if not meta_name:

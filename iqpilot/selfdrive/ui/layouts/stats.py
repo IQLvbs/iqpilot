@@ -1,4 +1,4 @@
-import pyray as rl
+import raylib_nb as rl
 from collections.abc import Callable
 
 from iqpilot.ui.layouts.settings.drive_history import TripsLayout

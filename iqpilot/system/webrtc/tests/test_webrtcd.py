@@ -31,9 +31,7 @@ class FakeSession:
 
 
 @parameterized_class(("in_services", "out_services"), [
-  (["testJoystick"], ["carState"]),
   ([], ["carState"]),
-  (["testJoystick"], []),
   ([], []),
 ])
 @pytest.mark.asyncio
@@ -73,3 +71,29 @@ class TestWebrtcdProc:
     ice_response = await add_ice(request)
     assert ice_response.status == 200
     assert session.candidates == [{"candidate": "candidate:1"}]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("in_services", [["testJoystick"], ["sendcan"], ["carControl", "sendcan"]])
+async def test_refuses_bridging_services_in_without_touching_the_active_session(mocker, in_services):
+  active = FakeSession("active")
+  new_session = mocker.patch("iqpilot.system.webrtc.webrtcd._new_stream_session")
+  request = mocker.MagicMock()
+  request.app = {"streams": {active.identifier: active}, "debug": False}
+  request.json = mocker.AsyncMock(return_value={"sdp": "offer", "cameras": ["road"], "bridge_services_in": in_services})
+
+  response = await get_stream(request)
+
+  assert response.status == 403
+  assert json.loads(response.text)["error"] == "bridge_in_forbidden"
+  new_session.assert_not_called()
+  assert not active.stopped
+  assert request.app["streams"] == {active.identifier: active}
+
+
+def test_listens_on_loopback_by_default(mocker):
+  from iqpilot.system.webrtc import webrtcd
+  run = mocker.patch.object(webrtcd, "webrtcd_thread")
+  mocker.patch("sys.argv", ["webrtcd"])
+  webrtcd.main()
+  assert run.call_args.args[0] == "127.0.0.1"

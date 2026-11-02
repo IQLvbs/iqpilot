@@ -3,14 +3,14 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 """
 
 import math
-import pyray as rl
+import raylib_nb as rl
 from typing import Union
 from enum import Enum
 from collections.abc import Callable
 from iqpilot.system.ui.widgets import Widget
 from iqpilot.system.ui.widgets.label import UnifiedLabel
 from iqpilot.system.ui.widgets.scroller import DO_ZOOM
-from iqpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
+from iqpilot.system.ui.lib.application import gui_app, FontWeight, MousePos, TextAlignmentVertical
 from iqpilot.common.filter_simple import BounceFilter
 try:
   from iqpilot.ui.theme import NeonTheme
@@ -152,7 +152,7 @@ class BigCircleButton(Widget):
 
   def _draw_content(self, btn_x: float, btn_y: float, btn_width: float, btn_height: float):
     icon_color = rl.Color(255, 255, 255, int(255 * 0.9)) if self.enabled else rl.Color(255, 255, 255, int(255 * 0.35))
-    rl.draw_texture_ex(self._txt_icon, (btn_x + (btn_width - self._txt_icon.width) / 2 + self._icon_offset[0],
+    rl.draw_texture_ex(self._txt_icon, rl.Vector2(btn_x + (btn_width - self._txt_icon.width) / 2 + self._icon_offset[0],
                                         btn_y + (btn_height - self._txt_icon.height) / 2 + self._icon_offset[1]), 0, 1.0, icon_color)
 
   def _render(self, _):
@@ -165,7 +165,7 @@ class BigCircleButton(Widget):
     scale = self._scale_filter.update(PRESSED_SCALE if self.is_pressed else 1.0)
     btn_x = self._rect.x + (self._rect.width * (1 - scale)) / 2
     btn_y = self._rect.y + (self._rect.height * (1 - scale)) / 2
-    rl.draw_texture_ex(txt_bg, (btn_x, btn_y), 0, scale, rl.WHITE)
+    rl.draw_texture_ex(txt_bg, rl.Vector2(btn_x, btn_y), 0, scale, rl.WHITE)
 
     cx = btn_x + self._rect.width * scale / 2.0
     cy = btn_y + self._rect.height * scale / 2.0
@@ -198,7 +198,7 @@ class BigCircleToggle(BigCircleButton):
     super()._draw_content(btn_x, btn_y, btn_width, btn_height)
 
     rl.draw_texture_ex(self._txt_toggle_enabled if self._checked else self._txt_toggle_disabled,
-                       (btn_x + (btn_width - self._txt_toggle_enabled.width) / 2, btn_y + 5),
+                       rl.Vector2(btn_x + (btn_width - self._txt_toggle_enabled.width) / 2, btn_y + 5),
                        0, 1.0, rl.WHITE)
 
 
@@ -225,11 +225,11 @@ class BigButton(Widget):
     self._rotate_icon_t: float | None = None
 
     self._label = UnifiedLabel(text, font_size=self._get_label_font_size(), font_weight=FontWeight.BOLD,
-                               text_color=LABEL_COLOR, alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_BOTTOM, scroll=scroll,
+                               text_color=LABEL_COLOR, alignment_vertical=TextAlignmentVertical.BOTTOM, scroll=scroll,
                                line_height=0.9)
     self._sub_label = UnifiedLabel(value, font_size=COMPLICATION_SIZE, font_weight=FontWeight.ROMAN,
                                    text_color=COMPLICATION_GREY,
-                                   alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_BOTTOM,
+                                   alignment_vertical=TextAlignmentVertical.BOTTOM,
                                    wrap_text=False, scroll=True)
     self._update_label_layout()
 
@@ -270,9 +270,9 @@ class BigButton(Widget):
   def _update_label_layout(self):
     self._label.set_font_size(self._get_label_font_size())
     if self.value:
-      self._label.set_alignment_vertical(rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP)
+      self._label.set_alignment_vertical(TextAlignmentVertical.TOP)
     else:
-      self._label.set_alignment_vertical(rl.GuiTextAlignmentVertical.TEXT_ALIGN_BOTTOM)
+      self._label.set_alignment_vertical(TextAlignmentVertical.BOTTOM)
 
   def set_text(self, text: str):
     self.text = text
@@ -403,9 +403,9 @@ class BigToggle(BigButton):
 
   def _draw_pill(self, x: float, y: float, checked: bool):
     if checked:
-      rl.draw_texture_ex(self._txt_enabled_toggle, (x, y), 0, 1.0, rl.WHITE)
+      rl.draw_texture_ex(self._txt_enabled_toggle, rl.Vector2(x, y), 0, 1.0, rl.WHITE)
     else:
-      rl.draw_texture_ex(self._txt_disabled_toggle, (x, y), 0, 1.0, rl.WHITE)
+      rl.draw_texture_ex(self._txt_disabled_toggle, rl.Vector2(x, y), 0, 1.0, rl.WHITE)
 
   def _draw_content(self, btn_x: float, btn_y: float, btn_width: float, btn_height: float):
     super()._draw_content(btn_x, btn_y, btn_width, btn_height)
@@ -467,8 +467,8 @@ class GreyBigButton(BigButton):
     self._sub_label.set_font_size(36)
     self._sub_label.set_text_color(rl.Color(255, 255, 255, int(255 * 0.9)))
     self._sub_label.set_font_weight(FontWeight.DISPLAY_REGULAR)
-    self._sub_label.set_alignment_vertical(rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE if not self._label.text else
-                                           rl.GuiTextAlignmentVertical.TEXT_ALIGN_BOTTOM)
+    self._sub_label.set_alignment_vertical(TextAlignmentVertical.MIDDLE if not self._label.text else
+                                           TextAlignmentVertical.BOTTOM)
     self._sub_label.set_line_height(0.95)
 
   @property

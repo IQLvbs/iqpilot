@@ -3,7 +3,6 @@
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos/
 """
 import re
-import secrets
 from pathlib import Path
 
 from iqpilot.common.params import Params
@@ -30,31 +29,19 @@ def _read_persist_dongle_id() -> str | None:
 
 
 def is_valid_dongle_id(dongle_id: str | None) -> bool:
-  return bool(dongle_id and _DONGLE_ID_RE.fullmatch(dongle_id))
+  return isinstance(dongle_id, str) and _DONGLE_ID_RE.fullmatch(dongle_id) is not None
 
 
 def get_cached_dongle_id(params: Params | None = None, prefer_readonly: bool = True) -> str | None:
   ro = _read_persist_dongle_id()
-  if is_valid_dongle_id(ro):
-    ro = ro.lower()
+  ro = ro.lower() if is_valid_dongle_id(ro) else None
   if prefer_readonly and ro:
     return ro
   p = Params() if params is None else params
   v = p.get("DongleId")
-  if v and v != UNREGISTERED_DONGLE_ID:
-    return v.lower() if is_valid_dongle_id(v) else v
+  if is_valid_dongle_id(v):
+    return v.lower()
   return ro or None
-
-
-def get_or_create_dongle_id(params: Params | None = None, prefer_readonly: bool = True) -> str:
-  p = Params() if params is None else params
-  dongle_id = get_cached_dongle_id(p, prefer_readonly=prefer_readonly)
-  if dongle_id and dongle_id != UNREGISTERED_DONGLE_ID:
-    return dongle_id
-  dongle_id = secrets.token_hex(8)
-  p.put("DongleId", dongle_id)
-  cloudlog.warning(f"generated new DongleId={dongle_id} (no readonly dongle_id found)")
-  return dongle_id
 
 
 _impl = None

@@ -382,4 +382,9 @@ class CarInterface(CarInterfaceBase):
     ret.longitudinalStoppingSpeedOverride = get_longitudinal_stopping_speed_override(candidate, stock_cp.flags)
     override_excluded_platforms = VolkswagenFlags.MLB | VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO
     ret.longActiveWithGasOverride = alpha_long and not bool(stock_cp.flags & override_excluded_platforms)
+    if not stock_cp.flags & (VolkswagenFlags.PQ | VolkswagenFlags.MLB):
+      actuation = ret.longitudinalActuation
+      actuation.jerkControl = actuation.JerkControl.nativeAsymmetric
+      actuation.comfortBand = actuation.ComfortBand.asymmetric
+      actuation.maxJerkUp = actuation.maxJerkDown = 5.0
     return ret

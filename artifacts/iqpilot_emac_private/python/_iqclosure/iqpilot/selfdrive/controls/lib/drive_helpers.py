@@ -8,10 +8,11 @@ CAR_ROTATION_RADIUS = 0.0
 # This is a turn radius smaller than most cars can achieve
 MAX_CURVATURE = 0.4
 MAX_VEL_ERR = 5.0  # m/s
+MIN_STABLE_DELAY = 0.3
 
 MAX_LATERAL_JERK = 5.0  # m/s^3
-MAX_LATERAL_ACCEL_NO_ROLL = 5.0  # m/s^2
-MAX_LATERAL_ACCEL_NO_ROLL_OVERRIDE = 5.0  # m/s^2
+MAX_LATERAL_ACCEL_NO_ROLL = 3.0  # m/s^2
+MAX_LATERAL_ACCEL_NO_ROLL_OVERRIDE = 3.0  # m/s^2
 DEFAULT_STOPPING_SPEED = 0.25  # m/s
 
 
@@ -58,7 +59,10 @@ def get_accel_from_plan(speeds, accels, t_idxs, action_t=DT_MDL, stopping_speed=
   if len(speeds) == len(t_idxs):
     v_now = speeds[0]
     a_now = accels[0]
-    v_target = np.interp(action_t, t_idxs, speeds)
+    if action_t < MIN_STABLE_DELAY:
+      v_target = v_now + (action_t / MIN_STABLE_DELAY) * (np.interp(MIN_STABLE_DELAY, t_idxs, speeds) - v_now)
+    else:
+      v_target = np.interp(action_t, t_idxs, speeds)
     a_target = 2 * (v_target - v_now) / (action_t) - a_now
   else:
     v_now = 0.0

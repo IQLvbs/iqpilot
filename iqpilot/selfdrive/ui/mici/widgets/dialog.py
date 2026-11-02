@@ -4,7 +4,7 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 
 import abc
 import math
-import pyray as rl
+import raylib_nb as rl
 from collections.abc import Callable
 from typing import cast
 from iqpilot.system.ui.widgets import Widget, NavWidget
@@ -12,7 +12,7 @@ from iqpilot.system.ui.widgets.label import UnifiedLabel, gui_label
 from iqpilot.system.ui.widgets.mici_keyboard import MiciKeyboard
 from iqpilot.system.ui.lib.text_measure import measure_text_cached
 from iqpilot.system.ui.lib.wrap_text import wrap_text
-from iqpilot.system.ui.lib.application import gui_app, FontWeight, MousePos, MouseEvent
+from iqpilot.system.ui.lib.application import gui_app, FontWeight, MousePos, MouseEvent, TextAlignment, TextAlignmentVertical
 from iqpilot.system.ui.widgets.scroller import Scroller
 from iqpilot.system.ui.widgets.slider import RedBigSlider, BigSlider
 from iqpilot.common.filter_simple import FirstOrderFilter
@@ -79,7 +79,7 @@ class BigDialog(BigDialogBase):
                               int(max_width),
                               int(title_size.y))
     gui_label(title_rect, title_wrapped, 50, font_weight=FontWeight.BOLD,
-              alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+              alignment=TextAlignment.CENTER)
 
     # draw description
     desc_wrapped = '\n'.join(wrap_text(gui_app.font(FontWeight.MEDIUM), self._description, 30, int(max_width)))
@@ -90,7 +90,7 @@ class BigDialog(BigDialogBase):
                              int(desc_size.y))
     # TODO: text align doesn't seem to work properly with newlines
     gui_label(desc_rect, desc_wrapped, 30, font_weight=FontWeight.MEDIUM,
-              alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+              alignment=TextAlignment.CENTER)
 
 class BigConfirmationDialogV2(BigDialogBase):
   def __init__(self, title: str, icon: str, red: bool = False,
@@ -164,7 +164,8 @@ class BigInputDialog(BigDialogBase):
     super()._update_state()
 
     last_mouse_event = gui_app.last_mouse_event
-    if last_mouse_event.left_down and rl.check_collision_point_rec(last_mouse_event.pos, self._top_right_button_rect) and self._backspace_img_alpha.x > 1:
+    mouse_pos = rl.Vector2(last_mouse_event.pos.x, last_mouse_event.pos.y)
+    if last_mouse_event.left_down and rl.check_collision_point_rec(mouse_pos, self._top_right_button_rect) and self._backspace_img_alpha.x > 1:
       if self._backspace_held_time is None:
         self._backspace_held_time = rl.get_time()
 
@@ -251,9 +252,9 @@ class BigInputDialog(BigDialogBase):
     # TODO: need to track where press was so enter and back can activate on release rather than press
     #  or turn into icon widgets :eyes_open:
     # handle backspace icon click
-    if rl.check_collision_point_rec(mouse_pos, self._top_right_button_rect) and self._backspace_img_alpha.x > 254:
+    if rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._top_right_button_rect) and self._backspace_img_alpha.x > 254:
       self._keyboard.backspace()
-    elif rl.check_collision_point_rec(mouse_pos, self._top_left_button_rect) and self._enter_img_alpha.x > 254:
+    elif rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._top_left_button_rect) and self._enter_img_alpha.x > 254:
       # handle enter icon click
       self._confirm_callback()
 
@@ -270,7 +271,7 @@ class BigDialogOptionButton(Widget):
     self._selected = False
 
     self._label = UnifiedLabel(option, font_size=70, text_color=rl.Color(255, 255, 255, int(255 * 0.58)),
-                               font_weight=FontWeight.DISPLAY_REGULAR, alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE,
+                               font_weight=FontWeight.DISPLAY_REGULAR, alignment_vertical=TextAlignmentVertical.MIDDLE,
                                scroll=True)
 
   def show_event(self):

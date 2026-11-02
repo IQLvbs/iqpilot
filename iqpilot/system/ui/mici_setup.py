@@ -12,12 +12,12 @@ from enum import IntEnum
 import shutil
 from collections.abc import Callable
 
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.common.utils import run_cmd
 from iqpilot.system.hardware import HARDWARE
 from iqpilot.system.ui.lib.setup_install import maybe_update_os, write_setup_claim
-from iqpilot.system.ui.lib.application import gui_app, FontWeight
+from iqpilot.system.ui.lib.application import gui_app, FontWeight, TextAlignment, TextAlignmentVertical
 from iqpilot.system.ui.lib.wifi_manager import WifiManager
 from iqpilot.system.ui.lib.scroll_panel2 import GuiScrollPanel2
 from iqpilot.system.ui.widgets import Widget
@@ -112,6 +112,7 @@ class SetupState(IntEnum):
   DOWNLOADING = 4
   DOWNLOAD_FAILED = 5
   CUSTOM_SOFTWARE_WARNING = 6
+  OS_UPDATE_CONFIRM = 9
 
 
 class StartPage(Widget):
@@ -119,8 +120,8 @@ class StartPage(Widget):
     super().__init__()
 
     self._title = UnifiedLabel("start", 64, text_color=rl.Color(255, 255, 255, int(255 * 0.9)),
-                               font_weight=FontWeight.DISPLAY, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
-                               alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE)
+                               font_weight=FontWeight.DISPLAY, alignment=TextAlignment.CENTER,
+                               alignment_vertical=TextAlignmentVertical.MIDDLE)
 
     self._start_bg_txt = gui_app.texture("icons_mici/setup/green_button.png", 520, 224)
     self._start_bg_pressed_txt = gui_app.texture("icons_mici/setup/green_button_pressed.png", 520, 224)
@@ -174,7 +175,7 @@ class TermsHeader(Widget):
     super().__init__()
 
     self._title = UnifiedLabel(text, 36, text_color=rl.Color(255, 255, 255, int(255 * 0.9)),
-                               font_weight=FontWeight.BOLD, alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE,
+                               font_weight=FontWeight.BOLD, alignment_vertical=TextAlignmentVertical.MIDDLE,
                                line_height=0.8)
     self._icon_texture = icon_texture
 
@@ -370,7 +371,7 @@ class DownloadingPage(Widget):
     self._title_label = UnifiedLabel("downloading", 64, text_color=rl.Color(255, 255, 255, int(255 * 0.9)),
                                      font_weight=FontWeight.DISPLAY)
     self._progress_label = UnifiedLabel("", 128, text_color=rl.Color(255, 255, 255, int(255 * 0.9 * 0.35)),
-                                        font_weight=FontWeight.ROMAN, alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_BOTTOM)
+                                        font_weight=FontWeight.ROMAN, alignment_vertical=TextAlignmentVertical.BOTTOM)
     self._progress = 0
 
   def set_progress(self, progress: int):
@@ -440,6 +441,56 @@ class FailedPage(Widget):
       rect.y + rect.height - self._retry_button.rect.height,
       self._retry_button.rect.width,
       self._retry_button.rect.height,
+    ))
+
+
+class OsUpdatePage(Widget):
+  def __init__(self, decline_callback: Callable, confirm_callback: Callable):
+    super().__init__()
+
+    self._title_label = UnifiedLabel("update IQ.OS", 64, text_color=rl.Color(255, 255, 255, int(255 * 0.9)),
+                                     font_weight=FontWeight.DISPLAY)
+    self._body_label = UnifiedLabel("", 36, text_color=rl.Color(255, 255, 255, int(255 * 0.9 * 0.65)),
+                                    font_weight=FontWeight.ROMAN)
+
+    self._decline_button = SmallRedPillButton("cancel")
+    self._decline_button.set_click_callback(decline_callback)
+    self._decline_button.set_enabled(lambda: self.enabled)
+
+    self._confirm_button = WideRoundedButton("update")
+    self._confirm_button.set_click_callback(confirm_callback)
+    self._confirm_button.set_enabled(lambda: self.enabled)
+
+  def set_versions(self, current: str, required: str):
+    self._body_label.set_text(f"This software needs {required}. This device runs {current}. Updating flashes the OS, then reboots.")
+
+  def _render(self, rect: rl.Rectangle):
+    self._title_label.render(rl.Rectangle(
+      rect.x + 8,
+      rect.y + 10,
+      rect.width,
+      64,
+    ))
+
+    self._body_label.render(rl.Rectangle(
+      rect.x + 8,
+      rect.y + 10 + 64,
+      rect.width - 16,
+      self._body_label.get_content_height(int(rect.width - 16)),
+    ))
+
+    self._decline_button.render(rl.Rectangle(
+      rect.x + 8,
+      rect.y + rect.height - self._decline_button.rect.height,
+      self._decline_button.rect.width,
+      self._decline_button.rect.height,
+    ))
+
+    self._confirm_button.render(rl.Rectangle(
+      rect.x + 8 + self._decline_button.rect.width + 8,
+      rect.y + rect.height - self._confirm_button.rect.height,
+      self._confirm_button.rect.width,
+      self._confirm_button.rect.height,
     ))
 
 
@@ -546,6 +597,10 @@ class Setup(Widget):
 
     self._downloading_page = DownloadingPage()
 
+    self._os_update_coordinator = None
+    self._os_update_page = OsUpdatePage(self._os_update_decline, self._os_update_confirm)
+    self._os_update_page.set_enabled(lambda: self.enabled)
+
   def _nav_stack_tick(self):
     has_internet = self._network_monitor.network_connected.is_set()
     if has_internet and not self._prev_has_internet:
@@ -591,7 +646,7 @@ class Setup(Widget):
     if self._ble_pending_install_url is not None:
       url = self._ble_pending_install_url
       self._ble_pending_install_url = None
-      if self.state not in (SetupState.DOWNLOADING, SetupState.DOWNLOAD_FAILED):
+      if self.state not in (SetupState.DOWNLOADING, SetupState.DOWNLOAD_FAILED, SetupState.OS_UPDATE_CONFIRM):
         self.download(url)
     # Install progress is reported by the install thread (_ble_progress /
     # _maybe_update_os) as the single source of truth. Do NOT push per-frame here:
@@ -631,6 +686,8 @@ class Setup(Widget):
       self.render_downloading(rect)
     elif self.state == SetupState.DOWNLOAD_FAILED:
       self._download_failed_page.render(rect)
+    elif self.state == SetupState.OS_UPDATE_CONFIRM:
+      self._os_update_page.render(rect)
 
   def _custom_software_warning_back_button_callback(self):
     self._set_state(SetupState.SOFTWARE_SELECTION)
@@ -769,7 +826,23 @@ class Setup(Widget):
       self.download_failed(label, "Invalid URL")
 
   def _maybe_update_os(self, label: str) -> bool:
-    return maybe_update_os(INSTALL_PATH, HARDWARE, self.ble_setup, self.download_failed, label)
+    return maybe_update_os(INSTALL_PATH, HARDWARE, self.ble_setup, self.download_failed, label, self._prompt_os_update)
+
+  def _prompt_os_update(self, coordinator):
+    self._os_update_coordinator = coordinator
+    if coordinator is None:
+      self._set_state(SetupState.DOWNLOADING)
+      return
+    self._os_update_page.set_versions(coordinator.current, coordinator.required)
+    self._set_state(SetupState.OS_UPDATE_CONFIRM)
+
+  def _os_update_confirm(self):
+    if self._os_update_coordinator is not None:
+      self._os_update_coordinator.confirm()
+
+  def _os_update_decline(self):
+    if self._os_update_coordinator is not None:
+      self._os_update_coordinator.decline()
 
   def _download_thread(self):
     try:

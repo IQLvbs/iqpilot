@@ -261,6 +261,15 @@ class CarInterface(CarInterfaceBase):
   @staticmethod
   def _get_params_iq(stock_cp, ret, candidate, fingerprint, car_fw, alpha_long, is_release_iq, docs):
     del candidate, car_fw, alpha_long, is_release_iq, docs
+    actuation = ret.longitudinalActuation
+    actuation.jerkControl = actuation.JerkControl.nativeAsymmetric
+    actuation.maxJerkUp = actuation.maxJerkDown = 5.0
+    # The radar path synthesizes SCC14. The classic camera path only forwards
+    # it when present on bus 2; CAN-FD's AccelLimitBand fields remain unused.
+    sends_scc14 = not stock_cp.flags & HyundaiFlags.CANFD and stock_cp.openpilotLongitudinalControl and (
+      not stock_cp.flags & HyundaiFlags.CAMERA_SCC or fingerprint[2].get(0x389) == 8)
+    if sends_scc14:
+      actuation.comfortBand = actuation.ComfortBand.asymmetric
     if not stock_cp.flags & HyundaiFlags.CANFD and 0x391 in fingerprint[0]:
       ret.flags |= HyundaiFlagsIQ.HAS_LFA_BUTTON
       ret.iqSafetyFlags |= HyundaiSafetyFlagsIQ.HAS_LDA_BUTTON

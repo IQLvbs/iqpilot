@@ -27,7 +27,8 @@ def mqb_car():
   return car
 
 
-def apply_long(car, *, accel=-1.0, speed=0.0, planned_speed=0.0, pitch=0.0, active=True, gas=False, brake=False):
+def apply_long(car, *, accel=-1.0, speed=0.0, planned_speed=0.0, pitch=0.0, active=True, gas=False, brake=False,
+               comfort=False, fcw=False, lead_distance=0.0, policy=None):
   cs = car.CS
   cs.out.vEgo = speed
   cs.out.standstill = speed == 0.0
@@ -39,10 +40,18 @@ def apply_long(car, *, accel=-1.0, speed=0.0, planned_speed=0.0, pitch=0.0, acti
   cc.actuators.speed = planned_speed
   cc.actuators.longControlState = LongCtrlState.stopping if accel < 0 else LongCtrlState.pid
   cc.orientationNED = [0.0, pitch, 0.0]
+  cc.longComfortMode = comfort
+  cc.hudControl.leadVisible = lead_distance > 0
+  cc.hudControl.leadDistance = lead_distance
+  if fcw:
+    cc.hudControl.visualAlert = structs.CarControl.HUDControl.VisualAlert.fcw
   # Each sample represents the next longitudinal-control tick.
   car.CC.frame += -car.CC.frame % car.CC.CCP.ACC_CONTROL_STEP
   now_nanos = (car.CC.frame + 1) * 10_000_000
-  output, messages = car.apply(cc.as_reader(), structs.IQCarControl(), now_nanos)
+  iq = structs.IQCarControl()
+  if policy is not None:
+    iq.longitudinalComfort = policy
+  output, messages = car.apply(cc.as_reader(), iq, now_nanos)
   parser = CANParser("vw_mqb", [("ACC_06", 0), ("ACC_07", 0)], car.CC.CAN.pt)
   parser.update([(now_nanos, messages)])
   assert {0x122, 0x12E} <= {address for address, _, _ in messages}
@@ -143,3 +152,31 @@ def test_esp_hold_torque_signals_round_trip():
   parser.update([(10_000_000, [message])])
   assert parser.vl["ESP_15"]["ESP_Index_Haltemoment"] == 1
   assert parser.vl["ESP_15"]["ESP_Haltemoment"] == 1230
+
+
+def comfort_fields(tsk):
+  return (tsk["ACC_zul_Regelabw_unten"], tsk["ACC_zul_Regelabw_oben"],
+          tsk["ACC_neg_Sollbeschl_Grad_02"], tsk["ACC_pos_Sollbeschl_Grad_02"])
+
+
+@pytest.mark.parametrize("kwargs", [{}, {"fcw": True}, {"gas": True}, {"lead_distance": 40.0}])
+def test_comfort_mode_off_keeps_fixed_comfort_band_and_jerk(mqb_car, kwargs):
+  for _ in range(20):
+    _, tsk, _ = apply_long(mqb_car, accel=0.5, speed=20.0, **kwargs)
+  # The DBC encodes the band in 0.024 / 0.0625 steps, so the fixed 0.2 lands one step below.
+  assert comfort_fields(tsk) == pytest.approx((0.2, 0.2, 4.0, 4.0), abs=0.0625)
+
+
+def test_comfort_mode_fcw_forces_fastest_reaction(mqb_car):
+  policy = structs.IQCarControl.LongitudinalComfort(valid=True, jerkUp=0.8, jerkDown=0.8, comfortEnabled=True,
+                                                  accelDeviationAbove=0.18, accelDeviationBelow=0.18)
+  for _ in range(20):
+    apply_long(mqb_car, accel=0.5, speed=20.0, comfort=True, lead_distance=40.0, policy=policy)
+  _, tsk, _ = apply_long(mqb_car, accel=-3.0, speed=20.0, comfort=True, lead_distance=40.0, fcw=True, policy=policy)
+  assert comfort_fields(tsk) == pytest.approx((0.0, 0.0, 5.0, 5.0))
+
+
+def test_comfort_mode_driver_gas_override_suspends_jerk_constraints(mqb_car):
+  policy = structs.IQCarControl.LongitudinalComfort(valid=True, jerkUp=5.0, jerkDown=5.0)
+  _, tsk, _ = apply_long(mqb_car, accel=0.5, speed=20.0, comfort=True, gas=True, policy=policy)
+  assert comfort_fields(tsk) == pytest.approx((0.0, 0.0, 5.0, 5.0))

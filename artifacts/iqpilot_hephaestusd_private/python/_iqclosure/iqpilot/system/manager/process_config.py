@@ -98,11 +98,14 @@ def iqmapd_needed(params: Params) -> bool:
     or params.get_bool("VisionCurveSpeedController")
   )
 
+def iqmodeld_model_ready(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return (not is_tinygrad_model(started, params, CP)) or params.get_bool("IqModelLoaded")
+
 def iqmapd_onroad(started: bool, params: Params, CP: car.CarParams) -> bool:
-  return started and params.get_bool("NavigationEnabled") and iqmapd_needed(params)
+  return started and params.get_bool("NavigationEnabled") and iqmapd_needed(params) and iqmodeld_model_ready(started, params, CP)
 
 def mapd_onroad(started: bool, params: Params, CP: car.CarParams) -> bool:
-  return started and iqmapd_needed(params)
+  return started and iqmapd_needed(params) and iqmodeld_model_ready(started, params, CP)
 
 def constructiond_onroad(started: bool, params: Params, CP: car.CarParams) -> bool:
   return started and params.get_bool("ConstructionZoneAssist")

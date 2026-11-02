@@ -3,7 +3,7 @@ import re
 from collections import OrderedDict
 
 from PIL import Image, ImageDraw, ImageFont
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.system.ui.lib.application import FONT_DIR
 

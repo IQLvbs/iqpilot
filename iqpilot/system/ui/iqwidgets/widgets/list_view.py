@@ -6,7 +6,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.system.ui.iqwidgets.lib.styles import ink, metrics
 from iqpilot.system.ui.widgets.button import Button, ButtonStyle
 from iqpilot.system.ui.iqwidgets.lib import canvas
@@ -16,7 +16,7 @@ from iqpilot.system.ui.widgets.toggle import Toggle
 import unicodedata
 from iqpilot.common.params import Params, UnknownKeyName
 from iqpilot.system.ui.widgets.label import gui_label
-from iqpilot.system.ui.lib.application import gui_app, MousePos, FontWeight
+from iqpilot.system.ui.lib.application import gui_app, MousePos, FontWeight, TextAlignment, TextAlignmentVertical
 from iqpilot.system.ui.widgets.list_view import (ListItem, ToggleAction, ItemAction, MultipleButtonAction,
                                                    ButtonAction, _resolve_value, DualButtonAction)
 
@@ -135,8 +135,8 @@ class IQButtonAction(ButtonAction):
       self._value_label.render(body)
     else:
       gui_label(body, value, font_size=metrics.TITLE_FS, color=self._readout_tint,
-                font_weight=FontWeight.NORMAL, alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
-                alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE)
+                font_weight=FontWeight.NORMAL, alignment=TextAlignment.LEFT,
+                alignment_vertical=TextAlignmentVertical.MIDDLE)
     return pressed
 
 
@@ -203,7 +203,7 @@ class IQMultipleButtonAction(MultipleButtonAction):
 
   def _segment_at(self, mouse_pos: MousePos) -> int:
     track = self._track_rect()
-    if not rl.check_collision_point_rec(mouse_pos, track):
+    if not rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), track):
       return -1
     return min(len(self.buttons) - 1, int((mouse_pos.x - track.x) / (track.width / len(self.buttons))))
 
@@ -373,8 +373,8 @@ class IQListItem(ListItem):
     span = rl.Rectangle(from_x, self._rect.y, self._rect.width - (from_x - self._rect.x) - metrics.GUTTER, metrics.ROW)
     if span.width > 0:
       gui_label(span, self.right_value, font_size=metrics.TITLE_FS, color=self._ro_tint,
-                font_weight=FontWeight.NORMAL, alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT,
-                alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE)
+                font_weight=FontWeight.NORMAL, alignment=TextAlignment.RIGHT,
+                alignment_vertical=TextAlignmentVertical.MIDDLE)
 
   def _draw_caption(self) -> None:
     content_w = int(self._rect.width - metrics.GUTTER * 2)
@@ -735,7 +735,7 @@ class IQOptionControl(ItemAction):
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
     for direction, zone in self._zones.items():
-      if self._step_allowed(direction) and rl.check_collision_point_rec(mouse_pos, zone):
+      if self._step_allowed(direction) and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), zone):
         self.set_value(self._clamp(self.current_value + direction * self.value_change_step))
         return
     self.set_value(self.current_value)
@@ -888,7 +888,7 @@ class _TreeRow(Button):
                favorite_callback=None, is_favorite=False, is_expanded=False, show_leaf_accent=True,
                status_pill: StatusPill | None = None, detail_text: str = ""):
     super().__init__(text, click_callback, button_style=ButtonStyle.NORMAL,
-                     text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
+                     text_alignment=TextAlignment.LEFT,
                      text_padding=20 + indent_level * 30, elide_right=True)
     self.text = text
     self.ref = ref
@@ -964,7 +964,7 @@ class _TreeRow(Button):
                 ink.ACCENT if self.is_favorite else rl.GRAY)
 
   def _handle_mouse_release(self, mouse_pos):
-    if not self.is_folder and self._favorite_callback and rl.check_collision_point_rec(mouse_pos, self._star_hitbox()):
+    if not self.is_folder and self._favorite_callback and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._star_hitbox()):
       self._favorite_callback()
       return True
     return super()._handle_mouse_release(mouse_pos)
@@ -1175,14 +1175,14 @@ class PickerDialog(MultiOptionDialog):
 
   # -- input ----------------------------------------------------------------
   def _handle_mouse_press(self, mouse_pos):
-    if self._search_rect and rl.check_collision_point_rec(mouse_pos, self._search_rect):
+    if self._search_rect and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._search_rect):
       self._search_pressed = True
       return True
     return super()._handle_mouse_press(mouse_pos)
 
   def _handle_mouse_release(self, mouse_pos):
     tapped_search = (self._search_pressed and self._search_rect
-                     and rl.check_collision_point_rec(mouse_pos, self._search_rect))
+                     and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._search_rect))
     self._search_pressed = False
     if tapped_search:
       self._open_search()

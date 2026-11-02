@@ -44,8 +44,9 @@ def test_hda2_long_replaces_the_silenced_adas_heartbeat_and_cluster_status(monke
   sends = sent_frames(interface)
 
   heartbeat = [s for s in sends if s[0] == ADRV_0x51]
-  assert len(heartbeat) == 100
-  assert {s[2] for s in heartbeat} == {can.ACAN}
+  assert len(heartbeat) == 200
+  assert {s[2] for s in heartbeat} == {can.ACAN, can.CAM}
+  assert sum(1 for s in heartbeat if s[2] == can.ACAN) == 100
 
   cluster = [s for s in sends if s[0] == LFAHDA_CLUSTER]
   assert len(cluster) == 20

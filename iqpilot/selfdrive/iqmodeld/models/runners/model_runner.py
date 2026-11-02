@@ -100,6 +100,11 @@ def wait_for_model_load_memory(need_mb: int, timeout_s: float = MODEL_LOAD_MEMOR
     raise RuntimeError(f"insufficient memory to load model: {avail}MB available < {need_mb}MB needed")
 
 
+def load_big_model_pickle(path: str) -> Any:
+  wait_for_model_load_memory(int(os.path.getsize(path) / (1024 * 1024) * 2.5) + 256)
+  return load_pickle(path)
+
+
 def load_artifact_metadata(metadata_filename):
   """Read one artifact's metadata pkl: (input shapes, output slices)."""
   try:

@@ -1,5 +1,5 @@
 import random
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.system.ui.lib.application import gui_app, FontWeight
 from iqpilot.selfdrive.ui.lib.motd import load_motds

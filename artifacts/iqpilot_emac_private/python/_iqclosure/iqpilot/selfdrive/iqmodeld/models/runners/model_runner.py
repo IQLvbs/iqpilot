@@ -2,6 +2,7 @@
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
 """
 import os
+import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -64,6 +65,44 @@ _configure_accelerator()
 # referenced as metadata (pre-fix manifests self-referenced the artifact), and
 # unpickling it here double-loads the model onto the GPU
 _META_MAX_BYTES = 1 << 20
+
+MODEL_LOAD_MEMORY_WAIT_S = 90.0
+MODEL_LOAD_MEMORY_FALLBACK_S = 15.0
+MODEL_LOAD_MEMORY_RECOVERY_MB = 64
+
+
+def mem_available_mb() -> int:
+  try:
+    with open("/proc/meminfo") as f:
+      for line in f:
+        if line.startswith("MemAvailable:"):
+          return int(line.split()[1]) // 1024
+  except OSError:
+    pass
+  return 1 << 20
+
+
+def wait_for_model_load_memory(need_mb: int, timeout_s: float = MODEL_LOAD_MEMORY_WAIT_S) -> None:
+  import gc
+  gc.collect()
+  start = time.monotonic()
+  deadline = start + timeout_s
+  avail = mem_available_mb()
+  start_avail = avail
+  while avail < need_mb and time.monotonic() < deadline:
+    cloudlog.warning(f"model load deferring: {avail}MB available < {need_mb}MB needed; waiting for memory to settle")
+    time.sleep(5.0)
+    gc.collect()
+    avail = mem_available_mb()
+    if time.monotonic() - start >= MODEL_LOAD_MEMORY_FALLBACK_S and avail < start_avail + MODEL_LOAD_MEMORY_RECOVERY_MB:
+      break
+  if avail < need_mb:
+    raise RuntimeError(f"insufficient memory to load model: {avail}MB available < {need_mb}MB needed")
+
+
+def load_big_model_pickle(path: str) -> Any:
+  wait_for_model_load_memory(int(os.path.getsize(path) / (1024 * 1024) * 2.5) + 256)
+  return load_pickle(path)
 
 
 def load_artifact_metadata(metadata_filename):
@@ -205,6 +244,18 @@ def _is_split_bundle(bundle) -> bool:
   return not present.isdisjoint(split_kinds)
 
 
+def _optional_private_runner(bundle):
+  try:
+    from iqpilot.system.proprietary_runtime._verified_import import import_verified_module
+    module = import_verified_module("iqpilot_context_private", "iqpilot_private.context.iqmodel_runtime")
+  except Exception:
+    return None
+  builder = getattr(module, "build_runner", None)
+  if builder is None:
+    return None
+  return builder(bundle)
+
+
 def get_model_runner() -> "ModelRunner":
   """Build the runner backend that fits the active bundle (supercombo / fused /
   combined-split / split / single). Concrete runners are imported lazily so one
@@ -216,6 +267,10 @@ def get_model_runner() -> "ModelRunner":
   # device; the big host serves the bundle's precompiled artifact
   if not (bundle and bundle.models and _qcom_models(bundle)):
     return TinygradRunner(ModelType.supercombo)
+
+  private_runner = _optional_private_runner(bundle)
+  if private_runner is not None:
+    return private_runner
 
   if _is_supercombo_bundle(bundle):
     from iqpilot.selfdrive.iqmodeld.models.runners.tinygrad.supercombo_runner import TinygradSupercomboRunner

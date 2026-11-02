@@ -1,4 +1,4 @@
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.system.ui.lib.application import gui_app, FontWeight
 from iqpilot.system.ui.lib.multilang import tr
 from iqpilot.system.ui.widgets import DialogResult

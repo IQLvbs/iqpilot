@@ -114,6 +114,8 @@ def build_controls(module, case, lookahead=False, slew=False, smooth=False, nnff
   controls.nav_exit_lane_change = False
   controls.nav_turn_signal_controller = SimpleNamespace(update=lambda *args: (False, False))
   controls.LoC = SimpleNamespace(long_control_state="off", reset=lambda: None, update=lambda *args, **kwargs: 0.125)
+  controls.enable_long_comfort_mode = False
+  controls.longitudinal_comfort = module.LongitudinalComfort(controls.CP_IQ.longitudinalActuation)
   controls.iq_lateral_allowed = lambda sm: sm["selfdriveState"].active
   controls.sm = ScenarioMessages()
   return controls
@@ -131,7 +133,8 @@ def set_frame(controls, frame):
   )
   controls.sm["lateralTorqueParameters"] = log.LateralTorqueParameters.new_message()
   controls.sm["selfdriveState"] = SimpleNamespace(enabled=active, active=active)
-  controls.sm["longitudinalPlan"] = SimpleNamespace(speeds=[speed], aTarget=0.125, leadDistance=30.0, hasLead=True, shouldStop=False)
+  controls.sm["longitudinalPlan"] = SimpleNamespace(speeds=[speed], aTarget=0.125, leadDistance=30.0, hasLead=True, shouldStop=False,
+                                                   fcw=False, longitudinalPlanSource='cruise', stopOffset=SimpleNamespace(version=0, valid=False))
   controls.sm["onroadEvents"] = []
   controls.sm["iqState"] = SimpleNamespace(aol=SimpleNamespace(active=280 <= frame < 300))
   controls.sm["lateralDelay"] = SimpleNamespace(lateralDelay=0.4 if frame < 300 else 0.15)

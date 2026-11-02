@@ -4,7 +4,7 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 
 import time
 
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.common.params import Params
 from iqpilot.ui.onroad.big_model_status import SourceState, draw_source_label, resolve_source

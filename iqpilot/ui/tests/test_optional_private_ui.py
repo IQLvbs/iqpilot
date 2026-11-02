@@ -4,7 +4,7 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 import threading
 from types import SimpleNamespace
 
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.ui import optional_private
 from iqpilot.ui.onroad.hud_renderer import REASONING_BAND_HEIGHT, _reasoning_rect

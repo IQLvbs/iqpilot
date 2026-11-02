@@ -4,7 +4,7 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 
 import time
 import numpy as np
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.cereal import messaging, car, log
 from iqpilot.common.params import Params
 from iqpilot.cereal.visionipc import VisionStreamType
@@ -17,7 +17,7 @@ from iqpilot.selfdrive.ui.mici.onroad.model_renderer import ModelRenderer
 from iqpilot.selfdrive.ui.mici.onroad.confidence_ball import ConfidenceBall
 from iqpilot.selfdrive.ui.mici.onroad.boost_bar import BoostBar
 from iqpilot.selfdrive.ui.mici.onroad.cameraview import CameraView
-from iqpilot.system.ui.lib.application import FontWeight, gui_app, MousePos, MouseEvent
+from iqpilot.system.ui.lib.application import FontWeight, gui_app, MousePos, MouseEvent, TextAlignment, TextAlignmentVertical
 from iqpilot.system.ui.widgets.label import UnifiedLabel
 from iqpilot.system.ui.widgets import Widget
 from iqpilot.common.issue_debug import log_issue_limited
@@ -193,8 +193,8 @@ class AugmentedRoadView(CameraView):
                                            MICI_EXPERIMENTAL_ICON_SIZE)
     self._offroad_label = UnifiedLabel(tr("start the car to\nuse IQ.Pilot"), 54, FontWeight.DISPLAY,
                                        text_color=rl.Color(255, 255, 255, int(255 * 0.9)),
-                                       alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
-                                       alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE)
+                                       alignment=TextAlignment.CENTER,
+                                       alignment_vertical=TextAlignmentVertical.MIDDLE)
 
     # debug
     self._pm = messaging.PubMaster(['uiDebug'])
@@ -220,7 +220,7 @@ class AugmentedRoadView(CameraView):
       self._offroad_label.set_text(tr("start the car to\nuse IQ.Pilot"))
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
-    if self._navigation.active and rl.check_collision_point_rec(mouse_pos, self._content_rect):
+    if self._navigation.active and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._content_rect):
       self._navigation.tap()
       return
     # Don't trigger click callback if bookmark was triggered

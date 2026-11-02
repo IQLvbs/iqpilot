@@ -10,11 +10,10 @@ import numpy as np
 
 from iqpilot.selfdrive.iqmodeld.models.combined_artifact import resolve_combined_split_artifact
 from iqpilot.selfdrive.iqmodeld.models.helpers import get_active_bundle
-from iqpilot.selfdrive.iqmodeld.models.runners.model_runner import NumpyDict, ShapeDict, SliceDict
+from iqpilot.selfdrive.iqmodeld.models.runners.model_runner import NumpyDict, ShapeDict, SliceDict, load_big_model_pickle
 from iqpilot.selfdrive.iqmodeld.models.runners.model_runner import ModelRunner
 from iqpilot.selfdrive.iqmodeld.models.split_model_constants import SplitModelConstants
 from iqpilot.selfdrive.iqmodeld.parser import PhaseParser
-from iqpilot.selfdrive.iqmodeld.models.iqc import load_pickle
 
 
 def _tinygrad_imports():
@@ -64,7 +63,7 @@ class TinygradCombinedSplitRunner(ModelRunner):
     if self._artifact_path is None:
       raise FileNotFoundError("No IQ combined split artifact is available for the active bundle")
 
-    runtime_package: dict[Any, Any] = load_pickle(self._artifact_path)
+    runtime_package: dict[Any, Any] = load_big_model_pickle(self._artifact_path)
 
     self._meta_by_role = runtime_package.get("meta_by_role", runtime_package.get("metadata", {}))
     self._policy_roles = runtime_package.get("roles", _phase_roles(self._meta_by_role))

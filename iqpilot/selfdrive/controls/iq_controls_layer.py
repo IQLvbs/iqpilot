@@ -11,6 +11,7 @@ from iqpilot.common.constants import CV
 from iqpilot.common.params import Params
 from iqpilot.common.swaglog import cloudlog
 from iqpilot.selfdrive.car.enhanced_stock_longitudinal_control import build_iq_control_params_from_plan
+from iqpilot.selfdrive.car.helpers import asdictref
 from iqpilot.selfdrive.iqmodeld.models.inference_state import InferenceStateBase
 from iqpilot.selfdrive.controls.lib.helpers.blinker_pause import IQSignalPauseController
 from iqpilot.selfdrive.controls.lib.iq_dynamic.radar_manager import RadarManager
@@ -41,6 +42,7 @@ class IQControlsLayer(InferenceStateBase):
     self._sync_set_speed = self._want_set_speed_to_limit()
     self._slc_limit_kph = None
     self._slc_limit_pending_kph = None
+    self._cached_iq_carcontrol = None
 
   def _want_set_speed_to_limit(self) -> bool:
     try:
@@ -105,8 +107,11 @@ class IQControlsLayer(InferenceStateBase):
     envelope.iqCarControl = CC_IQ
     pm.send('iqCarControl', envelope)
 
-  def publish_iq_state(self, sm: messaging.SubMaster, pm: messaging.PubMaster) -> None:
+  def publish_iq_state(self, sm: messaging.SubMaster, pm: messaging.PubMaster, comfort: structs.IQCarControl.LongitudinalComfort) -> None:
     fresh = sm.updated['iqState'] or sm.updated['iqPlan'] or (self._needs_iq_lead_data and sm.updated['radarState'])
-    if not fresh:
-      return
-    self._emit(self._compose_iq_carcontrol(sm), sm, pm)
+    if fresh or self._cached_iq_carcontrol is None:
+      self._cached_iq_carcontrol = self._compose_iq_carcontrol(sm)
+    # Keep the slower IQ composition at its input rate while delivering the
+    # current comfort policy on every control tick, including resets/gate-off.
+    self._cached_iq_carcontrol.longitudinalComfort = asdictref(comfort)
+    self._emit(self._cached_iq_carcontrol, sm, pm)

@@ -4,7 +4,7 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 
 import unicodedata
 
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.cereal import car
 from iqpilot.selfdrive.car.vehicle_catalog import load_catalog

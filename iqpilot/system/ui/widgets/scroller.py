@@ -2,7 +2,7 @@
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos/
 """
 
-import pyray as rl
+import raylib_nb as rl
 import numpy as np
 from collections.abc import Callable
 
@@ -95,10 +95,6 @@ class Scroller(Widget):
       self._scrolling_to = scroll_offset
     else:
       self.scroll_panel.set_offset(scroll_offset)
-
-  @property
-  def is_auto_scrolling(self) -> bool:
-    return self._scrolling_to is not None
 
   def add_widget(self, item: Widget) -> None:
     self._items.append(item)

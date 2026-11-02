@@ -19,7 +19,7 @@ from iqpilot.common.gps import get_gps_location_service
 from iqpilot.selfdrive.car.car_specific import CarSpecificEvents
 from iqpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
 from iqpilot.selfdrive.selfdrived.events import Events, ET
-from iqpilot.selfdrive.selfdrived.helpers import ExcessiveActuationCheck, SteerShortfallCheck
+from iqpilot.selfdrive.selfdrived.helpers import ExcessiveActuationCheck, SteerShortfallCheck, unresponsive_critical_services
 from iqpilot.selfdrive.selfdrived.state import StateMachine
 from iqpilot.selfdrive.selfdrived.alertmanager import AlertManager, set_offroad_alert
 from iqpilot.selfdrive.longitudinal_settings import get_runtime_personality
@@ -57,6 +57,10 @@ IGNORED_SAFETY_MODES = (SafetyModel.silent, SafetyModel.noOutput)
 def rx_checks_failed_while_powered(panda_state) -> bool:
   # a car powering off stops its bus, which fails the rx checks a moment after its ignition line falls
   return bool(panda_state.safetyRxChecksInvalid and (panda_state.ignitionLine or panda_state.ignitionCan))
+
+def can_bus_loss_expected_in_park(in_park: bool, panda_states) -> bool:
+  return in_park and len(panda_states) > 0 and not any(ps.ignitionCan for ps in panda_states)
+
 
 NON_BLOCKING_PROCESSES = {'mapd', 'iqmapd', 'navd', 'navincidentd', 'navrenderd', 'iqsentryd', 'k3wgd', 'webrtcd', 'stream_encoderd'}
 
@@ -108,7 +112,7 @@ class SelfdriveD(GapButtonActions):
     # TODO: de-couple selfdrived with card/conflate on carState without introducing controls mismatches
     self.car_state_sock = messaging.sub_sock('carState', timeout=20)
 
-    ignore = self.sensor_packets + self.gps_packets + ['alertDebug', 'lateralManeuverPlan', 'iqDriveModelData', 'iqNavState', 'vehicleParameters', 'driverAssistance', 'testJoystick']
+    ignore = self.sensor_packets + self.gps_packets + ['alertDebug', 'lateralManeuverPlan', 'iqDriveModelData', 'iqNavState', 'vehicleParameters', 'driverAssistance', 'testJoystick', 'iqCarState']
     if os.path.exists('/tmp/lite_hw'):
       ignore += ['driverCameraState', 'driverMonitoringState']
     if SIMULATION:
@@ -121,7 +125,7 @@ class SelfdriveD(GapButtonActions):
                                    'managerState', 'vehicleParameters', 'radarState', 'lateralTorqueParameters',
                                    'controlsState', 'carControl', 'driverAssistance', 'alertDebug', 'userBookmark', 'audioFeedback',
                                    'lateralManeuverPlan',
-                                   'iqDriveModelData', 'iqNavState', 'iqPlan', 'testJoystick'] + \
+                                   'iqDriveModelData', 'iqNavState', 'iqPlan', 'testJoystick', 'iqCarState'] + \
                                    self.camera_packets + self.sensor_packets + self.gps_packets,
                                   ignore_alive=ignore, ignore_avg_freq=ignore,
                                   ignore_valid=ignore, frequency=int(1/DT_CTRL))
@@ -155,6 +159,7 @@ class SelfdriveD(GapButtonActions):
     self.events_prev = []
     self.logged_comm_issue = None
     self.not_running_prev = None
+    self.unresponsive_prev: list[str] = []
     self.wide_cam_faulty = False
     self.experimental_mode = False
     self.personality = get_runtime_personality(self.params)
@@ -343,7 +348,7 @@ class SelfdriveD(GapButtonActions):
       car_events = self.car_events.update(CS, self.CS_prev, self.sm['carControl']).to_msg()
       self.events.add_from_msg(car_events)
 
-      car_events_iq = self.car_events_iq.update(CS, self.events)
+      car_events_iq = self.car_events_iq.update(CS, self.events, self.sm['iqCarState'])
       self._add_iq_event_names(car_events_iq.names)
 
       if self.CP.notCar:
@@ -463,7 +468,11 @@ class SelfdriveD(GapButtonActions):
       if not_running != self.not_running_prev:
         cloudlog.event("process_not_running", not_running=not_running, error=True)
       self.not_running_prev = not_running
-    if self.sm.recv_frame['managerState'] and (not_running - self.ignored_processes):
+    unresponsive = unresponsive_critical_services(self.sm)
+    if unresponsive != self.unresponsive_prev and unresponsive:
+      cloudlog.event("critical_service_unresponsive", services=unresponsive, error=True)
+    self.unresponsive_prev = unresponsive
+    if (self.sm.recv_frame['managerState'] and (not_running - self.ignored_processes)) or unresponsive:
       self.events.add(EventName.processNotRunning)
       if 'iqmodeld' in not_running and self.model_download_pending:
         self.events_iq.add(custom.IQOnroadEvent.EventName.modelUpdating)
@@ -580,8 +589,12 @@ class SelfdriveD(GapButtonActions):
         self.events.add(EventName.modeldLagging)
 
     # Mute canBusMissing in Park so standby guidance suppression does not create a false alarm.
-    if CS.gearShifter == car.CarState.GearShifter.park and self.aol.enabled:
+    in_park = CS.gearShifter == car.CarState.GearShifter.park
+    if in_park and self.aol.enabled:
       self.events.remove(EventName.canBusMissing)
+    if can_bus_loss_expected_in_park(in_park, self.sm['pandaStates']):
+      self.events.remove(EventName.canBusMissing)
+      self.events.remove(EventName.canError)
 
     GapButtonActions.update(self, CS, self.events_iq, self.experimental_mode)
 

@@ -6,6 +6,7 @@ import iqpilot.cereal.messaging as messaging
 from iqpilot.common.constants import CV
 from iqpilot.common.realtime import DT_CTRL
 from iqpilot.selfdrive.locationd.calibrationd import MIN_SPEED_FILTER
+from iqpilot.selfdrive.selfdrived.helpers import CRITICAL_SERVICES, unresponsive_critical_services
 from iqpilot.system.micd import SAMPLE_RATE, SAMPLE_BUFFER
 from iqpilot.selfdrive.ui.feedback.feedbackd import FEEDBACK_MAX_DURATION
 from iqpilot.system.hardware import HARDWARE
@@ -98,10 +99,23 @@ def posenet_invalid_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.Sub
   return NoEntryAlert(msg, alert_text_1="Posenet Speed Invalid")
 
 
+def unresponsive_reason(sm: messaging.SubMaster) -> str | None:
+  # a restarted or hung process can keep a running PID while its output is gone
+  unresponsive = unresponsive_critical_services(sm)
+  return f"{CRITICAL_SERVICES[unresponsive[0]]} Not Responding" if unresponsive else None
+
+
 def process_not_running_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
   not_running = [p.name for p in sm['managerState'].processes if not p.running and p.shouldBeRunning]
+  if not not_running and (reason := unresponsive_reason(sm)):
+    return NoEntryAlert(reason)
   msg = ', '.join(not_running)
   return NoEntryAlert(msg, alert_text_1="Process Not Running")
+
+
+def process_not_running_disable_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
+  reason = unresponsive_reason(sm) or "Process Not Running"
+  return soft_disable_alert(reason)(CP, CS, sm, metric, soft_disable_time, personality)
 
 
 def camera_malfunction_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
@@ -654,7 +668,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.processNotRunning: {
     ET.NO_ENTRY: process_not_running_alert,
-    ET.SOFT_DISABLE: soft_disable_alert("Process Not Running"),
+    ET.SOFT_DISABLE: process_not_running_disable_alert,
   },
 
   EventName.radarFault: {
@@ -693,6 +707,16 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
     ET.IMMEDIATE_DISABLE: ImmediateDisableAlert("Cruise Fault: Restart the Car"),
     ET.PERMANENT: NormalPermanentAlert("Cruise Fault: Restart the car to engage"),
     ET.NO_ENTRY: NoEntryAlert("Cruise Fault: Restart the Car"),
+  },
+
+  EventName.accFaultedHardDecel: {
+    ET.IMMEDIATE_DISABLE: ImmediateDisableAlert("ACC fault from hard braking"),
+    ET.PERMANENT: NormalPermanentAlert("IQ.Pilot Temporarily Unavailable", "Temporary ACC fault caused by hard braking"),
+    ET.NO_ENTRY: NoEntryAlert("Temporary ACC fault caused by hard braking"),
+  },
+
+  EventName.accFaultedHardDecelLateral: {
+    ET.PERMANENT: NormalPermanentAlert("IQ.Pilot Temporarily Unavailable", "Temporary ACC fault caused by hard braking", duration=5.0, priority=Priority.LOW),
   },
 
   EventName.cruiseFaultLateralAllowed: {

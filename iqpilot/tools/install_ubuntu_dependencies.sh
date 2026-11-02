@@ -49,6 +49,7 @@ function install_ubuntu_common_requirements() {
     libbz2-dev \
     libeigen3-dev \
     libffi-dev \
+    libgbm-dev \
     libgles2-mesa-dev \
     libglfw3-dev \
     libglib2.0-0 \
@@ -56,7 +57,12 @@ function install_ubuntu_common_requirements() {
     libncurses5-dev \
     libusb-1.0-0-dev \
     libva-dev \
+    libx11-dev \
     libx264-dev \
+    libxcursor-dev \
+    libxi-dev \
+    libxinerama-dev \
+    libxrandr-dev \
     libzmq3-dev \
     libzstd-dev \
     libsqlite3-dev \

@@ -25,7 +25,7 @@ from iqdbc.car.car_helpers import get_car, interfaces
 from iqdbc.car.interfaces import CarInterfaceBase, RadarInterfaceBase
 from iqpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
 from iqpilot.selfdrive.car.cruise import VCruiseHelper
-from iqpilot.selfdrive.car.helpers import convert_iq_car_control_compact, convert_to_capnp
+from iqpilot.selfdrive.car.helpers import convert_iq_car_control_compact, convert_to_capnp, invalidate_stale_longitudinal_comfort
 from iqpilot.selfdrive.controls.lib.actuator_feedback import AppliedActuators, CAR_CONTROL_TIMEOUT_NS, car_output_supports_pairing
 from iqpilot.selfdrive.controls.lib.hkg_tuning import uses_hkg_tuning
 
@@ -266,6 +266,9 @@ class Car:
     CS_IQ.slcSetSpeedRequestId = self.v_cruise_helper.slc_set_speed_request_id
     CS_IQ.slcSetSpeedGestureId = self.v_cruise_helper.slc_set_speed_gesture_id
     CS_IQ.slcSetSpeedRequestKph = self.v_cruise_helper.slc_set_speed_request_kph
+    CS_IQ.hcaSessionSec = float(getattr(self.CI.CC, "hca_session_sec", 0.0))
+    CS_IQ.hcaResetCount = min(int(getattr(self.CI.CC, "hca_reset_count", 0)), 65535)
+    CS_IQ.hcaTimerAlert = bool(getattr(self.CI.CC, "eps_timer_soft_disable_alert", False))
 
     return CS, CS_IQ, RD
 
@@ -380,6 +383,7 @@ class Car:
       model = self.sm['modelV2'] if self.sm.valid['modelV2'] else None
       started = time.monotonic_ns()
       now_nanos = self.can_log_mono_time if REPLAY else time.monotonic_ns()
+      invalidate_stale_longitudinal_comfort(cc_iq, now_nanos, self.sm.logMonoTime['iqCarControl'], self.sm.valid['iqCarControl'])
       if self._pair_actuator_feedback:
         request_time = self.sm.logMonoTime['carControl'] if self.sm.all_checks(['carControl']) else 0
         feedback = AppliedActuators.capture(CC, request_time, now_nanos)

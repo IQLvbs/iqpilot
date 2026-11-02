@@ -1,4 +1,4 @@
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.system.ui.lib.scroll_panel import GuiScrollPanel
 from iqpilot.system.ui.widgets import Widget
 

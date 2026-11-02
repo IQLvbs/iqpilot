@@ -362,7 +362,7 @@ def clip(route: Route, output: str, start: int, end: int, headless: bool = True,
   # params path active when they're constructed, and load_route_metadata below seeds the route's
   # params (on-screen maps gate, units, Mapbox token) into the prefixed dir.
   with OpenpilotPrefix(shared_download_cache=True):
-    import pyray as rl
+    import raylib_nb as rl
     if big:
       from iqpilot.selfdrive.ui.onroad.augmented_road_view import AugmentedRoadView
     else:

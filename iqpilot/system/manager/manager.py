@@ -19,6 +19,8 @@ from iqpilot.system.hardware import HARDWARE
 from iqpilot.system.loggerd.crash_recovery import recover_unclean_segments
 from iqpilot.system.manager.helpers import unblock_stdout, write_onroad_params, save_bootlog, heal_param_perms
 from iqpilot.system.manager.process import ensure_running
+from iqpilot.system.proprietary_runtime.bundle_modes import normalize_tree
+from iqpilot.common.basedir import BASEDIR
 from iqpilot.system.manager.process_config import managed_processes
 from iqpilot.konn3kt.registration import register, UNREGISTERED_DONGLE_ID
 from iqpilot.common.swaglog import cloudlog, add_file_handler
@@ -76,6 +78,7 @@ def _acquire_drm_fd() -> None:
 
 def manager_init() -> None:
   _acquire_drm_fd()
+  normalize_tree(BASEDIR)
   heal_param_perms()
   save_bootlog()
 

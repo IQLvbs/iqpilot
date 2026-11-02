@@ -27,6 +27,8 @@ from iqpilot.selfdrive.controls.lib.latcontrol_torque import LatControlTorque
 from iqpilot.selfdrive.controls.lib.latcontrol_torque_pq import LatControlTorquePQ
 from iqpilot.selfdrive.controls.lib.latcontrol_torque_v0 import LatControlTorqueV0, is_vw_mqb_torque
 from iqpilot.selfdrive.controls.lib.longcontrol import LongControl
+from iqpilot.selfdrive.controls.lib.stop_offset import CONTROLLER_VERSION
+from iqpilot.selfdrive.controls.lib.longitudinal_comfort import LongitudinalComfort
 from iqpilot.selfdrive.controls.steering_fault_recovery import SteeringFaultRecovery
 from iqpilot.system.proprietary_runtime._verified_import import import_verified_module
 from iqpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
@@ -107,6 +109,7 @@ class Controls(IQControlsLayer):
     self.calibrated_pose: Pose | None = None
 
     self.LoC = LongControl(self.CP, self.CP_IQ)
+    self.longitudinal_comfort = LongitudinalComfort(self.CP_IQ.longitudinalActuation)
     self.VM = VehicleModel(self.CP)
 
     self.smooth_steer = PT2Filter(SMOOTH_STEER_W0, SMOOTH_STEER_ZETA, DT_CTRL)
@@ -248,9 +251,15 @@ class Controls(IQControlsLayer):
     # accel PID loop
     pid_accel_limits = self.CI.get_pid_accel_limits(self.CP, self.CP_IQ, CS.vEgo, CS.vCruise * CV.KPH_TO_MS)
     v_target_now = long_plan.speeds[0] if len(long_plan.speeds) else CS.vEgo
+    stop_target = long_plan.stopOffset
+    stop_target_valid = stop_target.version == CONTROLLER_VERSION and stop_target.valid
     actuators.accel = float(self.LoC.update(CC.longActive, CS, long_plan.aTarget, long_plan.shouldStop, pid_accel_limits,
                                             long_plan.leadDistance, long_plan.hasLead, gas_override=override_longitudinal,
-                                            v_target_now=v_target_now))
+                                            v_target_now=v_target_now,
+                                            stop_distance=stop_target.distance if stop_target_valid else None,
+                                            stop_event_id=stop_target.eventId if stop_target_valid else 0,
+                                            comfort=self.longitudinal_comfort, comfort_enabled=self.enable_long_comfort_mode,
+                                            fcw=long_plan.fcw, plan_source=long_plan.longitudinalPlanSource))
 
     # Steering PID loop and lateral MPC
     # Reset desired curvature to current to avoid violating the limits on engage
@@ -406,7 +415,7 @@ class Controls(IQControlsLayer):
   def _tail_work(self) -> int:
     started_ns = time.monotonic_ns()
     self.refresh_iq_params(self.sm)
-    self.publish_iq_state(self.sm, self.pm)
+    self.publish_iq_state(self.sm, self.pm, self.longitudinal_comfort.control)
     return (time.monotonic_ns() - started_ns) // 1000
 
   def _missing_services(self) -> list[str]:

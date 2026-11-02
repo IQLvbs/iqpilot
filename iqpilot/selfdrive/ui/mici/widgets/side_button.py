@@ -1,4 +1,4 @@
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.system.ui.widgets import Widget
 from iqpilot.system.ui.lib.application import gui_app
 

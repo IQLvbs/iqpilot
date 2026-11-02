@@ -3,7 +3,7 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 """
 from dataclasses import dataclass
 
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.system.ui.lib.application import FontWeight, gui_app
 from iqpilot.system.ui.lib.text_measure import measure_text_cached

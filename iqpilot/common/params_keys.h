@@ -9,7 +9,6 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"AccessToken", {CLEAR_ON_MANAGER_START | DONT_LOG, STRING}},
     {"AdbEnabled", {PERSISTENT, BOOL}},
     {"AlwaysOnDM", {PERSISTENT, BOOL}},
-    {"ApiCache_Device", {PERSISTENT, STRING}},
     {"ApiCache_FirehoseStats", {PERSISTENT, JSON}},
     {"AssistNowToken", {PERSISTENT, STRING}},
     {"AthenadPid", {PERSISTENT, INT}},
@@ -122,7 +121,6 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"Offroad_ModelFallbackDefault", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, JSON}},
     {"Offroad_StorageMissing", {CLEAR_ON_MANAGER_START, JSON}},
     {"Offroad_NeosUpdate", {CLEAR_ON_MANAGER_START, JSON}},
-    {"Offroad_NoFirmware", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, JSON}},
     {"Offroad_Recalibration", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, JSON}},
     {"Offroad_TemperatureTooHigh", {CLEAR_ON_MANAGER_START, JSON}},
     {"Offroad_UnregisteredHardware", {CLEAR_ON_MANAGER_START, JSON}},
@@ -159,6 +157,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"UpdaterManualRequest", {CLEAR_ON_MANAGER_START, STRING}},
     {"UpdaterNewDescription", {CLEAR_ON_MANAGER_START, STRING}},
     {"UpdaterNewReleaseNotes", {CLEAR_ON_MANAGER_START, BYTES}},
+    {"UpdaterRuntimeState", {CLEAR_ON_MANAGER_START, JSON}},
     {"UpdaterState", {CLEAR_ON_MANAGER_START, STRING}},
     {"UpdaterTargetBranch", {CLEAR_ON_MANAGER_START, STRING}},
     {"UpdaterLastFetchTime", {PERSISTENT, TIME}},
@@ -386,7 +385,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"IQDynamicModelStopTime", {PERSISTENT, FLOAT, "3.0"}},
     {"IQDynamicMinimumForceStopLength", {PERSISTENT, FLOAT, "0.0"}},
     {"IQForceStops", {PERSISTENT, BOOL, "1"}},
-    {"IQCustomStopDistance", {PERSISTENT, INT, "0"}},  // meters, -2..2; negative = stop closer, positive = stop further back; independent of IQForceStops
+    {"IQCustomStopDistance", {PERSISTENT, INT, "0"}},  // extra meters (0..10); lead stop target 3 + N; independent of IQForceStops
     {"IQBlindSpotAlerts", {PERSISTENT, BOOL, "0"}},
     {"IQExpandedStatus", {PERSISTENT, BOOL, "1"}},
     {"HomePanelWidget", {PERSISTENT, STRING, "map"}},

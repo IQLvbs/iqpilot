@@ -1,6 +1,6 @@
 from collections import OrderedDict
 
-import pyray as rl
+import raylib_nb as rl
 from iqpilot.system.ui.lib.application import FONT_SCALE, font_fallback
 from iqpilot.system.ui.lib.emoji import find_emoji
 

@@ -77,6 +77,7 @@ def test_gas_override_preserves_negative_accel_command():
     reset=lambda: None,
   )
   control.last_output_accel = -0.4
+  control.stop_event_id = 0
   control.stopping_decel_rate = 1.0
   control.speed_error_pid = False
   control.filter_a_ego = False
@@ -107,6 +108,7 @@ def pid_control(fingerprint):
     reset=lambda: None,
   )
   control.last_output_accel = 0.0
+  control.stop_event_id = 0
   control.stopping_decel_rate = 1.0
   control.speed_error_pid = fingerprint in SPEED_ERROR_PID_CARS
   control.filter_a_ego = fingerprint in FILTERED_A_EGO_CARS

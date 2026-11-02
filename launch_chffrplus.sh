@@ -3,13 +3,13 @@
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 
 export HOME="${HOME:-/home/comma}"
-export IQPILOT_PROPRIETARY_ROOT="$DIR/artifacts"
+export IQPILOT_PROPRIETARY_ROOT="${IQPILOT_PROPRIETARY_ROOT:-$DIR/artifacts}"
 source "$DIR/launch_env.sh"
 export PATH="/usr/local/venv/bin:$PATH"
 
 function agnos_version_allowed {
-  local current_version="$1"
-  local expected_version="$2"
+  local current_version="${1#IQ.OS }"
+  local expected_version="${2#IQ.OS }"
   local compat_version
 
   if [ "$current_version" = "$expected_version" ] || [[ "$current_version" = "$expected_version"-* ]]; then
@@ -20,6 +20,7 @@ function agnos_version_allowed {
   for compat_version in "${compat_versions[@]}"; do
     compat_version="${compat_version#"${compat_version%%[![:space:]]*}"}"
     compat_version="${compat_version%"${compat_version##*[![:space:]]}"}"
+    compat_version="${compat_version#IQ.OS }"
     if [ -n "$compat_version" ] && [ "$current_version" = "$compat_version" ]; then
       return 0
     fi
@@ -189,13 +190,17 @@ function launch {
   export PYTHONSAFEPATH=1
   VERIFIED_PYTHON_ROOT="/usr/libexec/iqpilot/python"
   IQPILOT_PYTHONPATH="$VENV_SITE_PACKAGES:$PWD"
-  if [ -d "$PWD/artifacts/package_runtime" ]; then
+  if [ -n "$(iq_package_runtime_root "$PWD")" ]; then
     IQPILOT_PYTHONPATH="$PWD/artifacts/package_runtime:$IQPILOT_PYTHONPATH"
   fi
   if [ -d "$VERIFIED_PYTHON_ROOT" ]; then
     export PYTHONPATH="$VERIFIED_PYTHON_ROOT:$IQPILOT_PYTHONPATH"
   else
     export PYTHONPATH="$IQPILOT_PYTHONPATH"
+  fi
+
+  if iq_service_dropins_missing && [ -x "$IQOS_SERVICE_DROPINS_HELPER" ]; then
+    sudo -n "$IQOS_SERVICE_DROPINS_HELPER" 2>/dev/null || true
   fi
 
   # Install independent systemd services BEFORE build so they run even
@@ -211,7 +216,7 @@ function launch {
     service_dropin="/run/systemd/system/${service_name}.service.d"
     service_exec="$(grep '^ExecStart=' "$service_src")"
     sudo -n mkdir -p "$service_dropin" 2>/dev/null || mkdir -p "$service_dropin" 2>/dev/null || true
-    printf '[Service]\nWorkingDirectory=%s\nEnvironment="IQPILOT_SOURCE_ROOT=%s/iqpilot"\nEnvironment="IQPILOT_PROPRIETARY_ROOT=%s/artifacts"\nEnvironment="PYTHONPATH=%s"\nExecStart=\n%s\n' "$RUNTIME_COMPAT_ROOT" "$DIR" "$DIR" "$PYTHONPATH" "$service_exec" | sudo -n tee "$service_dropin/iqpilot-packages.conf" >/dev/null 2>&1 || true
+    printf '[Service]\nWorkingDirectory=%s\nEnvironment="IQPILOT_SOURCE_ROOT=%s/iqpilot"\nEnvironment="IQPILOT_PROPRIETARY_ROOT=%s"\nEnvironment="PYTHONPATH=%s"\nExecStart=\n%s\n' "$RUNTIME_COMPAT_ROOT" "$DIR" "$IQPILOT_PROPRIETARY_ROOT" "$PYTHONPATH" "$service_exec" | sudo -n tee "$service_dropin/iqpilot-packages.conf" >/dev/null 2>&1 || true
     sudo -n systemctl daemon-reload 2>/dev/null || true
     if [ -f "$service_lib" ] && grep -q "/usr/libexec/iqpilot/iqpilot_bundle_runner" "$service_lib"; then
       if [ -f "$service_dst" ]; then

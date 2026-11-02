@@ -49,12 +49,13 @@ class SmoothStopController:
   def want_hold(self, should_stop: bool, v_ego: float, standstill: bool) -> bool:
     return bool(should_stop and (v_ego <= STANDSTILL_SPEED or (standstill and v_ego <= STANDSTILL_HOLD_SPEED)))
 
-  def settle(self, a_target: float, v_ego: float, lead_distance: float, has_lead: bool, last_output: float) -> float:
+  def settle(self, a_target: float, v_ego: float, lead_distance: float, has_lead: bool, last_output: float,
+             *, stop_distance: float | None = None) -> float:
     landing = STOP_KISS_DECEL + (SETTLE_DECEL - STOP_KISS_DECEL) * min(v_ego / TAPER_SPEED, 1.0)
     a_settle = -landing
 
-    if has_lead and lead_distance > 0.0:
-      gap = max(lead_distance - STOP_GAP_MARGIN, MIN_GAP_BUDGET)
+    if stop_distance is not None or (has_lead and lead_distance > 0.0):
+      gap = max(stop_distance if stop_distance is not None else lead_distance - STOP_GAP_MARGIN, MIN_GAP_BUDGET)
       a_settle = min(a_settle, -(v_ego * v_ego) / (2.0 * gap))
 
     if v_ego < self._v_min - PROGRESS_EPS:

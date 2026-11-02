@@ -18,7 +18,7 @@ from iqdbc.car.volkswagen.pq_radar_handler import PQRadarHandler
 from iqdbc.car.volkswagen.values import (
   CanBus, CarControllerParams, MQB_A0_CARS, VolkswagenFlags, VolkswagenFlagsIQ, apply_pq_stopping_accel,
 )
-from iqdbc.car.volkswagen.mebutils import CurvatureSmoother, LongControlJerk, LongControlLimit, LatControlCurvature, LongStopHold
+from iqdbc.car.volkswagen.mebutils import longitudinal_comfort_values, CurvatureSmoother, LatControlCurvature, LongStopHold
 from iqdbc.car.vehicle_model import VehicleModel
 
 iqpilot_path = os.path.join(os.path.dirname(__file__), '..', '..', '..')
@@ -126,8 +126,6 @@ class CarController(CarControllerBase):
     self.CSLH3_SignLast = 0
     self.CSsteeringAngleDegLast = 0
     self.steering_power_last = 0
-    self.long_jerk_control = LongControlJerk(dt=(DT_CTRL * self.CCP.ACC_CONTROL_STEP)) if self.CP.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO) else None
-    self.long_limit_control = LongControlLimit(dt=(DT_CTRL * self.CCP.ACC_CONTROL_STEP)) if self.CP.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO) else None
     self.curvature_smoother = (
       CurvatureSmoother(self.CCP.CURVATURE_SMOOTH_SPEED_BP, self.CCP.CURVATURE_SMOOTH_TAU_V, DT_CTRL * self.CCP.STEER_STEP)
       if self.CP.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO) else None
@@ -147,8 +145,6 @@ class CarController(CarControllerBase):
     self.hca_frame_timer_running = 0
     self.hca_frame_same_torque = 0
     self.accel_last = 0
-    self.long_deviation = 0
-    self.long_jerklimit = 0
     self.HCA_Status = 3
     self.leadDistanceBars = 0
     self.lead_distance_bars_last = None
@@ -169,6 +165,7 @@ class CarController(CarControllerBase):
     self._pq_patch_checked = not bool(CP.flags & VolkswagenFlags.PQ) or self.eps_timer_workaround
     self.hca_frame_timer_resetting = 0
     self.hca_frame_low_torque = 0
+    self.hca_reset_count = 0
     self.acc_hold_type_last = mebcan.ACC_HMS_NO_REQUEST
     self.acc_hold_ramp_counter = 0
     self.mqb_long_state = mqbcan.MqbLongStateMachine(CP.mass, self.CCP.ACCEL_MIN) if self.CCS == mqbcan else None
@@ -187,6 +184,10 @@ class CarController(CarControllerBase):
   @staticmethod
   def _is_mqb_a0_car(candidate) -> bool:
     return candidate in MQB_A0_CARS
+
+  @property
+  def hca_session_sec(self) -> float:
+    return self.hca_frame_timer_running * DT_CTRL
 
   def _get_mqb_steering_torque_scale(self, v_ego: float, enabled: bool) -> float:
     if enabled and self.CCS == mqbcan:
@@ -340,6 +341,8 @@ class CarController(CarControllerBase):
           output_torque = 0
           self.hca_frame_timer_resetting += self.CCP.STEER_STEP
           if self.hca_frame_timer_resetting >= self.CCP.STEER_TIME_RESET / DT_CTRL or not self.eps_timer_workaround:
+            if self.hca_frame_timer_running > 0:
+              self.hca_reset_count += 1
             self.hca_frame_timer_running = 0
             apply_torque = 0
 
@@ -351,7 +354,8 @@ class CarController(CarControllerBase):
         else:
           self.HCA_Status = 3
 
-        self.eps_timer_soft_disable_alert = self.hca_frame_timer_running > self.CCP.STEER_TIME_ALERT / DT_CTRL
+        self.eps_timer_soft_disable_alert = self.eps_timer_workaround and (
+          self.hca_frame_timer_running > self.CCP.STEER_TIME_ALERT / DT_CTRL or CS.eps_session.age_s > self.CCP.STEER_TIME_ALERT)
         self.apply_torque_last = apply_torque
         if not (AngleLateralControl and self.CCS in (mqbcan, pqcan, mlbcan)):
           can_sends.append(self.CCS.create_hca_steering_control(self.packer_pt, self._pt_tx_bus, output_torque, self.HCA_Status))
@@ -404,11 +408,7 @@ class CarController(CarControllerBase):
         stopping, starting, esp_hold, accel = self.long_stop_hold.update(
           CC.longActive, stopping, starting, accel, CS.esp_hold_confirmation, CS.out.vEgo, long_override)
 
-
-        critical_state = hud_control.visualAlert == VisualAlert.fcw
-        if CC.longComfortMode and self.long_jerk_control is not None and self.long_limit_control is not None:
-          self.long_jerk_control.update(CC.enabled, long_override, hud_control.leadDistance, hud_control.leadVisible, accel, critical_state)
-          self.long_limit_control.update(CC.enabled, CS.out.vEgoRaw, hud_control.setSpeed, hud_control.leadDistance, hud_control.leadVisible, critical_state)
+        jerk_up, jerk_down, band_oben, band_unten = longitudinal_comfort_values(CC, CC_IQ, legacy_band=0.0)
 
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, CC.enabled, long_override)
         acc_hold_type, self.acc_hold_ramp_counter = self.CCS.acc_hold_type(
@@ -417,10 +417,7 @@ class CarController(CarControllerBase):
         self.acc_hold_type_last = acc_hold_type
         can_sends.extend(self.CCS.create_acc_accel_control(
           self.packer_pt, self.CAN.pt, self.CP, CS.acc_type, CC.enabled,
-          self.long_jerk_control.get_jerk_up() if CC.longComfortMode and self.long_jerk_control is not None else 4.0,
-          self.long_jerk_control.get_jerk_down() if CC.longComfortMode and self.long_jerk_control is not None else 4.0,
-          self.long_limit_control.get_upper_limit() if CC.longComfortMode and self.long_limit_control is not None else 0.,
-          self.long_limit_control.get_lower_limit() if CC.longComfortMode and self.long_limit_control is not None else 0.,
+          jerk_up, jerk_down, band_oben, band_unten,
           accel, acc_control, acc_hold_type, stopping, starting, esp_hold,
           CS.out.vEgoRaw * CV.MS_TO_KPH, long_override, CS.travel_assist_available,
         ))
@@ -439,25 +436,28 @@ class CarController(CarControllerBase):
 
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, long_active, CC.cruiseControl.override, CS.out.accFaulted)
         accel = float(np.clip(accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if (long_active or CC.cruiseControl.override) else 0)
-        self.long_jerklimit = float(interp(accel, [-1.5, -0.3, 0.05], [2.0, 0.52, 0.30]))
-        self.long_deviation = float(interp(accel, [-0.3, 0.1], [0.0, 0.20]))
         self.accel_last = accel
 
-        if blend_active and getattr(CC_IQ, "useRadarAccel", False) and CS.acc_radar_sta_adr == 1 and not self.radar_handler.failed:
+        use_radar_accel = blend_active and getattr(CC_IQ, "useRadarAccel", False) and CS.acc_radar_sta_adr == 1 and not self.radar_handler.failed
+        if use_radar_accel:
           accel = float(np.clip(CS.acc_radar_sollbeschl, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX))
-          self.long_jerklimit = CS.acc_radar_aendgrad
-          self.long_deviation = CS.acc_radar_regelabw
           self.accel_last = accel
 
         if self.CCS == mqbcan:
+          jerk_up, jerk_down, band_oben, band_unten = longitudinal_comfort_values(CC, CC_IQ, legacy_band=0.2)
           can_sends.extend(self.CCS.create_acc_accel_control(
             self.packer_pt, self.CAN.pt, CS.acc_type, accel, acc_control, stopping, starting, CS.esp_hold_confirmation,
-            self.long_deviation, self.long_jerklimit, eBrakeActive,
-            esp_override=esp_override,
+            eBrakeActive, esp_override=esp_override, upper_jerk=jerk_up, lower_jerk=jerk_down,
+            upper_control_limit=band_oben, lower_control_limit=band_unten,
           ))
         elif self.CCS == mlbcan:
           can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, accel, acc_control, stopping))
         else:
+          if use_radar_accel:
+            long_jerklimit, long_deviation = CS.acc_radar_aendgrad, CS.acc_radar_regelabw
+          else:
+            long_jerklimit = float(interp(accel, [-1.5, -0.3, 0.05], [2.0, 0.52, 0.30]))
+            long_deviation = float(interp(accel, [-0.3, 0.1], [0.0, 0.20]))
           accel = apply_pq_stopping_accel(self.CP.carFingerprint, accel, stopping)
 
           sng_ecd_enabled = bool(self.CP.flags & VolkswagenFlagsIQ.IQ_PQ_SNG_ECD)
@@ -468,7 +468,7 @@ class CarController(CarControllerBase):
             self.sng_handoff_active = False
           sng_decel_req = float(np.clip(accel, self.CCP.ACCEL_MIN, self.CCP.SNG_HOLD_DECEL_MAX)) if self.sng_handoff_active else 0.0
 
-          can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, accel, acc_control, stopping and not self.motor3_resuming, starting, CS.esp_hold_confirmation, self.long_deviation, self.long_jerklimit, eBrakeActive, sng_active=self.sng_handoff_active))
+          can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, accel, acc_control, stopping and not self.motor3_resuming, starting, CS.esp_hold_confirmation, long_deviation, long_jerklimit, eBrakeActive, sng_active=self.sng_handoff_active))
           if sng_ecd_enabled:
             can_sends.append(self.CCS.create_sng_handoff_control(self.packer_pt, self.CAN.aux, self.sng_handoff_active, sng_decel_req))
 

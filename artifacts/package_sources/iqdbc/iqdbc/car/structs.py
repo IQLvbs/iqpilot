@@ -54,6 +54,22 @@ class IQCarParams:
   longitudinalStoppingSpeedOverride: float = auto_field()
   stoppingDecelRateOverride: float = auto_field()
   longActiveWithGasOverride: bool = auto_field()
+  longitudinalActuation: 'IQCarParams.LongitudinalActuation' = field(default_factory=lambda: IQCarParams.LongitudinalActuation())
+
+  @auto_dataclass
+  class LongitudinalActuation:
+    jerkControl: 'IQCarParams.LongitudinalActuation.JerkControl' = field(default_factory=lambda: IQCarParams.LongitudinalActuation.JerkControl.software)
+    comfortBand: 'IQCarParams.LongitudinalActuation.ComfortBand' = field(default_factory=lambda: IQCarParams.LongitudinalActuation.ComfortBand.none)
+    maxJerkUp: float = auto_field()
+    maxJerkDown: float = auto_field()
+
+    class JerkControl(StrEnum):
+      software = auto()
+      nativeAsymmetric = auto()
+
+    class ComfortBand(StrEnum):
+      none = auto()
+      asymmetric = auto()
 
   iqLateralNet: 'IQCarParams.LateralNet' = field(default_factory=lambda: IQCarParams.LateralNet())
 
@@ -120,6 +136,18 @@ class IQCarControl:
   useRadarAccel: bool = auto_field()
   radarSetSpeedKph: float = auto_field()
   radarGapBars: int = auto_field()
+  longitudinalComfort: 'IQCarControl.LongitudinalComfort' = field(default_factory=lambda: IQCarControl.LongitudinalComfort())
+
+  @auto_dataclass
+  class LongitudinalComfort:
+    valid: bool = auto_field()
+    jerkUp: float = auto_field()
+    jerkDown: float = auto_field()
+    accelDeviationAbove: float = auto_field()
+    accelDeviationBelow: float = auto_field()
+    comfortEnabled: bool = auto_field()
+    bypassJerkLimit: bool = auto_field()
+    bypassJerkDownLimit: bool = auto_field()
 
   @auto_dataclass
   class Param:
@@ -143,3 +171,9 @@ class IQCarControl:
 class IQCarState:
   speedLimit: float = auto_field()
   alcOverrideAlert: bool = auto_field()
+  epsHcaStatus: int = auto_field()
+  epsSessionSec: float = auto_field()
+  epsSessionResets: int = auto_field()
+  hcaSessionSec: float = auto_field()
+  hcaResetCount: int = auto_field()
+  hcaTimerAlert: bool = auto_field()

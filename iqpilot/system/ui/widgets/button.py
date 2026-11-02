@@ -1,9 +1,9 @@
 from collections.abc import Callable
 from enum import IntEnum
 
-import pyray as rl
+import raylib_nb as rl
 
-from iqpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
+from iqpilot.system.ui.lib.application import gui_app, FontWeight, MousePos, TextAlignment, TextAlignmentVertical
 from iqpilot.system.ui.widgets import Widget
 from iqpilot.system.ui.widgets.label import Label, UnifiedLabel
 from iqpilot.common.filter_simple import FirstOrderFilter
@@ -86,7 +86,7 @@ class Button(Widget):
                font_weight: FontWeight = FontWeight.MEDIUM,
                button_style: ButtonStyle = ButtonStyle.NORMAL,
                border_radius: int = 10,
-               text_alignment: int = rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+               text_alignment: int = TextAlignment.CENTER,
                text_padding: int = 20,
                icon=None,
                elide_right: bool = False,
@@ -139,7 +139,7 @@ class ButtonRadio(Button):
                icon,
                click_callback: Callable[[], None] | None = None,
                font_size: int = DEFAULT_BUTTON_FONT_SIZE,
-               text_alignment: int = rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
+               text_alignment: int = TextAlignment.LEFT,
                border_radius: int = 10,
                text_padding: int = 20,
                ):
@@ -234,8 +234,8 @@ class SmallButton(Widget):
 
     self._label = UnifiedLabel(text, 36, font_weight=FontWeight.MEDIUM,
                                text_color=rl.Color(255, 255, 255, int(255 * 0.9)),
-                               alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
-                               alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE)
+                               alignment=TextAlignment.CENTER,
+                               alignment_vertical=TextAlignmentVertical.MIDDLE)
 
     self._bg_disabled_txt = None
 

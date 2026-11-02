@@ -4,7 +4,7 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 import math
 from enum import IntEnum
 
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.common.params import Params
 from iqpilot.system.ui.lib.text_measure import measure_text_cached

@@ -3,6 +3,7 @@ from iqdbc.car import DT_CTRL, structs
 from iqdbc.car.car_helpers import interfaces
 from iqdbc.car.interfaces import MAX_CTRL_SPEED
 from iqdbc.car.toyota.values import ToyotaFlags
+from iqdbc.car.volkswagen.values import VolkswagenFlags
 
 from iqpilot.selfdrive.selfdrived.events import Events
 
@@ -10,6 +11,10 @@ ButtonType = structs.CarState.ButtonEvent.Type
 GearShifter = structs.CarState.GearShifter
 EventName = log.OnroadEvent.EventName
 NetworkLocation = structs.CarParams.NetworkLocation
+
+HARD_DECEL_ACCEL = -4.0
+HARD_DECEL_FAULT_WINDOW_FRAMES = int(1.5 / DT_CTRL)
+VW_TSK_FLAGS = VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO
 
 
 class CarSpecificEvents:
@@ -20,6 +25,23 @@ class CarSpecificEvents:
     self.low_speed_alert = False
     self.no_steer_warning = False
     self.silent_steer_warning = True
+    self.hard_decel_age = HARD_DECEL_FAULT_WINDOW_FRAMES + 1
+    self.acc_fault_from_hard_decel = False
+
+  def _acc_fault_from_hard_decel(self, CS: car.CarState, CS_prev: car.CarState) -> bool:
+    if self.CP.brand != 'volkswagen' or not (getattr(self.CP, 'flags', 0) & VW_TSK_FLAGS):
+      return False
+    if CS.brakePressed and getattr(CS, 'aEgo', 0.) <= HARD_DECEL_ACCEL:
+      self.hard_decel_age = 0
+    else:
+      self.hard_decel_age += 1
+    faulted = CS.accFaulted or getattr(CS, 'cruiseFaultLateralMode', False)
+    was_faulted = CS_prev.accFaulted or getattr(CS_prev, 'cruiseFaultLateralMode', False)
+    if not faulted:
+      self.acc_fault_from_hard_decel = False
+    elif not was_faulted:
+      self.acc_fault_from_hard_decel = self.hard_decel_age <= HARD_DECEL_FAULT_WINDOW_FRAMES
+    return self.acc_fault_from_hard_decel
 
   def update(self, CS: car.CarState, CS_prev: car.CarState, CC: car.CarControl):
     if self.CP.brand in ('body', 'mock'):
@@ -75,10 +97,6 @@ class CarSpecificEvents:
         if CC.enabled and CS.vEgo < self.CP.minEnableSpeed:
           events.add(EventName.speedTooLow)
 
-      # TODO: this needs to be implemented generically in carState struct
-      # if CC.eps_timer_soft_disable_alert:
-      #   events.add(EventName.steerTimeLimit)
-
     return events
 
   def create_common_events(self, CS: structs.CarState, CS_prev: car.CarState):
@@ -119,11 +137,12 @@ class CarSpecificEvents:
       events.add(EventName.brakeHold)
     if CS.parkingBrake:
       events.add(EventName.parkBrake)
+    hard_decel_fault = self._acc_fault_from_hard_decel(CS, CS_prev)
     if getattr(CS, 'cruiseFaultLateralMode', False):
       if not getattr(CS_prev, 'cruiseFaultLateralMode', False):
-        events.add(EventName.cruiseFaultLateralAllowed)
+        events.add(EventName.accFaultedHardDecelLateral if hard_decel_fault else EventName.cruiseFaultLateralAllowed)
     elif CS.accFaulted:
-      events.add(EventName.accFaulted)
+      events.add(EventName.accFaultedHardDecel if hard_decel_fault else EventName.accFaulted)
     if CS.steeringPressed:
       events.add(EventName.steerOverride)
     if CS.steeringDisengage and not CS_prev.steeringDisengage:

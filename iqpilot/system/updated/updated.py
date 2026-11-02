@@ -3,6 +3,7 @@ import os
 import re
 import datetime
 import subprocess
+import tempfile
 import psutil
 import signal
 import fcntl
@@ -12,6 +13,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from iqpilot.common.basedir import BASEDIR
+from iqpilot.common.git_creds import fetch_remote, remove_legacy_source_remotes, retarget_missing_public_branch, run_remote
 from iqpilot.common.params import Params
 from iqpilot.common.time_helpers import system_time_valid
 from iqpilot.common.markdown import parse_markdown
@@ -57,18 +59,22 @@ class WaitTimeHelper:
       params.remove("UpdaterManualRequest")
       threading.Thread(target=self._poll_request_param, daemon=True).start()
 
-  def _poll_request_param(self) -> None:
-    while True:
-      try:
-        req = self._params.get("UpdaterManualRequest", encoding="utf-8")
-      except Exception:
-        req = None
+  def _read_request_param(self) -> None:
+    try:
+      req = self._params.get("UpdaterManualRequest", encoding="utf-8")
       if req:
         self._params.remove("UpdaterManualRequest")
-        if req == "fetch":
-          self.update_now(0, None)
-        elif req == "check":
-          self.check_now(0, None)
+    except Exception:
+      cloudlog.exception("updater: manual request unavailable")
+      return
+    if req == "fetch":
+      self.update_now(0, None)
+    elif req == "check":
+      self.check_now(0, None)
+
+  def _poll_request_param(self) -> None:
+    while True:
+      self._read_request_param()
       time.sleep(1)
 
   def update_now(self, signum: int, frame) -> None:
@@ -159,11 +165,60 @@ def get_agnos_target_versions(launch_env_dir: str) -> tuple[str, list[str]]:
   return expected_version, compat_versions
 
 
+def fetched_os_target_versions(cwd: str, commit: str) -> tuple[str, list[str]]:
+  with tempfile.TemporaryDirectory() as directory:
+    Path(directory, "launch_env.sh").write_bytes(subprocess.check_output(["git", "show", f"{commit}:launch_env.sh"], cwd=cwd))
+    return get_agnos_target_versions(directory)
+
+
+IQOS5_MANIFEST = "iqpilot/system/hardware/tici/iqos.json"
+
+
+def flash_iqos5_for(commit: str) -> int | None:
+  """Flash IQ.OS 5 to the other slot when the fetched commit needs it, before the checkout changes.
+
+  The build being left does the work: the manifest is read from the fetched commit with git show and
+  flashed with this build's flasher, so nothing from the new tree is imported. Returns the slot to switch
+  to after the checkout is reset, or None when the commit doesn't ask for IQ.OS 5.
+  """
+  if not AGNOS:
+    return None
+  target, compat = fetched_os_target_versions(BASEDIR, commit)
+  current = HARDWARE.get_os_version()
+  if not is_iqos5(target) or is_iqos5(current) or agnos_version_allowed(current, target, compat):
+    return None
+
+  from iqpilot.system.hardware.tici.agnos import flash_iqos5_update, get_target_slot_number
+  cloudlog.info(f"IQ.OS 5 update: current={current}, target={target}, compat={compat}")
+  set_offroad_alert("Offroad_NeosUpdate", True)
+  try:
+    with tempfile.TemporaryDirectory() as directory:
+      manifest = os.path.join(directory, "iqos.json")
+      for name in (IQOS5_MANIFEST, f"{IQOS5_MANIFEST}.sig"):
+        data = subprocess.check_output(["git", "show", f"{commit}:{name}"], cwd=BASEDIR)
+        Path(directory, os.path.basename(name)).write_bytes(data)
+      target_slot_number = get_target_slot_number()
+      flash_iqos5_update(manifest, target_slot_number, cloudlog)
+  finally:
+    set_offroad_alert("Offroad_NeosUpdate", False)
+  return target_slot_number
+
+
+def os_version_number(version: str) -> str:
+  return version.strip().removeprefix("IQ.OS").strip()
+
+
+def is_iqos5(version: str) -> bool:
+  return version.strip().startswith("IQ.OS 5") or os_version_number(version).split(".")[0] == "5"
+
+
 def agnos_version_allowed(current_version: str, expected_version: str, compat_versions: list[str]) -> bool:
+  current_version = os_version_number(current_version)
+  expected_version = os_version_number(expected_version)
   if current_version == expected_version or current_version.startswith(f"{expected_version}-"):
     return True
 
-  return current_version in compat_versions
+  return current_version in {os_version_number(v) for v in compat_versions}
 
 # The public release repo at git.konn3kt.com/IQ.Lvbs/IQ.Pilot needs no auth.
 # Earlier builds installed an insteadOf rule + JWT credential helper that
@@ -172,6 +227,7 @@ def agnos_version_allowed(current_version: str, expected_version: str, compat_ve
 # directly. A device that installed from GitHub is already rewritten to it and
 # is left untouched here.
 PUBLIC_RELEASE_REMOTE = "https://git.konn3kt.com/IQ.Lvbs/IQ.Pilot.git"
+
 
 def _clear_stale_proxy_config(cwd: str) -> None:
   subprocess.run(["git", "-C", cwd, "config", "--unset-all", "credential.helper"],
@@ -190,7 +246,13 @@ def _clear_stale_proxy_config(cwd: str) -> None:
   # the prebuilt ships to and need no auth.
   origin_url = subprocess.check_output(["git", "-C", cwd, "config", "--get", "remote.origin.url"],
                                         text=True, stderr=subprocess.DEVNULL).strip().lower()
-  is_release_repo = "iqos-git" in origin_url or "iq.lvbs/iq.pilot" in origin_url or "iqinc/iqpilot" in origin_url or "iqinc/openpilot" in origin_url
+  from iqpilot.common.git_creds import ssh_to_https
+  canonical_origin = ssh_to_https(origin_url).rstrip("/").removesuffix(".git")
+  # Match complete public repo names: IQ.Pilot-Preview must retain its source.
+  is_release_repo = "iqos-git" in origin_url or canonical_origin in (
+    PUBLIC_RELEASE_REMOTE.lower().removesuffix(".git"),
+    "https://github.com/iqinc/iqpilot", "https://github.com/iqinc/openpilot",
+  )
   already_public = origin_url == PUBLIC_RELEASE_REMOTE.lower()
   if is_release_repo and not already_public:
     subprocess.run(["git", "-C", cwd, "remote", "set-url", "origin", PUBLIC_RELEASE_REMOTE],
@@ -216,7 +278,7 @@ def configure_git_auth(cwd: str) -> None:
   _clear_stale_proxy_config(cwd)
 
   try:
-    from iqpilot.system.proprietary_runtime._verified_import import import_verified_module
+    from iqpilot.system.proprietary_runtime.bundle_modes import import_verified_module
     import_verified_module("iqpilot_updater_private", "iqpilot_private.updater.git_remote").configure(cwd)
   except Exception:
     cloudlog.info("updater: proprietary git auth unavailable; using ambient git credentials")
@@ -257,6 +319,18 @@ def setup_git_options(cwd: str) -> None:
   ]
   for option, value in git_cfg:
     run(["git", "config", option, value], cwd)
+
+
+def checkpoint(cwd: str) -> None:
+  head = run(["git", "rev-parse", "HEAD"], cwd).strip()
+  run(["git", "update-ref", "refs/iqos/checkpoint", head], cwd)
+  stamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%S.%fZ")
+  # A failed stash is not a clean tree: abort before checkout destroys changes.
+  dirty = run(["git", "stash", "create"], cwd).strip()
+  if dirty:
+    # Create only; even a timestamp collision must not replace recovery data.
+    run(["git", "update-ref", f"refs/iqos/dirty/{stamp}", dirty, "0" * len(head)], cwd)
+  cloudlog.info(f"updater: checkpoint {head[:7]}" + (f" + dirty tree {dirty[:7]}" if dirty else ""))
 
 
 def cleanup_stale_prebuilt_marker(cwd: str, branch: str) -> None:
@@ -305,6 +379,15 @@ class Updater:
     self.branches = defaultdict(lambda: None)
     self._has_internet: bool = False
     self.os_flashed: bool = False
+
+    # This snapshot survives updater-only restarts after an in-place fetch.
+    # manager_init clears it before the next boot's processes start.
+    runtime = self.params.get("UpdaterRuntimeState") or {}
+    if isinstance(runtime, dict) and runtime.get("commit"):
+      self.running_commit = runtime["commit"]
+      self.running_branch = runtime["branch"]
+      self.running_description = runtime["description"]
+      return
 
     # The commit/branch the running processes booted from. We update BASEDIR in
     # place, so this is what we diff against to know a reboot is needed.
@@ -359,11 +442,11 @@ class Updater:
     if len(self.branches) == 0:
       return False
     target = self.target_branch
-    on_disk_commit = self.get_commit_hash(BASEDIR)
-    on_disk_branch = self.get_branch(BASEDIR)
-    hash_mismatch = self.branches[target] is not None and on_disk_commit != self.branches[target]
-    branch_mismatch = on_disk_branch != target
-    return hash_mismatch or branch_mismatch
+    # A target the remote doesn't list can't be fetched; advertising it would fail every cycle.
+    target_commit = self.branches.get(target)
+    if target_commit is None:
+      return False
+    return self.get_commit_hash(BASEDIR) != target_commit or self.get_branch(BASEDIR) != target
 
   def get_branch(self, path: str) -> str:
     if not has_git_repo(path):
@@ -454,13 +537,11 @@ class Updater:
 
     excluded_branches = ('release2', 'release2-staging')
 
-    # authenticate before the very first remote op (the internet probe below),
-    # since anonymous access is firewalled
-    configure_git_auth(BASEDIR)
     setup_git_options(BASEDIR)
+    remove_legacy_source_remotes(BASEDIR)
 
     try:
-      run(["git", "ls-remote", "origin", "HEAD"], BASEDIR, timeout=GIT_PROBE_TIMEOUT)
+      run_remote(["git", "ls-remote", "origin", "HEAD"], BASEDIR, self.target_branch, configure_git_auth, timeout=GIT_PROBE_TIMEOUT)
       self._has_internet = True
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
       self._has_internet = False
@@ -471,7 +552,7 @@ class Updater:
       return
 
     try:
-      output = run(["git", "ls-remote", "--heads"], BASEDIR, timeout=GIT_PROBE_TIMEOUT)
+      output = run_remote(["git", "ls-remote", "--heads"], BASEDIR, self.target_branch, configure_git_auth, timeout=GIT_PROBE_TIMEOUT)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
       cloudlog.exception("updater: ls-remote --heads failed")
       self._has_internet = False
@@ -484,11 +565,13 @@ class Updater:
       x = re.fullmatch(ls_remotes_re, line.strip())
       if x is not None and x.group('branch_name') not in excluded_branches:
         self.branches[x.group('branch_name')] = x.group('commit_sha')
+    if self.branches:
+      retarget_missing_public_branch(BASEDIR, self.target_branch, self.branches)
 
     cur_branch = self.get_branch(BASEDIR)
     cur_commit = self.get_commit_hash(BASEDIR)
     new_branch = self.target_branch
-    new_commit = self.branches[new_branch]
+    new_commit = self.branches.get(new_branch)
     if (cur_branch, cur_commit) != (new_branch, new_commit):
       cloudlog.info(f"update available, {cur_branch} ({str(cur_commit)[:7]}) -> {new_branch} ({str(new_commit)[:7]})")
     else:
@@ -502,8 +585,6 @@ class Updater:
 
     cloudlog.info("attempting git fetch and in-place reset")
 
-    configure_git_auth(BASEDIR)
-
     self.params.put("UpdaterState", "downloading...")
     self.params.put_bool("UpdateAvailable", False)
 
@@ -511,22 +592,42 @@ class Updater:
 
     run(["git", "config", "--replace-all", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"], BASEDIR)
 
-    branch = self.target_branch
-    git_fetch_output = run(["git", "fetch", "origin", branch], BASEDIR, timeout=GIT_FETCH_TIMEOUT)
-    cloudlog.info("git fetch success: %s", git_fetch_output)
+    branch = fetch_remote(BASEDIR, self.target_branch, configure_git_auth, timeout=GIT_FETCH_TIMEOUT)
+    fetched_commit = run(["git", "rev-parse", "FETCH_HEAD"], BASEDIR).strip()
+    cloudlog.info("git fetch success: %s (%s)", branch, fetched_commit)
 
+    # raises before the checkout changes if the flash fails
+    iqos5_slot = flash_iqos5_for(fetched_commit)
+    previous_branch = run(["git", "rev-parse", "--abbrev-ref", "HEAD"], BASEDIR).strip()
+    if iqos5_slot is not None:
+      # bound before the reset, so the switch runs this build's code rather than the new tree's
+      from iqpilot.system.hardware.tici.agnos import switch_slot
+
+    checkpoint(BASEDIR)
     cloudlog.info("git reset in progress")
     cmds = [
-      ["git", "checkout", "--force", "-B", branch, "FETCH_HEAD"],
+      ["git", "checkout", "--force", "-B", branch, fetched_commit],
       ["git", "branch", "--set-upstream-to", f"origin/{branch}"],
-      ["git", "reset", "--hard", "FETCH_HEAD"],
+      ["git", "reset", "--hard", fetched_commit],
     ]
     r = [run(cmd, BASEDIR) for cmd in cmds]
     cloudlog.info("git reset success: %s", '\n'.join(r))
     cleanup_stale_prebuilt_marker(BASEDIR, branch)
 
+    if iqos5_slot is not None:
+      try:
+        switch_slot(iqos5_slot, cloudlog)
+      except Exception:
+        cloudlog.exception("IQ.OS 5 slot switch failed; restoring the previous checkout")
+        if previous_branch == "HEAD":
+          run(["git", "checkout", "--force", "--detach", "refs/iqos/checkpoint"], BASEDIR)
+        else:
+          run(["git", "checkout", "--force", "-B", previous_branch, "refs/iqos/checkpoint"], BASEDIR)
+        run(["git", "reset", "--hard", "refs/iqos/checkpoint"], BASEDIR)
+        raise
+      self.os_flashed = True
     # TODO: show agnos download progress
-    if AGNOS and handle_agnos_update():
+    elif AGNOS and handle_agnos_update():
       self.os_flashed = True
 
     cloudlog.info("update applied to disk; reboot to finish")
@@ -582,9 +683,17 @@ def prepare_environment() -> bool:
     return False
 
 
+def publish_runtime(params: Params, updater: Updater, disabled: bool) -> None:
+  params.put("UpdaterRuntimeState", {
+    "disabled": disabled, "commit": updater.running_commit,
+    "branch": updater.running_branch, "description": updater.running_description,
+  })
+
+
 def publish_running_version(params: Params) -> None:
   try:
     updater = Updater()
+    publish_runtime(params, updater, True)
     release_notes = parse_release_notes(BASEDIR)
     params.put("UpdaterState", "idle")
     params.put("UpdaterTargetBranch", updater.target_branch)
@@ -604,7 +713,7 @@ def main() -> None:
   if params.get_bool("DisableUpdates"):
     cloudlog.warning("updates are disabled by the DisableUpdates param")
     publish_running_version(params)
-    exit(0)
+    return
 
   with open(LOCK_FILE, 'w') as ov_lock_fd:
     try:
@@ -629,6 +738,8 @@ def main() -> None:
 
     params.put("UpdaterState", "idle")
     params.put_bool("UpdateAvailable", False)
+
+    publish_runtime(params, updater, False)
 
     # Run the update loop
     first_run = True
@@ -661,7 +772,7 @@ def main() -> None:
         last_fetch = params.get("UpdaterLastFetchTime")
         timed_out = last_fetch is None or (datetime.datetime.now(datetime.UTC).replace(tzinfo=None) - last_fetch > datetime.timedelta(days=3))
         user_requested_fetch = wait_helper.user_request == UserRequest.FETCH
-        if params.get_bool("IsOnroad") and not user_requested_fetch:
+        if params.get("IsOnroad") is not False:
           # the update download + AGNOS flash hold hundreds of MB; onroad that trips lowMemory,
           # so defer the heavy work until parked
           cloudlog.info("skipping fetch, device is onroad")
@@ -678,7 +789,7 @@ def main() -> None:
         # Finish a fetched update. update_ready stays true across cycles (on-disk
         # vs running commit), so failed prep and deferred reboots retry here on
         # the short sleep instead of being one-shot at fetch time.
-        if updater.update_ready and not params.get_bool("IsOnroad"):
+        if updater.update_ready and params.get("IsOnroad") is False:
           on_disk_commit = updater.get_commit_hash(BASEDIR)
           if updater.os_flashed and prepared_commit != on_disk_commit:
             # the new tree targets the OS just flashed to the other slot; its env prep on this OS is
@@ -686,6 +797,7 @@ def main() -> None:
             cloudlog.info("update prep: skipped, the OS update swaps slots on reboot")
             prepared_commit = on_disk_commit
           if prepared_commit != on_disk_commit:
+            params.put("UpdaterState", "preparing...")
             if prepare_environment():
               prepared_commit = on_disk_commit
           if prepared_commit != on_disk_commit:
@@ -693,6 +805,9 @@ def main() -> None:
             # fallback path still exists, but rebooting into it is exactly the
             # heavy all-at-once boot that takes devices down.
             install_pending = True
+          elif params.get("IsOnroad") is not False:
+            # Preparation may take long enough for the car to start driving.
+            install_eligible_since = None
           elif updater.install_mode == UpdateInstallMode.DOWNLOAD_AND_INSTALL:
             if install_eligible_since is None:
               install_eligible_since = time.monotonic()

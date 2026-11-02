@@ -157,6 +157,9 @@ async def _get_stream(request: 'web.Request'):
     raw_body = await request.json()
     body = StreamRequestBody(**raw_body)
     offer_sdp = body.sdp
+    if body.bridge_services_in:
+      logger.warning("Refused stream request bridging in %s", body.bridge_services_in)
+      return web.json_response({"error": "bridge_in_forbidden", "message": "Publishing services into the device over WebRTC is not allowed"}, status=403)
 
     # Single active session on the device: tear down any prior session before starting a new
     # one. webrtcd is long-lived (manager-owned), so without this, repeated offers would leak
@@ -255,7 +258,7 @@ def webrtcd_thread(host: str, port: int, debug: bool):
 
 def main():
   parser = argparse.ArgumentParser(description="WebRTC daemon")
-  parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to listen on")
+  parser.add_argument("--host", type=str, default="127.0.0.1", help="Host to listen on")
   parser.add_argument("--port", type=int, default=5001, help="Port to listen on")
   parser.add_argument("--debug", action="store_true", help="Enable debug mode")
   args = parser.parse_args()

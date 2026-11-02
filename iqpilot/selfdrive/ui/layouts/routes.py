@@ -1,5 +1,5 @@
 import threading
-import pyray as rl
+import raylib_nb as rl
 from collections.abc import Callable
 
 from iqpilot.selfdrive.ui.widgets.screen_header import ScreenHeader, HEADER_HEIGHT
@@ -188,7 +188,7 @@ class RoutesLayout(Widget):
     if not self._scroll_panel.is_touch_valid():
       return
     for play_rect, entry in self._row_hitboxes:
-      if rl.check_collision_point_rec(mouse_pos, play_rect):
+      if rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), play_rect):
         if self._on_play:
           self._on_play(entry.name)
         return

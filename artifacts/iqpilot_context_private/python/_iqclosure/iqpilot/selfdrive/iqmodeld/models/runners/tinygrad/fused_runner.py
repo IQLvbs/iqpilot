@@ -9,12 +9,11 @@ from typing import Any
 import numpy as np
 
 from iqpilot.selfdrive.iqmodeld.models.runners.model_runner import (
-    CUSTOM_MODEL_PATH, NumpyDict, ShapeDict, SliceDict,
+    CUSTOM_MODEL_PATH, NumpyDict, ShapeDict, SliceDict, load_big_model_pickle,
 )
 from iqpilot.selfdrive.iqmodeld.models.runners.model_runner import ModelRunner
 from iqpilot.selfdrive.iqmodeld.models.split_model_constants import SplitModelConstants
 from iqpilot.selfdrive.iqmodeld.parser import PhaseParser
-from iqpilot.selfdrive.iqmodeld.models.iqc import load_pickle
 
 
 def _tinygrad_imports():
@@ -40,7 +39,7 @@ class TinygradFusedRunner(ModelRunner):
         self._model_data = next(iter(self.models.values()))
 
         pkl_path = os.path.join(CUSTOM_MODEL_PATH, self._model_data.model.artifact.fileName)
-        self._fused: dict[Any, Any] = load_pickle(pkl_path)
+        self._fused: dict[Any, Any] = load_big_model_pickle(pkl_path)
 
         self._vision_meta = self._fused['metadata']['vision']
         self._on_meta = self._fused['metadata']['on_policy']

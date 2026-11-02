@@ -1,4 +1,4 @@
-import pyray as rl
+import raylib_nb as rl
 from collections.abc import Callable
 
 from iqpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
@@ -54,5 +54,5 @@ class ScreenHeader(Widget):
     rl.draw_text_ex(font, title, rl.Vector2(int(title_x), int(title_y)), 64, 0, rl.WHITE)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
-    if rl.check_collision_point_rec(mouse_pos, self._back_rect) and self._on_back:
+    if rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._back_rect) and self._on_back:
       self._on_back()

@@ -10,9 +10,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-import iqpilot.cereal.messaging as cereal_messaging
-from iqpilot.selfdrive.iqmodeld import cot_decode, metadata
-from iqpilot.selfdrive.iqmodeld.messaging import populate_iq_model_reasoning
+from iqpilot.selfdrive.iqmodeld import metadata
 from iqpilot.selfdrive.iqmodeld.models.runners.tinygrad.supercombo_runner import TinygradSupercomboRunner
 
 
@@ -73,15 +71,4 @@ def test_tinygrad_runner_exposes_reasoning_tail_and_metadata():
   np.testing.assert_array_equal(sliced["reasoning_tokens"], [[4, 6, 2, -1]])
   np.testing.assert_array_equal(sliced["reasoning_state"], [[1]])
   assert runner.reasoning_metadata == record
-
-
-def test_undeclared_reasoning_leaves_message_bytes_unchanged():
-  pristine = cereal_messaging.new_message("iqDriveModelData")
-  pristine.logMonoTime = 0
-  before = pristine.to_bytes()
-  message = cereal_messaging.new_message("iqDriveModelData")
-  message.logMonoTime = 0
-  wire = cot_decode.ReasoningWire({"output_slices": {}})
-  assert not populate_iq_model_reasoning(message.iqDriveModelData, {}, wire, 1, 2)
-  assert message.to_bytes() == before
 

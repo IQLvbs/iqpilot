@@ -29,6 +29,7 @@ class LongControl:
                              (CP.longitudinalTuning.kiBP, CP.longitudinalTuning.kiV),
                              rate=1 / DT_CTRL)
     self.last_output_accel = 0.0
+    self.stop_event_id = 0
     self.stopping_decel_rate = CP_IQ.stoppingDecelRateOverride or 1.0
     self.smooth = SmoothStopController()
     self.speed_error_pid = CP.carFingerprint in SPEED_ERROR_PID_CARS
@@ -62,13 +63,22 @@ class LongControl:
     )
     self.long_control_state = LongCtrlState.stopping if release_blocked else LongCtrlState.pid
 
-  def update(self, active, CS, a_target, should_stop, accel_limits, lead_distance=0.0, has_lead=False, gas_override=False, *, v_target_now):
-    self.pid.neg_limit = accel_limits[0]
-    self.pid.pos_limit = accel_limits[1]
+  def update(self, active, CS, a_target, should_stop, accel_limits, lead_distance=0.0, has_lead=False, gas_override=False, *, v_target_now,
+             stop_distance=None, stop_event_id=0, comfort=None, comfort_enabled=False, fcw=False, plan_source='cruise'):
     self.smooth.update()
+    if stop_event_id != self.stop_event_id:
+      self.smooth.reset()
+      self.stop_event_id = stop_event_id
     a_ego = self.a_ego_filter.update(CS.aEgo) if self.filter_a_ego else CS.aEgo
 
     self._update_state(active, CS, should_stop)
+    pid_limits = accel_limits
+    if comfort is not None:
+      pid_limits = comfort.update(enabled=comfort_enabled, active=active, car_state=CS, a_target=a_target,
+                                  should_stop=should_stop, stopping=self.long_control_state == LongCtrlState.stopping,
+                                  previous_command=self.last_output_accel, physical_limits=accel_limits,
+                                  driver_override=gas_override, fcw=fcw, plan_source=plan_source)
+    self.pid.neg_limit, self.pid.pos_limit = pid_limits
     if self.long_control_state == LongCtrlState.off:
       self.reset()
       self.smooth.reset()
@@ -84,7 +94,7 @@ class LongControl:
 
     else:
       if self.smooth.enabled and active and should_stop and CS.vEgo <= SMOOTH_STOP_MAX_SPEED:
-        output_accel = self.smooth.settle(a_target, CS.vEgo, lead_distance, has_lead, self.last_output_accel)
+        output_accel = self.smooth.settle(a_target, CS.vEgo, lead_distance, has_lead, self.last_output_accel, stop_distance=stop_distance)
         self.reset()
       else:
         error = v_target_now - CS.vEgo if self.speed_error_pid else a_target - a_ego
@@ -94,4 +104,6 @@ class LongControl:
         self.smooth.reset()
 
     self.last_output_accel = np.clip(output_accel, accel_limits[0], accel_limits[1])
+    if comfort is not None:
+      comfort.finish(a_target, self.last_output_accel, CS.aEgo)
     return self.last_output_accel

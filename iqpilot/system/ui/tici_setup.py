@@ -10,13 +10,13 @@ from urllib.parse import urlparse
 from enum import IntEnum
 import shutil
 
-import pyray as rl
+import raylib_nb as rl
 
 from iqpilot.common.utils import run_cmd
 from iqpilot.system.hardware import HARDWARE
 from iqpilot.system.ui.lib.setup_install import maybe_update_os, write_setup_claim
 from iqpilot.system.ui.lib.scroll_panel import GuiScrollPanel
-from iqpilot.system.ui.lib.application import gui_app, FontWeight, FONT_SCALE
+from iqpilot.system.ui.lib.application import gui_app, FontWeight, FONT_SCALE, TextAlignment
 from iqpilot.system.ui.widgets import Widget
 from iqpilot.system.ui.widgets.button import Button, ButtonStyle, ButtonRadio
 from iqpilot.system.ui.widgets.keyboard import Keyboard
@@ -72,6 +72,7 @@ class SetupState(IntEnum):
   DOWNLOAD_FAILED = 6
   CUSTOM_SOFTWARE_WARNING = 7
   IQPILOT_BRANCH_SELECTION = 8
+  OS_UPDATE_CONFIRM = 9
 
 
 class Setup(Widget):
@@ -103,17 +104,17 @@ class Setup(Widget):
     self.warning = gui_app.texture("icons/warning.png", 150, 150)
     self.checkmark = gui_app.texture("icons/circled_check.png", 100, 100)
 
-    self._low_voltage_title_label = Label("WARNING: Low Voltage", TITLE_FONT_SIZE, FontWeight.MEDIUM, rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
+    self._low_voltage_title_label = Label("WARNING: Low Voltage", TITLE_FONT_SIZE, FontWeight.MEDIUM, TextAlignment.LEFT,
                                           text_color=rl.Color(255, 89, 79, 255), text_padding=20)
     self._low_voltage_body_label = Label("Power your device in a car with a harness or proceed at your own risk.", BODY_FONT_SIZE,
-                                         text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT, text_padding=20)
+                                         text_alignment=TextAlignment.LEFT, text_padding=20)
     self._low_voltage_continue_button = Button("Continue", self._low_voltage_continue_button_callback)
     self._low_voltage_poweroff_button = Button("Power Off", HARDWARE.shutdown)
 
     self._getting_started_button = Button("", self._getting_started_button_callback, button_style=ButtonStyle.PRIMARY, border_radius=0)
-    self._getting_started_title_label = Label("Getting Started", TITLE_FONT_SIZE, FontWeight.BOLD, rl.GuiTextAlignment.TEXT_ALIGN_LEFT, text_padding=20)
+    self._getting_started_title_label = Label("Getting Started", TITLE_FONT_SIZE, FontWeight.BOLD, TextAlignment.LEFT, text_padding=20)
     self._getting_started_body_label = Label("Before we get on the road, let's finish installation and cover some details.",
-                                             BODY_FONT_SIZE, text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT, text_padding=20)
+                                             BODY_FONT_SIZE, text_alignment=TextAlignment.LEFT, text_padding=20)
 
     self.iqpilot_url = IQPILOT_RELEASE_URL
 
@@ -124,7 +125,7 @@ class Setup(Widget):
                                                       button_style=ButtonStyle.PRIMARY)
     self._software_selection_continue_button.set_enabled(False)
     self._software_selection_back_button = Button("Back", self._software_selection_back_button_callback)
-    self._software_selection_title_label = Label("Choose Software to Use", TITLE_FONT_SIZE, FontWeight.BOLD, rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
+    self._software_selection_title_label = Label("Choose Software to Use", TITLE_FONT_SIZE, FontWeight.BOLD, TextAlignment.LEFT,
                                                  text_padding=20)
 
     self._iqpilot_branch_beta_button = ButtonRadio("Beta", self.checkmark, font_size=BODY_FONT_SIZE, text_padding=80)
@@ -133,26 +134,26 @@ class Setup(Widget):
                                                   button_style=ButtonStyle.PRIMARY)
     self._iqpilot_branch_continue_button.set_enabled(False)
     self._iqpilot_branch_back_button = Button("Back", self._iqpilot_branch_back_button_callback)
-    self._iqpilot_branch_title_label = Label("Branch:", TITLE_FONT_SIZE, FontWeight.BOLD, rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
+    self._iqpilot_branch_title_label = Label("Branch:", TITLE_FONT_SIZE, FontWeight.BOLD, TextAlignment.LEFT,
                                              text_padding=20)
 
     self._download_failed_reboot_button = Button("Reboot device", HARDWARE.reboot)
     self._download_failed_startover_button = Button("Start over", self._download_failed_startover_button_callback, button_style=ButtonStyle.PRIMARY)
-    self._download_failed_title_label = Label("Download Failed", TITLE_FONT_SIZE, FontWeight.BOLD, rl.GuiTextAlignment.TEXT_ALIGN_LEFT, text_padding=20)
-    self._download_failed_url_label = Label("", 52, FontWeight.NORMAL, rl.GuiTextAlignment.TEXT_ALIGN_LEFT, text_padding=20)
-    self._download_failed_body_label = Label("", BODY_FONT_SIZE, text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT, text_padding=20)
+    self._download_failed_title_label = Label("Download Failed", TITLE_FONT_SIZE, FontWeight.BOLD, TextAlignment.LEFT, text_padding=20)
+    self._download_failed_url_label = Label("", 52, FontWeight.NORMAL, TextAlignment.LEFT, text_padding=20)
+    self._download_failed_body_label = Label("", BODY_FONT_SIZE, text_alignment=TextAlignment.LEFT, text_padding=20)
 
     self._network_setup_back_button = Button("Back", self._network_setup_back_button_callback)
     self._network_setup_continue_button = Button("Waiting for internet", self._network_setup_continue_button_callback,
                                                  button_style=ButtonStyle.PRIMARY)
     self._network_setup_continue_button.set_enabled(False)
-    self._network_setup_title_label = Label("Connect to Wi-Fi", TITLE_FONT_SIZE, FontWeight.BOLD, rl.GuiTextAlignment.TEXT_ALIGN_LEFT, text_padding=20)
+    self._network_setup_title_label = Label("Connect to Wi-Fi", TITLE_FONT_SIZE, FontWeight.BOLD, TextAlignment.LEFT, text_padding=20)
 
     self._custom_software_warning_continue_button = Button("Scroll to continue", self._custom_software_warning_continue_button_callback,
                                                            button_style=ButtonStyle.PRIMARY)
     self._custom_software_warning_continue_button.set_enabled(False)
     self._custom_software_warning_back_button = Button("Back", self._custom_software_warning_back_button_callback)
-    self._custom_software_warning_title_label = Label("WARNING: Custom Software", 81, FontWeight.BOLD, rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
+    self._custom_software_warning_title_label = Label("WARNING: Custom Software", 81, FontWeight.BOLD, TextAlignment.LEFT,
                                                       text_color=rl.Color(255, 89, 79, 255),
                                                       text_padding=60)
     self._custom_software_warning_body_label = Label("Use caution when installing third-party software.\n\n"
@@ -161,18 +162,24 @@ class Setup(Widget):
                                                      + "⚠️ It may cause damage to your device and/or vehicle.\n\n"
                                                      + "If you'd like to proceed, use https://flash.comma.ai "
                                                      + "to restore your device to a factory state later.",
-                                                     68, text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT, text_padding=60)
+                                                     68, text_alignment=TextAlignment.LEFT, text_padding=60)
     self._custom_software_warning_body_scroll_panel = GuiScrollPanel()
+
+    self._os_update_coordinator = None
+    self._os_update_title_label = Label("Update IQ.OS", TITLE_FONT_SIZE, FontWeight.BOLD, TextAlignment.LEFT, text_padding=20)
+    self._os_update_body_label = Label("", BODY_FONT_SIZE, text_alignment=TextAlignment.LEFT, text_padding=20)
+    self._os_update_decline_button = Button("Cancel", self._os_update_decline)
+    self._os_update_confirm_button = Button("Update", self._os_update_confirm, button_style=ButtonStyle.PRIMARY)
 
     self._downloading_body_label = Label("Downloading...", TITLE_FONT_SIZE, FontWeight.MEDIUM, text_padding=20)
     # Persistent "set up from your phone" banner: an eyebrow + the big pairing
     # code, shown on every setup page so the konn3kt app can drive setup at any point.
-    self._ble_eyebrow_label = Label("KONN3KT SETUP CODE", 26, FontWeight.BOLD, rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+    self._ble_eyebrow_label = Label("KONN3KT SETUP CODE", 26, FontWeight.BOLD, TextAlignment.CENTER,
                                     text_color=rl.Color(255, 255, 255, 150))
-    self._ble_code_label = Label("", 56, FontWeight.BOLD, rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+    self._ble_code_label = Label("", 56, FontWeight.BOLD, TextAlignment.CENTER,
                                  text_color=rl.Color(255, 255, 255, 240))
     self._ble_connected_label = Label("Phone connected - continue in app", 28, FontWeight.MEDIUM,
-                                      rl.GuiTextAlignment.TEXT_ALIGN_CENTER, text_color=rl.Color(16, 185, 129, 255))
+                                      TextAlignment.CENTER, text_color=rl.Color(16, 185, 129, 255))
 
     try:
       with open("/sys/class/hwmon/hwmon1/in1_input") as f:
@@ -225,7 +232,7 @@ class Setup(Widget):
       url = self._ble_pending_install_url
       self._ble_pending_install_url = None
       self.iqpilot_url = url
-      if self.state not in (SetupState.DOWNLOADING, SetupState.DOWNLOAD_FAILED):
+      if self.state not in (SetupState.DOWNLOADING, SetupState.DOWNLOAD_FAILED, SetupState.OS_UPDATE_CONFIRM):
         self.download(url)
     # Install progress is reported by the install thread (_ble_progress /
     # _maybe_update_os) as the single source of truth. Do NOT push per-frame from
@@ -287,6 +294,8 @@ class Setup(Widget):
       self.render_downloading(rect)
     elif self.state == SetupState.DOWNLOAD_FAILED:
       self.render_download_failed(rect)
+    elif self.state == SetupState.OS_UPDATE_CONFIRM:
+      self.render_os_update_confirm(rect)
     self._render_ble_overlay(rect)
 
   def _low_voltage_continue_button_callback(self):
@@ -489,6 +498,15 @@ class Setup(Widget):
     self._download_failed_reboot_button.render(rl.Rectangle(rect.x + MARGIN, button_y, button_width, BUTTON_HEIGHT))
     self._download_failed_startover_button.render(rl.Rectangle(rect.x + MARGIN + button_width + BUTTON_SPACING, button_y, button_width, BUTTON_HEIGHT))
 
+  def render_os_update_confirm(self, rect: rl.Rectangle):
+    self._os_update_title_label.render(rl.Rectangle(rect.x + 117, rect.y + 185, rect.width - 117, TITLE_FONT_SIZE * FONT_SCALE))
+    self._os_update_body_label.render(rl.Rectangle(rect.x + 117, rect.y, rect.width - 117 - 100, rect.height))
+
+    button_width = (rect.width - BUTTON_SPACING - MARGIN * 2) / 2
+    button_y = rect.height - BUTTON_HEIGHT - MARGIN
+    self._os_update_decline_button.render(rl.Rectangle(rect.x + MARGIN, button_y, button_width, BUTTON_HEIGHT))
+    self._os_update_confirm_button.render(rl.Rectangle(rect.x + MARGIN + button_width + BUTTON_SPACING, button_y, button_width, BUTTON_HEIGHT))
+
   def render_custom_software_warning(self, rect: rl.Rectangle):
     warn_rect = rl.Rectangle(rect.x, rect.y, rect.width, 1500)
     offset = self._custom_software_warning_body_scroll_panel.update(rect, warn_rect)
@@ -638,7 +656,24 @@ class Setup(Widget):
       self.download_failed(label, fail_msg)
 
   def _maybe_update_os(self, label: str) -> bool:
-    return maybe_update_os(INSTALL_PATH, HARDWARE, self.ble_setup, self.download_failed, label)
+    return maybe_update_os(INSTALL_PATH, HARDWARE, self.ble_setup, self.download_failed, label, self._prompt_os_update)
+
+  def _prompt_os_update(self, coordinator):
+    self._os_update_coordinator = coordinator
+    if coordinator is None:
+      self.state = SetupState.DOWNLOADING
+      return
+    self._os_update_body_label.set_text(f"This software needs {coordinator.required}. This device runs {coordinator.current}.\n\n"
+                                        + "Updating flashes the OS, then reboots.")
+    self.state = SetupState.OS_UPDATE_CONFIRM
+
+  def _os_update_confirm(self):
+    if self._os_update_coordinator is not None:
+      self._os_update_coordinator.confirm()
+
+  def _os_update_decline(self):
+    if self._os_update_coordinator is not None:
+      self._os_update_coordinator.decline()
 
   def _download_thread(self):
     try:
