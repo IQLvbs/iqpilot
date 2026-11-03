@@ -1,5 +1,5 @@
 """
-Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
+Copyright © IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved, licensed under https://iqlvbs.com/terms
 """
 import numpy as np
 JERK_SPEED_BP = [0.0, 8.0, 20.0, 35.0]

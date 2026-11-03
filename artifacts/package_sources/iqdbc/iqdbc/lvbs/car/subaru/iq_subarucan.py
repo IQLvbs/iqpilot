@@ -1,5 +1,5 @@
 """
-Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
+Copyright © IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved, licensed under https://iqlvbs.com/terms
 
 Camera-bus message spoofers for Subaru stop-and-go: re-emit the stock Throttle
 and Brake_Pedal frames, nudging a single field to trigger an ACC resume from a

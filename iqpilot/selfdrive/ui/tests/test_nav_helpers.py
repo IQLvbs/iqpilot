@@ -82,3 +82,12 @@ def test_route_preview_requires_current_destination_and_engine_acceptance(tmp_pa
   assert active_navigation_route(params) is None
   params.remove("NavigationDestination")
   assert active_navigation_route(params) is None
+
+
+def test_resolve_mapbox_token_ignores_the_revoked_default(tmp_path):
+  params = Params(str(tmp_path))
+  params.put("MapboxToken", "pk.old-default")
+  params.put("MapboxTokenDefaultApplied", "pk.old-default")
+  assert resolve_mapbox_token(params) == ""
+  params.put("MapboxToken", "pk.user")
+  assert resolve_mapbox_token(params) == "pk.user"

@@ -1,5 +1,5 @@
 """
-Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
+Copyright © IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved, licensed under https://iqlvbs.com/terms
 
 Engagement tiers for the speed-assist feature. A tier is persisted as an integer
 under the "IQSpeedAssistMode" param; the ordinal IS the stored value and must remain

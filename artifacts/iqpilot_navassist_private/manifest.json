@@ -12,7 +12,7 @@
   },
   "python/iqpilot_private/navassist/__init__.py": {
     "mode": 420,
-    "sha256": "ee4237375e199e74a35b5c1851f32eec3d0799966b7f1211c86ce00a0f756088",
+    "sha256": "a31d1312f85162bbcf206ba948b571ea1a49fc6a8b3fd578fb9d16166f9d7439",
     "size": 112
   },
   "python/iqpilot_private/navassist/_cipher.cpython-312-aarch64-linux-gnu.so": {

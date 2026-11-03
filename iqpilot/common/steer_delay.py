@@ -1,5 +1,5 @@
 """
-Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
+Copyright © IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved, licensed under https://iqlvbs.com/terms
 
 Chooses which steer-actuator delay the lateral controllers run with: the value the
 live estimator learned, or the driver's fixed software delay — gated by the

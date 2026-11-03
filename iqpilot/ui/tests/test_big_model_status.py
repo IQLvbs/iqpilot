@@ -1,5 +1,5 @@
 """
-Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos/
+Copyright © IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved, licensed under https://iqlvbs.com/terms
 
 The BIG (tici/tizi) and SMALL (mici) onroad source indicators share one
 resolver (comma PR #38492 states, backend-aware label). Pin its truth table.

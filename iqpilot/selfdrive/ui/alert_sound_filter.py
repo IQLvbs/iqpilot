@@ -1,5 +1,5 @@
 """
-Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
+Copyright © IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved, licensed under https://iqlvbs.com/terms
 
 Sound-suppression policy for Soundd. The driver's "IQAlertSilence" param, when set,
 mutes routine chimes and keeps only a named allow-list of safety-critical cues

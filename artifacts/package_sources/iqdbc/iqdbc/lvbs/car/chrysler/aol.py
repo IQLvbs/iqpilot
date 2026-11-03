@@ -1,5 +1,5 @@
 """
-Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
+Copyright © IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved, licensed under https://iqlvbs.com/terms
 
 Always-on-Lateral adapter for Chrysler. CarState reads the LKAS toggle button
 (and the forwarded LKAS heartbeat); CarController tracks the AOL state and, when

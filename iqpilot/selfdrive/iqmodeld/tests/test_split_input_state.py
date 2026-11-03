@@ -1,5 +1,5 @@
 """
-Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos/
+Copyright © IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved, licensed under https://iqlvbs.com/terms
 
 eMac split-model "prepared input equivalence": SplitInputState must reproduce,
 byte-exact, the queue semantics of compile_split_runtime's execute_bundle —

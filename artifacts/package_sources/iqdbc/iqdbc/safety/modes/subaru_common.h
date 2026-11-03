@@ -1,7 +1,7 @@
 /*
  * Copyright © IQ.Lvbs, a part of Project Teal Lvbs.
  * All Rights Reserved.
- * Licensed under: https://konn3kt.com/tos
+ * Licensed under: https://iqlvbs.com/terms
  */
 
 #pragma once

@@ -1,4 +1,4 @@
-"""Copyright (c) IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved."""
+"""Copyright (c) IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved."""
 
 from types import SimpleNamespace
 

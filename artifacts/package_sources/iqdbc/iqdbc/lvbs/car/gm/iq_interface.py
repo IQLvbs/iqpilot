@@ -1,5 +1,5 @@
 """
-Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
+Copyright © IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved, licensed under https://iqlvbs.com/terms
 
 GM torque-space feed-forward for the IQ.Pilot lateral extension: a sigmoid+linear
 lat-accel -> torque curve for the tuned platforms, else the linear default.

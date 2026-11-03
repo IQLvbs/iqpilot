@@ -1,5 +1,5 @@
 """
-Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
+Copyright © IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved, licensed under https://iqlvbs.com/terms
 
 IQ.Pilot Subaru extension flags. Selected in apply_iq_car_config() from the user's
 stop-and-go params and consumed by the stop-and-go controller and panda safety.

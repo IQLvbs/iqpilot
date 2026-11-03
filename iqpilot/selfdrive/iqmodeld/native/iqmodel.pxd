@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # distutils: language = c++
-# Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos/
+# Copyright © IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved, licensed under https://iqlvbs.com/terms
 
 from msgq.visionipc.visionipc cimport cl_device_id, cl_context, cl_mem
 

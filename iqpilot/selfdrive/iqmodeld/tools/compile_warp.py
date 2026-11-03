@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos/
+Copyright © IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved, licensed under https://iqlvbs.com/terms
 
 Compile the backend-neutral warp-only artifact: NV12 camera frames + 3x3
 transforms -> (2, 6, model_h/2, model_w/2) uint8 warped tensor, on the device

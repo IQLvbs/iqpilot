@@ -1,15 +1,9 @@
 import json
 import platform
-import threading
-import time
 from pathlib import Path
 
 from iqpilot.common.params import Params
 
-_MAPBOX_DEFAULT_HELPER_UNAVAILABLE = False
-_MAPBOX_DEFAULT_TOKEN = ""
-_MAPBOX_DEFAULT_RETRY_AT = 0.0
-_MAPBOX_DEFAULT_LOCK = threading.Lock()
 _GPS_SERVICES = ("gpsLocationExternal", "gpsLocation")
 _POSITION_PARAM_KEYS = ("LastGPSPosition", "LastGPSPositionIQLoc")
 
@@ -35,47 +29,12 @@ def active_navigation_route(params: Params) -> dict | None:
   return route
 
 
-def _load_default_mapbox_token(params: Params) -> None:
-  global _MAPBOX_DEFAULT_HELPER_UNAVAILABLE, _MAPBOX_DEFAULT_TOKEN, _MAPBOX_DEFAULT_RETRY_AT
-
-  try:
-    try:
-      from iqpilot.system.proprietary_runtime._verified_import import import_verified_module
-      runtime_common = import_verified_module("iqpilot_navd_private", "iqpilot_private.navd.runtime_common")
-    except Exception:
-      _MAPBOX_DEFAULT_HELPER_UNAVAILABLE = True
-      return
-
-    for args in ((params,), ()):
-      try:
-        token = _decode_param(runtime_common.ensure_default_mapbox_token(*args))
-      except TypeError:
-        continue
-      except Exception:
-        return
-      _MAPBOX_DEFAULT_TOKEN = token or _decode_param(params.get("MapboxToken"))
-      return
-  finally:
-    _MAPBOX_DEFAULT_RETRY_AT = time.monotonic() + 60.0
-    _MAPBOX_DEFAULT_LOCK.release()
-
-
 def resolve_mapbox_token(params: Params | None = None) -> str:
   params = params or Params()
   token = _decode_param(params.get("MapboxToken"))
-  if token:
-    return token
-  if _MAPBOX_DEFAULT_TOKEN or _MAPBOX_DEFAULT_HELPER_UNAVAILABLE:
-    return _MAPBOX_DEFAULT_TOKEN
-
-  # Default-token discovery can perform network and runtime verification work.
-  if time.monotonic() >= _MAPBOX_DEFAULT_RETRY_AT and _MAPBOX_DEFAULT_LOCK.acquire(blocking=False):
-    try:
-      threading.Thread(target=_load_default_mapbox_token, args=(params,), daemon=True, name="mapbox-token").start()
-    except Exception:
-      _MAPBOX_DEFAULT_LOCK.release()
-      raise
-  return ""
+  if token and token == _decode_param(params.get("MapboxTokenDefaultApplied")):
+    return ""
+  return token
 
 
 def _valid_lat_lon(lat: float, lon: float) -> bool:

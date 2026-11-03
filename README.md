@@ -53,7 +53,7 @@
 #### Konn3kt encrypts your logs, and video data with dual end-to-end encryption, ensuring that your data is accessible to you, and only you, not even accessible to IQ.Lvbs.
 
 ## Terms of Service / Privacy Policy / Licensing
-#### IQ.Pilot is subject to the License found in this repository, [Terms of Service](https://konn3kt.com/tos), and, [Privacy Policy](https://konn3kt.com/privacy).
+#### IQ.Pilot is subject to the License found in this repository, [Terms of Service](https://iqlvbs.com/terms), and, [Privacy Policy](https://konn3kt.com/privacy).
 
 
 ## Support IQ.Pilot?
