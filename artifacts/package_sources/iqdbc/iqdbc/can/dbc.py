@@ -17,6 +17,7 @@ from iqdbc.car.volkswagen.mqbcan import volkswagen_mqb_meb_checksum, volkswagen_
 from iqdbc.car.tesla.teslacan import tesla_checksum
 from iqdbc.car.body.bodycan import body_checksum
 from iqdbc.car.psa.psacan import psa_checksum
+from iqdbc.car.mg.mgcan import mg_checksum
 
 
 class SignalType:
@@ -35,6 +36,7 @@ class SignalType:
   PSA_CHECKSUM = 12
   VOLKSWAGEN_MLB_CHECKSUM = 13
   VOLKSWAGEN_MQB_MEB_GEN2_CHECKSUM = 14
+  MG_CHECKSUM = 15
 
 
 @dataclass
@@ -173,6 +175,7 @@ class ChecksumState:
   checksum_type: int
   calc_checksum: Callable[[int, Signal, bytearray], int] | None
   setup_signal: Callable[[Signal, str, int], None] | None = None
+  checksum_pattern: str = r"^CHECKSUM$"
 
 
 def get_checksum_state(dbc_name: str) -> ChecksumState | None:
@@ -202,6 +205,8 @@ def get_checksum_state(dbc_name: str) -> ChecksumState | None:
     return ChecksumState(8, -1, 0, -1, True, SignalType.TESLA_CHECKSUM, tesla_checksum, tesla_setup_signal)
   elif dbc_name.startswith("psa_"):
     return ChecksumState(4, 4, 7, 3, False, SignalType.PSA_CHECKSUM, psa_checksum)
+  elif dbc_name == "mg":
+    return ChecksumState(8, -1, 63, -1, False, SignalType.MG_CHECKSUM, mg_checksum, checksum_pattern=r"Chksm|^ChLKARespToqPVHSC2$")
   return None
 
 
@@ -210,7 +215,7 @@ def set_signal_type(sig: Signal, chk: ChecksumState | None, dbc_name: str, line_
   if chk:
     if chk.setup_signal:
       chk.setup_signal(sig, dbc_name, line_num)
-    if sig.name == "CHECKSUM":
+    if re.search(chk.checksum_pattern, sig.name):
       sig.type = chk.checksum_type
       sig.calc_checksum = chk.calc_checksum
     elif sig.name == "COUNTER":

@@ -6,7 +6,7 @@ from iqdbc.car import Bus, CarSpecs, DbcDict, PlatformConfig, Platforms, uds
 from iqdbc.car.lateral import AngleSteeringLimits
 from iqdbc.car.common.conversions import Conversions as CV
 from iqdbc.car.structs import CarParams
-from iqdbc.car.docs_definitions import CarFootnote, CarHarness, CarDocs, CarParts, Column
+from iqdbc.car.docs_definitions import CarFootnote, CarHarness, CarDocs, CarParts, Column, SupportType
 from iqdbc.car.fw_query_definitions import FwQueryConfig, Request, p16
 
 Ecu = CarParams.Ecu
@@ -62,6 +62,11 @@ class CarControllerParams:
     # these cars have significantly more torque than most HKG; limit to 70% of max
     elif CP.flags & HyundaiFlags.ALT_LIMITS:
       self.STEER_MAX = 384
+      self.STEER_DELTA_UP = 2
+      self.STEER_DELTA_DOWN = 3
+
+    elif CP.flags & HyundaiFlags.ALT_LIMITS_2:
+      self.STEER_MAX = 170
       self.STEER_DELTA_UP = 2
       self.STEER_DELTA_DOWN = 3
 
@@ -301,9 +306,9 @@ class CAR(Platforms):
     flags=HyundaiFlags.CLUSTER_GEARS | HyundaiFlags.ALT_LIMITS,
   )
   HYUNDAI_KONA_2022 = HyundaiPlatformConfig(
-    [HyundaiCarDocs("Hyundai Kona 2022", car_parts=CarParts.common([CarHarness.hyundai_o]))],
+    [HyundaiCarDocs("Hyundai Kona 2022-23", car_parts=CarParts.common([CarHarness.hyundai_o]))],
     CarSpecs(mass=1491, wheelbase=2.6, steerRatio=13.42, tireStiffnessFactor=0.385),
-    flags=HyundaiFlags.CAMERA_SCC,
+    flags=HyundaiFlags.CAMERA_SCC | HyundaiFlags.ALT_LIMITS_2,
   )
   HYUNDAI_KONA_EV = HyundaiPlatformConfig(
     [HyundaiCarDocs("Hyundai Kona Electric 2018-21", car_parts=CarParts.common([CarHarness.hyundai_g]))],
@@ -429,7 +434,10 @@ class CAR(Platforms):
     flags=HyundaiFlags.EV,
   )
   HYUNDAI_IONIQ_6 = HyundaiCanFDPlatformConfig(
-    [HyundaiCarDocs("Hyundai Ioniq 6 (with HDA II) 2023-24", "Highway Driving Assist II", car_parts=CarParts.common([CarHarness.hyundai_p]))],
+    [
+      HyundaiCarDocs("Hyundai Ioniq 6 (without HDA II) 2023-24", "Highway Driving Assist", car_parts=CarParts.common([CarHarness.hyundai_l])),
+      HyundaiCarDocs("Hyundai Ioniq 6 (with HDA II) 2023-24", "Highway Driving Assist II", car_parts=CarParts.common([CarHarness.hyundai_p])),
+    ],
     HYUNDAI_IONIQ_5.specs,
     flags=HyundaiFlags.EV | HyundaiFlags.CANFD_NO_RADAR_DISABLE,
   )
@@ -508,6 +516,10 @@ class CAR(Platforms):
     KIA_K5_2021.specs,
     flags=HyundaiFlags.MANDO_RADAR | HyundaiFlags.CHECKSUM_CRC8 | HyundaiFlags.HYBRID,
   )
+  KIA_K7_2017 = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Kia K7 2017", car_parts=CarParts.common([CarHarness.hyundai_c]), support_type=SupportType.COMMUNITY)],
+    CarSpecs(mass=1648, wheelbase=2.86, steerRatio=16.8),
+  )
   KIA_K5_DL3_24 = HyundaiCanFDPlatformConfig(
     [
       HyundaiCarDocs("Kia K5 (South Korea only) 2024", "Highway Driving Assist II", car_parts=CarParts.common([CarHarness.hyundai_k])),
@@ -536,7 +548,10 @@ class CAR(Platforms):
     flags=HyundaiFlags.MANDO_RADAR | HyundaiFlags.EV,
   )
   KIA_NIRO_EV_2ND_GEN = HyundaiCanFDPlatformConfig(
-    [HyundaiCarDocs("Kia Niro EV 2023", "All", car_parts=CarParts.common([CarHarness.hyundai_a]))],
+    [
+      HyundaiCarDocs("Kia Niro EV 2023", "All", car_parts=CarParts.common([CarHarness.hyundai_a])),
+      HyundaiCarDocs("Kia Niro EV (with HDA II) 2024-25", "Highway Driving Assist II", car_parts=CarParts.common([CarHarness.hyundai_r])),
+    ],
     KIA_NIRO_EV.specs,
     flags=HyundaiFlags.EV,
   )
@@ -566,7 +581,7 @@ class CAR(Platforms):
     flags=HyundaiFlags.HYBRID,
   )
   KIA_NIRO_HEV_2ND_GEN = HyundaiCanFDPlatformConfig(
-    [HyundaiCarDocs("Kia Niro Hybrid 2023", car_parts=CarParts.common([CarHarness.hyundai_a]))],
+    [HyundaiCarDocs("Kia Niro Hybrid 2023-24", car_parts=CarParts.common([CarHarness.hyundai_a]))],
     KIA_NIRO_EV.specs,
   )
   KIA_OPTIMA_G4 = HyundaiPlatformConfig(
@@ -600,6 +615,7 @@ class CAR(Platforms):
     [
       HyundaiCarDocs("Kia Sportage 2023-24", car_parts=CarParts.common([CarHarness.hyundai_n])),
       HyundaiCarDocs("Kia Sportage Hybrid 2023", car_parts=CarParts.common([CarHarness.hyundai_n])),
+      HyundaiCarDocs("Kia Sportage Plug-in Hybrid 2023", car_parts=CarParts.common([CarHarness.hyundai_n])),
     ],
     # weight from SX and above trims, average of FWD and AWD version, steering ratio according to Kia News https://www.kiamedia.com/us/en/models/sportage/2023/specifications
     CarSpecs(mass=1725, wheelbase=2.756, steerRatio=13.6),
@@ -640,6 +656,11 @@ class CAR(Platforms):
     [HyundaiCarDocs("Kia Ceed 2019-21", car_parts=CarParts.common([CarHarness.hyundai_e]))],
     CarSpecs(mass=1450, wheelbase=2.65, steerRatio=13.75, tireStiffnessFactor=0.5),
     flags=HyundaiFlags.LEGACY,
+  )
+  KIA_CEED_PHEV = HyundaiPlatformConfig(
+    [HyundaiCarDocs("Kia Ceed Plug-in Hybrid 2021", car_parts=CarParts.common([CarHarness.hyundai_b]))],
+    CarSpecs(mass=1450, wheelbase=2.65, steerRatio=13.75, tireStiffnessFactor=0.5),
+    flags=HyundaiFlags.LEGACY | HyundaiFlags.HYBRID,
   )
   KIA_EV4 = HyundaiCanFDPlatformConfig(
     [HyundaiCarDocs("Kia EV4 2025", "All", car_parts=CarParts.common([CarHarness.hyundai_q]))],

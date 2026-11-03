@@ -74,6 +74,7 @@ def test_classic_longitudinal_accel_and_aeb_guards(safety):
     assert not safety.safety_tx_hook(classic_accel(accel))
   assert not safety.safety_tx_hook(classic_accel(0, aeb_decel=1))
   assert not safety.safety_tx_hook(classic_accel(0, aeb_request=True))
+  assert not safety.safety_tx_hook(classic_accel(0, aeb_stop_request=True))
 
   assert safety.safety_tx_hook(packet(0x38D, 0, 8))
   assert not safety.safety_tx_hook(packet(0x38D, 0, 8, {1: 1}))

@@ -398,8 +398,7 @@ class CarController(CarControllerBase, AolCarController, GasInterceptorCarContro
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud))
 
-      steering_available = CS.out.cruiseState.available and CS.out.vEgo > self.CP.minSteerSpeed
-      reduced_steering = CS.out.steeringPressed
+      steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
 
       lkas_state_change = None
       if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
@@ -414,7 +413,7 @@ class CarController(CarControllerBase, AolCarController, GasInterceptorCarContro
         self.lkas_state_change_frames = max(0, self.lkas_state_change_frames - 1)
 
       can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
-                                                steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, self.dashed_lanes,
+                                                steering_available, alert_steer_required, CS.lkas_hud, self.dashed_lanes,
                                                 steer_fault_permanent=CS.out.steerFaultPermanent, lkas_state_change=lkas_state_change))
 
       if self.CP.openpilotLongitudinalControl:

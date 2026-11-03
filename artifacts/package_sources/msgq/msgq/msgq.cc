@@ -6,18 +6,27 @@
 #include <cstdint>
 #include <chrono>
 #include <algorithm>
+#include <cstddef>
 #include <cstdlib>
-#include <csignal>
+#include <mutex>
 #include <random>
 #include <string>
 #include <limits>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include <poll.h>
+#include <pthread.h>
+#ifdef __linux__
+#include <sys/epoll.h>
+#endif
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/syscall.h>
+#include <sys/un.h>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -25,22 +34,133 @@
 
 #include "msgq/msgq.h"
 
-void sigusr2_handler(int signal) {
-  assert(signal == SIGUSR2);
-}
-
 uint64_t msgq_get_uid(void){
   std::random_device rd("/dev/urandom");
-  std::uniform_int_distribution<uint64_t> distribution(0, std::numeric_limits<uint32_t>::max());
+  std::uniform_int_distribution<uint64_t> distribution(1, (MSGQ_READER_WAITING >> 32) - 1);
+  return distribution(rd) << 32;
+}
 
-  #ifdef __APPLE__
-    // TODO: this doesn't work
-    uint64_t uid = distribution(rd) << 32 | getpid();
-  #else
-    uint64_t uid = distribution(rd) << 32 | syscall(SYS_gettid);
-  #endif
+static socklen_t wake_addr(uint64_t uid, sockaddr_un *addr) {
+  memset(addr, 0, sizeof(*addr));
+  addr->sun_family = AF_UNIX;
+#ifdef __APPLE__
+  snprintf(addr->sun_path, sizeof(addr->sun_path), "/tmp/msgq_wake_%016llx", (unsigned long long)uid);
+  return sizeof(*addr);
+#else
+  int n = snprintf(addr->sun_path + 1, sizeof(addr->sun_path) - 1, "msgq_wake_%016llx", (unsigned long long)uid);
+  return offsetof(sockaddr_un, sun_path) + 1 + n;
+#endif
+}
 
-  return uid;
+static int wake_socket() {
+  int fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+  if (fd >= 0) {
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
+    fcntl(fd, F_SETFL, O_NONBLOCK);
+  }
+  return fd;
+}
+
+struct WakeSender {
+  int fd = -1;
+  ~WakeSender() { if (fd >= 0) close(fd); }
+};
+static thread_local WakeSender t_sender;
+
+#ifdef __linux__
+// Edge-triggered so an undrained wake datagram can't turn the wait into a busy loop
+struct PollSet {
+  int epfd = -1;
+  std::unordered_map<int, std::pair<const msgq_queue_t*, uint64_t>> regs;
+  ~PollSet() { if (epfd >= 0) close(epfd); }
+};
+static thread_local PollSet t_pollset;
+#endif
+
+static void drop_wake_state_in_child() {
+  if (t_sender.fd >= 0) close(t_sender.fd);
+  t_sender.fd = -1;
+#ifdef __linux__
+  if (t_pollset.epfd >= 0) close(t_pollset.epfd);
+  t_pollset.epfd = -1;
+  t_pollset.regs.clear();
+#endif
+}
+
+static void register_atfork_once() {
+  static std::once_flag atfork_once;
+  std::call_once(atfork_once, []() { pthread_atfork(nullptr, nullptr, drop_wake_state_in_child); });
+}
+
+static int wake_sender() {
+  register_atfork_once();
+  if (t_sender.fd < 0) t_sender.fd = wake_socket();
+  return t_sender.fd;
+}
+
+static void wake_reader(uint64_t uid) {
+  sockaddr_un addr;
+  socklen_t len = wake_addr(uid, &addr);
+
+  char c = 0;
+  int fd = wake_sender();
+  if (fd >= 0 && (sendto(fd, &c, sizeof(c), 0, reinterpret_cast<sockaddr*>(&addr), len) >= 0 ||
+                  errno == ENOENT || errno == ECONNREFUSED)) {
+    return;
+  }
+
+  // Unread datagrams count against the sending socket, so a stuck reader can fill it; retry on a fresh one
+  int tmp = wake_socket();
+  if (tmp < 0) return;
+  sendto(tmp, &c, sizeof(c), MSG_DONTWAIT, reinterpret_cast<sockaddr*>(&addr), len);
+  close(tmp);
+}
+
+static bool wake_socket_alive(uint64_t uid) {
+  sockaddr_un addr;
+  socklen_t len = wake_addr(uid & ~MSGQ_READER_WAITING, &addr);
+  int fd = wake_socket();
+  if (fd < 0) return true;
+  int rc = connect(fd, reinterpret_cast<sockaddr*>(&addr), len);
+  int err = errno;
+  close(fd);
+  return rc == 0 || (err != ECONNREFUSED && err != ENOENT);
+}
+
+static void wake_if_waiting(std::atomic<uint64_t> *read_uid, uint64_t new_value) {
+  uint64_t old = read_uid->exchange(new_value);
+  if (old & MSGQ_READER_WAITING) {
+    wake_reader(old & ~MSGQ_READER_WAITING);
+  }
+}
+
+static void close_wake_socket(msgq_queue_t *q) {
+  if (q->wake_fd < 0) return;
+  close(q->wake_fd);
+  q->wake_fd = -1;
+#ifdef __APPLE__
+  sockaddr_un addr;
+  wake_addr(q->read_uid_local, &addr);
+  unlink(addr.sun_path);
+#endif
+}
+
+static void bind_wake_socket(msgq_queue_t *q) {
+  sockaddr_un addr;
+  socklen_t len = wake_addr(q->read_uid_local, &addr);
+
+  int fd = wake_socket();
+  if (fd < 0) return;
+  if (bind(fd, reinterpret_cast<sockaddr*>(&addr), len) < 0) {
+    close(fd);
+    return;
+  }
+  q->wake_fd = fd;
+}
+
+static void drain_wake_socket(int fd) {
+  char c;
+  recv(fd, &c, sizeof(c), MSG_DONTWAIT);
 }
 
 int msgq_msg_init_size(msgq_msg_t * msg, size_t size){
@@ -85,7 +205,6 @@ void msgq_wait_for_subscriber(msgq_queue_t *q){
 
 int msgq_new_queue(msgq_queue_t * q, const char * path, size_t size){
   assert(size < 0xFFFFFFFF); // Buffer must be smaller than 2^32 bytes
-  std::signal(SIGUSR2, sigusr2_handler);
 
 #ifdef __APPLE__
   std::string base_path = "/tmp/msgq_";
@@ -153,7 +272,9 @@ void msgq_close_queue(msgq_queue_t *q){
   if (q->mmap_p != NULL){
     msgq_remove_subscriber(q);
     munmap(q->mmap_p, q->size + sizeof(msgq_header_t));
+    q->mmap_p = nullptr;
   }
+  close_wake_socket(q);
 }
 
 
@@ -161,63 +282,16 @@ void msgq_init_publisher(msgq_queue_t * q) {
   //std::cout << "Starting publisher" << std::endl;
   uint64_t uid = msgq_get_uid();
 
-  q->last_reap_us = 0;
   *q->write_uid = uid;
   *q->num_readers = 0;
 
   for (size_t i = 0; i < NUM_READERS; i++){
     *q->read_valids[i] = false;
-    *q->read_uids[i] = 0;
+    wake_if_waiting(q->read_uids[i], 0);
   }
 
   q->write_uid_local = uid;
 }
-
-static void thread_signal(uint32_t tid) {
-  if (tid == 0) return;
-  #ifdef __APPLE__
-    // macOS doesn't have tkill, rely on polling instead
-    (void)tid;
-  #elif !defined(SYS_tkill)
-    // fallback for systems without tkill
-    kill(tid, SIGUSR2);
-  #else
-    syscall(SYS_tkill, tid, SIGUSR2);
-  #endif
-}
-
-#ifdef __linux__
-// Zero reader slots whose owning thread died without closing, so the notify loop
-// stops signaling their TIDs: the kernel recycles TIDs, and a stale slot means
-// every send fires SIGUSR2 at an unrelated process — fatal for one with no
-// handler installed (e.g. a subscriber's short-lived compiler child). Amortized
-// to ~1Hz per publisher; reclaim-at-overflow alone leaves stale slots signaled
-// indefinitely while the table has free space.
-static void msgq_reap_dead_readers(msgq_queue_t *q) {
-  int64_t now_us = std::chrono::duration_cast<std::chrono::microseconds>(
-      std::chrono::steady_clock::now().time_since_epoch()).count();
-  if (now_us - q->last_reap_us < 1000000)
-    return;
-  q->last_reap_us = now_us;
-
-  uint64_t num_readers = std::min<uint64_t>(NUM_READERS, *q->num_readers);
-  for (uint64_t i = 0; i < num_readers; i++){
-    uint64_t slot_uid = *q->read_uids[i];
-    uint32_t slot_tid = slot_uid & 0xFFFFFFFF;
-    if (slot_uid == 0 || slot_tid == 0)
-      continue;
-    char proc_path[32];
-    snprintf(proc_path, sizeof(proc_path), "/proc/%u", slot_tid);
-    struct stat st;
-    if (stat(proc_path, &st) == 0)
-      continue;
-    uint64_t expected = slot_uid;
-    if (std::atomic_compare_exchange_strong(q->read_uids[i], &expected, (uint64_t)0)){
-      *q->read_valids[i] = false;
-    }
-  }
-}
-#endif
 
 // claim slot i (its uid CAS already succeeded) for the calling thread
 static void msgq_claim_slot(msgq_queue_t * q, size_t i, uint64_t uid) {
@@ -231,6 +305,7 @@ int msgq_init_subscriber(msgq_queue_t * q) {
   assert(q != NULL);
   assert(q->num_readers != NULL);
 
+  close_wake_socket(q);
   uint64_t uid = msgq_get_uid();
 
   // Get reader id
@@ -254,34 +329,21 @@ int msgq_init_subscriber(msgq_queue_t * q) {
         }
       }
 
-#ifdef __linux__
-      // a slot whose owning thread died without closing; /proc/<tid> is stat-able
-      // for any live thread (incl. non-leaders), no procfs elsewhere
       for (size_t i = 0; i < cur_num_readers && !reclaimed; i++){
-        uint64_t slot_uid = *q->read_uids[i];
-        uint32_t slot_tid = slot_uid & 0xFFFFFFFF;
-        if (slot_uid == 0 || slot_tid == 0)
-          continue;
-        char proc_path[32];
-        snprintf(proc_path, sizeof(proc_path), "/proc/%u", slot_tid);
-        struct stat st;
-        if (stat(proc_path, &st) == 0)
-          continue;
-        // claim atomically so two registrants can't take the same dead slot
         std::atomic<uint64_t> *slot = q->read_uids[i];
-        uint64_t expected = slot_uid;
-        if (std::atomic_compare_exchange_strong(slot, &expected, uid)){
+        uint64_t slot_uid = *slot;
+        if (slot_uid == 0 || wake_socket_alive(slot_uid))
+          continue;
+        if (std::atomic_compare_exchange_strong(slot, &slot_uid, uid)){
           msgq_claim_slot(q, i, uid);
           reclaimed = true;
         }
       }
-#endif
       if (reclaimed)
         break;
 
       // NUM_READERS live readers: fail this registration. Evicting live readers
-      // (the old fallback) storms every healthy subscriber of the service and
-      // its SIGUSR2 flood interrupts their unrelated syscalls.
+      // (the old fallback) storms every healthy subscriber of the service.
       static std::atomic<int64_t> last_full_log_us(0);
       int64_t now_us = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -320,8 +382,8 @@ int msgq_init_subscriber(msgq_queue_t * q) {
     }
   }
 
-  //std::cout << "New subscriber id: " << q->reader_id << " uid: " << q->read_uid_local << " " << q->endpoint << std::endl;
   msgq_reset_reader(q);
+  bind_wake_socket(q);
   return 0;
 }
 
@@ -332,7 +394,11 @@ void msgq_remove_subscriber(msgq_queue_t * q) {
   // may have handed it to another reader
   std::atomic<uint64_t> *slot = q->read_uids[q->reader_id];
   uint64_t expected = q->read_uid_local;
-  if (std::atomic_compare_exchange_strong(slot, &expected, (uint64_t)0)){
+  while (!std::atomic_compare_exchange_weak(slot, &expected, (uint64_t)0)){
+    if ((expected & ~MSGQ_READER_WAITING) != q->read_uid_local)
+      break;
+  }
+  if ((expected & ~MSGQ_READER_WAITING) == q->read_uid_local){
     *q->read_valids[q->reader_id] = false;
   }
   q->reader_id = -1;
@@ -413,14 +479,15 @@ int msgq_msg_send(msgq_msg_t * msg, msgq_queue_t *q){
   uint32_t new_ptr = ALIGN(write_pointer + msg->size + sizeof(int64_t));
   PACK64(*q->write_pointer, write_cycles, new_ptr);
 
-#ifdef __linux__
-  msgq_reap_dead_readers(q);
-#endif
-
-  // Notify readers
+  // Reload so a reader that subscribed and started polling during this send isn't missed
+  num_readers = std::min<uint64_t>(NUM_READERS, *q->num_readers);
   for (uint64_t i = 0; i < num_readers; i++){
-    uint64_t reader_uid = *q->read_uids[i];
-    thread_signal(reader_uid & 0xFFFFFFFF);
+    if (!(*q->read_uids[i] & MSGQ_READER_WAITING))
+      continue;
+    uint64_t reader_uid = q->read_uids[i]->fetch_and(~MSGQ_READER_WAITING);
+    if (reader_uid & MSGQ_READER_WAITING){
+      wake_reader(reader_uid & ~MSGQ_READER_WAITING);
+    }
   }
 
   return msg->size;
@@ -432,7 +499,7 @@ int msgq_msg_ready(msgq_queue_t * q){
   int id = q->reader_id;
   assert(id >= 0); // Make sure subscriber is initialized
 
-  if (q->read_uid_local != *q->read_uids[id]){
+  if (q->read_uid_local != (*q->read_uids[id] & ~MSGQ_READER_WAITING)){
     // publisher restart (or slot takeover) invalidated us; reconnect. If the
     // table is momentarily full, report not-ready and retry on the next call.
     if (msgq_init_subscriber(q) != 0){
@@ -464,7 +531,7 @@ int msgq_msg_recv(msgq_msg_t * msg, msgq_queue_t * q){
   int id = q->reader_id;
   assert(id >= 0); // Make sure subscriber is initialized
 
-  if (q->read_uid_local != *q->read_uids[id]){
+  if (q->read_uid_local != (*q->read_uids[id] & ~MSGQ_READER_WAITING)){
     // publisher restart (or slot takeover) invalidated us; reconnect. If the
     // table is momentarily full, report no-message and retry on the next call.
     if (msgq_init_subscriber(q) != 0){
@@ -552,63 +619,112 @@ int msgq_msg_recv(msgq_msg_t * msg, msgq_queue_t * q){
 
 
 
+#ifdef __linux__
+static bool epoll_track(msgq_queue_t *q) {
+  PollSet &ps = t_pollset;
+  if (ps.epfd < 0) {
+    register_atfork_once();
+    ps.epfd = epoll_create1(EPOLL_CLOEXEC);
+    if (ps.epfd < 0) return false;
+  }
+
+  auto entry = std::make_pair(static_cast<const msgq_queue_t*>(q), q->read_uid_local);
+  auto it = ps.regs.find(q->wake_fd);
+  if (it != ps.regs.end() && it->second == entry) return true;
+
+  epoll_event ev = {};
+  ev.events = EPOLLIN | EPOLLET;
+  ev.data.fd = q->wake_fd;
+  if (epoll_ctl(ps.epfd, EPOLL_CTL_ADD, q->wake_fd, &ev) < 0 &&
+      (errno != EEXIST || epoll_ctl(ps.epfd, EPOLL_CTL_MOD, q->wake_fd, &ev) < 0)) {
+    return false;
+  }
+  ps.regs[q->wake_fd] = entry;
+  return true;
+}
+#endif
+
 int msgq_poll(msgq_pollitem_t * items, size_t nitems, int timeout){
-  int num = 0;
+  const int LOST_WAKEUP_CAP_MS = 100;
 
-  // Check if messages ready
-  for (size_t i = 0; i < nitems; i++) {
-    items[i].revents = msgq_msg_ready(items[i].q);
-    if (items[i].revents) num++;
-  }
+  auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(std::max(timeout, 0));
+  static thread_local std::vector<pollfd> fds;
+  static thread_local std::vector<std::atomic<uint64_t>*> armed;
+  static thread_local std::vector<uint64_t> uids;
+  fds.resize(nitems);
+  armed.resize(nitems);
+  uids.resize(nitems);
 
-  int ms = (timeout == -1) ? 100 : timeout;
-
-#ifdef __APPLE__
-  // On macOS, signals can't interrupt nanosleep, so poll more frequently
-  int poll_ms = std::min(ms, 10);
-  int remaining_ms = ms;
-#else
-  int poll_ms = ms;
-#endif
-
-  struct timespec ts;
-  ts.tv_sec = poll_ms / 1000;
-  ts.tv_nsec = (poll_ms % 1000) * 1000 * 1000;
-
-
-  while (num == 0) {
-    int ret;
-
-    ret = nanosleep(&ts, &ts);
-
-    // Check if messages ready
+  while (true) {
+    int num = 0;
     for (size_t i = 0; i < nitems; i++) {
-      if (items[i].revents == 0 && msgq_msg_ready(items[i].q)){
-        num += 1;
-        items[i].revents = 1;
-      }
+      items[i].revents = msgq_msg_ready(items[i].q);
+      num += items[i].revents;
+    }
+    if (num > 0) return num;
+
+    int timeout_ms = -1;
+    if (timeout >= 0) {
+      auto remaining = std::chrono::ceil<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
+      timeout_ms = std::max<int64_t>(remaining.count(), 0);
+      if (timeout_ms == 0) return 0;
     }
 
-#ifdef __APPLE__
-    // exit if we had a timeout and we've exhausted it
-    if (timeout != -1 && ret == 0){
-      remaining_ms -= poll_ms;
-      if (remaining_ms <= 0){
-        break;
+    bool reconnected = false;
+    bool can_block = true;
+    for (size_t i = 0; i < nitems; i++) {
+      msgq_queue_t *q = items[i].q;
+      uids[i] = q->read_uid_local;
+
+      // Arm before re-checking so a message sent in between isn't missed; the exchange fails if we were evicted
+      armed[i] = q->read_uids[q->reader_id];
+      uint64_t expected = uids[i];
+      armed[i]->compare_exchange_strong(expected, uids[i] | MSGQ_READER_WAITING);
+      num += msgq_msg_ready(q);
+
+      reconnected |= (q->read_uid_local != uids[i]);
+      can_block &= (q->wake_fd >= 0);
+      fds[i] = {q->wake_fd, POLLIN, 0};
+    }
+
+    if (num == 0 && !reconnected) {
+      int block_ms = timeout_ms < 0 ? LOST_WAKEUP_CAP_MS : std::min(timeout_ms, LOST_WAKEUP_CAP_MS);
+#ifdef __linux__
+      bool tracked = can_block;
+      for (size_t i = 0; i < nitems && tracked; i++) {
+        tracked = epoll_track(items[i].q);
       }
-      poll_ms = std::min(remaining_ms, 10);
-      ts.tv_sec = poll_ms / 1000;
-      ts.tv_nsec = (poll_ms % 1000) * 1000 * 1000;
-    }
-#else
-    // exit if we had a timeout and the sleep finished
-    if (timeout != -1 && ret == 0){
-      break;
-    }
+      if (tracked) {
+        epoll_event events[16];
+        int n = epoll_wait(t_pollset.epfd, events, 16, block_ms);
+        for (int e = 0; e < n; e++) {
+          for (size_t i = 0; i < nitems; i++) {
+            if (fds[i].fd == events[e].data.fd) {
+              drain_wake_socket(fds[i].fd);
+              break;
+            }
+          }
+        }
+        for (size_t i = 0; i < nitems; i++) {
+          uint64_t expected = uids[i] | MSGQ_READER_WAITING;
+          armed[i]->compare_exchange_strong(expected, uids[i]);
+        }
+        continue;
+      }
 #endif
-  }
+      int poll_ms = can_block ? block_ms : (timeout_ms < 0 ? 10 : std::min(timeout_ms, 10));
+      poll(fds.data(), fds.size(), poll_ms);
+    }
 
-  return num;
+    for (size_t i = 0; i < nitems; i++) {
+      // Only clears our own request; the slot may belong to someone else by now
+      uint64_t expected = uids[i] | MSGQ_READER_WAITING;
+      armed[i]->compare_exchange_strong(expected, uids[i]);
+      if (fds[i].revents & POLLIN) {
+        drain_wake_socket(fds[i].fd);
+      }
+    }
+  }
 }
 
 bool msgq_all_readers_updated(msgq_queue_t *q) {

@@ -22,14 +22,14 @@ def canfd_steer(addr: int, length: int, torque: int, request: bool = True):
   })
 
 
-def classic_accel(accel: int, *, aeb_decel: int = 0, aeb_request: bool = False):
+def classic_accel(accel: int, *, aeb_decel: int = 0, aeb_request: bool = False, aeb_stop_request: bool = False):
   value = accel + 1023
   return packet(0x421, 0, 8, {
     2: aeb_decel,
     3: value & 0xFF,
     4: ((value >> 8) & 0x7) | ((value & 0x7) << 5),
     5: (value >> 3) & 0xFF,
-    6: int(aeb_request) << 6,
+    6: (int(aeb_request) << 6) | (int(aeb_stop_request) << 7),
   })
 
 

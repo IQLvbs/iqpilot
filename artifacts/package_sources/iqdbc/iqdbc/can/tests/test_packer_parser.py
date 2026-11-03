@@ -1,3 +1,4 @@
+import math
 import pytest
 import random
 
@@ -108,6 +109,18 @@ class TestCanParserPacker:
       _ = parser.can_valid
     for _ in range(20):
       assert not parser.can_valid
+
+  def test_invalid_messages_names_the_message_that_never_arrived(self):
+    parser = CANParser(TEST_DBC, [("CAN_FD_MESSAGE", 10), ("STEERING_CONTROL", math.nan)], 3)
+    packer = CANPacker(TEST_DBC)
+    assert parser.invalid_messages() == [
+      {"bus": 3, "address": hex(245), "name": "CAN_FD_MESSAGE", "frames_seen": 0, "counter_fail": 0},
+    ]
+
+    for i in range(1, 100):
+      parser.update([int(0.01 * i * 1e9), [packer.make_can_msg("CAN_FD_MESSAGE", 3, {})]])
+    assert parser.invalid_messages() == []
+    assert parser.can_valid
 
   def test_parser_updated_list(self):
     msgs = [("CAN_FD_MESSAGE", 10), ]
@@ -258,6 +271,18 @@ class TestCanParserPacker:
         assert parser.vl["ES_LKAS"]["SET_1"] == pytest.approx(1)
         assert parser.vl["ES_LKAS"]["COUNTER"] == pytest.approx(idx % 16)
         idx += 1
+
+  def test_learned_frequency_counts_intervals(self):
+    dbc_file = "honda_civic_touring_2016_can_generated"
+    parser = CANParser(dbc_file, [("VSA_STATUS", None)], 0)
+    packer = CANPacker(dbc_file)
+    state = parser.message_states[parser.dbc.name_to_msg["VSA_STATUS"].address]
+
+    for i in range(1, 12):
+      parser.update([i * 0.5e9, [packer.make_can_msg("VSA_STATUS", 0, {})]])
+
+    assert state.frequency == pytest.approx(2.0, abs=1e-6)
+    assert state.timeout_threshold == pytest.approx(5e9, rel=1e-6)
 
   def test_bus_timeout(self):
     """Test CAN bus timeout detection"""

@@ -7,6 +7,7 @@ from iqdbc.car.honda.values import CAR as HONDA
 from iqdbc.car.hyundai.values import CAR as HYUNDAI
 from iqdbc.car.nissan.values import CAR as NISSAN
 from iqdbc.car.mazda.values import CAR as MAZDA
+from iqdbc.car.mg.values import CAR as MG
 from iqdbc.car.mock.values import CAR as MOCK
 from iqdbc.car.rivian.values import CAR as RIVIAN
 from iqdbc.car.subaru.values import CAR as SUBARU
@@ -31,6 +32,16 @@ route_exempt_cars = [
   HONDA.HONDA_NBOX_2G,
   HONDA.ACURA_MDX_4G_MMR,
   HONDA.HONDA_CITY_7G,
+  HONDA.ACURA_ADX,
+  HONDA.ACURA_MDX_4G,
+  HONDA.ACURA_RDX_3G_MMR,
+  HONDA.HONDA_E_ADVANCE,
+  HONDA.HONDA_PILOT_4G_MMR,
+  HONDA.HONDA_PRELUDE_6G,
+  CHRYSLER.JEEP_CHEROKEE_5TH_GEN,
+  HYUNDAI.KIA_CEED_PHEV,
+  HYUNDAI.KIA_K7_2017,
+  MG.MG_5_EV,
 
   # These had their DSUs unplugged, need new routes
   # TOYOTA.LEXUS_ES  # hybrid

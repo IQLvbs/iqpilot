@@ -2,7 +2,7 @@ from iqdbc.can import CANPacker
 from iqdbc.car import Bus, DT_CTRL
 from iqdbc.car.lateral import apply_meas_steer_torque_limits
 from iqdbc.car.chrysler import chryslercan
-from iqdbc.car.chrysler.values import RAM_CARS, CarControllerParams, ChryslerFlags, RAM_DT
+from iqdbc.car.chrysler.values import CUSW_CARS, RAM_CARS, CarControllerParams, ChryslerFlags, RAM_DT
 from iqdbc.car.interfaces import CarControllerBase
 
 from iqdbc.lvbs.car.chrysler.iq_carcontroller import IQCarController
@@ -67,6 +67,9 @@ class CarController(CarControllerBase, AolCarController, IQCarController):
       elif self.CP.carFingerprint in RAM_CARS:
         if CS.out.vEgo < (self.CP.minSteerSpeed - 0.5):
           lkas_control_bit = False
+      elif self.CP.carFingerprint in CUSW_CARS:
+        if CS.out.vEgo < (self.CP.minSteerSpeed - 2.0):
+          lkas_control_bit = False
 
       # EPS faults if LKAS re-enables too quickly
       lkas_control_bit = lkas_control_bit and (self.frame - self.last_lkas_falling_edge > 200)
@@ -84,7 +87,7 @@ class CarController(CarControllerBase, AolCarController, IQCarController):
 
       can_sends.append(chryslercan.create_lkas_command(self.packer, self.CP, int(apply_torque), lkas_control_bit))
 
-    if self.frame % 10 == 0 and self.CP.carFingerprint not in RAM_CARS:
+    if self.frame % 10 == 0 and self.CP.carFingerprint not in RAM_CARS | CUSW_CARS:
       can_sends.append(AolCarController.create_lkas_heartbit(self.packer, CS.lkas_heartbit, self.aol))
 
     self.frame += 1

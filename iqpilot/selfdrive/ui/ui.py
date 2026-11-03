@@ -5,6 +5,7 @@ import time
 import raylib_nb as rl
 
 from iqpilot.system.hardware import TICI
+from iqpilot.common.iq_perf import StallWatch
 from iqpilot.common.realtime import CycleCollector, Priority, config_realtime_process, set_core_affinity
 from iqpilot.system.ui.lib.application import gui_app
 from iqpilot.selfdrive.ui.layouts.main import MainLayout
@@ -47,8 +48,11 @@ def main():
   last_trim = time.monotonic()
 
   collector = CycleCollector(UI_GC_INTERVAL_S)
+  stall_watch = StallWatch("ui")
+  stall_watch.start()
 
   for should_render in gui_app.render():
+    stall_watch.beat()
     ui_state.update()
     gui_app.set_target_fps(UI_ONROAD_FPS if ui_state.started else UI_OFFROAD_FPS)
     if should_render:

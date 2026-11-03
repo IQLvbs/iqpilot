@@ -2,6 +2,18 @@
   "catalog": "iqlvbs/supported-vehicles",
   "rev": 1,
   "vehicles": {
+    "ACURA_ADX|2025-2026": {
+      "label": "Acura ADX 2025-26",
+      "id": "ACURA_ADX",
+      "mk": "Acura",
+      "grp": "honda",
+      "mdl": "ADX",
+      "yrs": [
+        "2025",
+        "2026"
+      ],
+      "req": "All"
+    },
     "ACURA_ILX|2016-2018": {
       "label": "Acura ILX 2016-18",
       "id": "ACURA_ILX",
@@ -23,6 +35,19 @@
       "mdl": "ILX",
       "yrs": [
         "2019"
+      ],
+      "req": "All"
+    },
+    "ACURA_MDX_4G|2022-2024": {
+      "label": "Acura MDX 2022-24",
+      "id": "ACURA_MDX_4G",
+      "mk": "Acura",
+      "grp": "honda",
+      "mdl": "MDX",
+      "yrs": [
+        "2022",
+        "2023",
+        "2024"
       ],
       "req": "All"
     },
@@ -64,14 +89,28 @@
       ],
       "req": "All"
     },
-    "ACURA_TLX_2G|2021": {
-      "label": "Acura TLX 2021",
+    "ACURA_RDX_3G_MMR|2022-2024": {
+      "label": "Acura RDX 2022-24",
+      "id": "ACURA_RDX_3G_MMR",
+      "mk": "Acura",
+      "grp": "honda",
+      "mdl": "RDX",
+      "yrs": [
+        "2022",
+        "2023",
+        "2024"
+      ],
+      "req": "All"
+    },
+    "ACURA_TLX_2G|2021-2022": {
+      "label": "Acura TLX 2021-22",
       "id": "ACURA_TLX_2G",
       "mk": "Acura",
       "grp": "honda",
       "mdl": "TLX",
       "yrs": [
-        "2021"
+        "2021",
+        "2022"
       ],
       "req": "All"
     },
@@ -1161,8 +1200,8 @@
       ],
       "req": "All"
     },
-    "HONDA_ACCORD_11G|2023-2025#2": {
-      "label": "Honda Accord Hybrid 2023-25",
+    "HONDA_ACCORD_11G|2023-2026": {
+      "label": "Honda Accord Hybrid 2023-26",
       "id": "HONDA_ACCORD_11G",
       "mk": "Honda",
       "grp": "honda",
@@ -1170,7 +1209,8 @@
       "yrs": [
         "2023",
         "2024",
-        "2025"
+        "2025",
+        "2026"
       ],
       "req": "All"
     },
@@ -1211,8 +1251,8 @@
       ],
       "req": "All"
     },
-    "HONDA_CIVIC_2022|2022-2024": {
-      "label": "Honda Civic 2022-24",
+    "HONDA_CIVIC_2022|2022-2026": {
+      "label": "Honda Civic 2022-26",
       "id": "HONDA_CIVIC_2022",
       "mk": "Honda",
       "grp": "honda",
@@ -1220,7 +1260,9 @@
       "yrs": [
         "2022",
         "2023",
-        "2024"
+        "2024",
+        "2025",
+        "2026"
       ],
       "req": "All"
     },
@@ -1249,8 +1291,8 @@
       ],
       "req": "All"
     },
-    "HONDA_CIVIC_2022|2022-2024#2": {
-      "label": "Honda Civic Hatchback 2022-24",
+    "HONDA_CIVIC_2022|2022-2026#2": {
+      "label": "Honda Civic Hatchback 2022-26",
       "id": "HONDA_CIVIC_2022",
       "mk": "Honda",
       "grp": "honda",
@@ -1258,7 +1300,9 @@
       "yrs": [
         "2022",
         "2023",
-        "2024"
+        "2024",
+        "2025",
+        "2026"
       ],
       "req": "All"
     },
@@ -1369,8 +1413,8 @@
       ],
       "req": "Honda Sensing"
     },
-    "HONDA_CRV_6G|2023-2026#2": {
-      "label": "Honda CR-V Hybrid 2023-26",
+    "HONDA_CRV_6G|2023-2027": {
+      "label": "Honda CR-V Hybrid 2023-27",
       "id": "HONDA_CRV_6G",
       "mk": "Honda",
       "grp": "honda",
@@ -1379,7 +1423,8 @@
         "2023",
         "2024",
         "2025",
-        "2026"
+        "2026",
+        "2027"
       ],
       "req": "All"
     },
@@ -1432,8 +1477,8 @@
       ],
       "req": "Honda Sensing"
     },
-    "HONDA_HRV_3G|2023-2025": {
-      "label": "Honda HR-V 2023-25",
+    "HONDA_HRV_3G|2023-2027": {
+      "label": "Honda HR-V 2023-27",
       "id": "HONDA_HRV_3G",
       "mk": "Honda",
       "grp": "honda",
@@ -1441,7 +1486,9 @@
       "yrs": [
         "2023",
         "2024",
-        "2025"
+        "2025",
+        "2026",
+        "2027"
       ],
       "req": "All"
     },
@@ -1509,6 +1556,17 @@
         "2026"
       ],
       "req": "All"
+    },
+    "HONDA_ODYSSEY_TWN|2021": {
+      "label": "Honda Odyssey (Singapore) 2021",
+      "id": "HONDA_ODYSSEY_TWN",
+      "mk": "Honda",
+      "grp": "honda",
+      "mdl": "Odyssey (Singapore)",
+      "yrs": [
+        "2021"
+      ],
+      "req": "Honda Sensing"
     },
     "HONDA_ODYSSEY_TWN|2018-2019": {
       "label": "Honda Odyssey (Taiwan) 2018-19",
@@ -1580,8 +1638,30 @@
       ],
       "req": "All"
     },
-    "HONDA_RIDGELINE|2017-2025": {
-      "label": "Honda Ridgeline 2017-25",
+    "HONDA_PILOT_4G_MMR|2026": {
+      "label": "Honda Pilot 2026",
+      "id": "HONDA_PILOT_4G_MMR",
+      "mk": "Honda",
+      "grp": "honda",
+      "mdl": "Pilot",
+      "yrs": [
+        "2026"
+      ],
+      "req": "All"
+    },
+    "HONDA_PRELUDE_6G|2026": {
+      "label": "Honda Prelude 2026",
+      "id": "HONDA_PRELUDE_6G",
+      "mk": "Honda",
+      "grp": "honda",
+      "mdl": "Prelude",
+      "yrs": [
+        "2026"
+      ],
+      "req": "All"
+    },
+    "HONDA_RIDGELINE|2017-2026": {
+      "label": "Honda Ridgeline 2017-26",
       "id": "HONDA_RIDGELINE",
       "mk": "Honda",
       "grp": "honda",
@@ -1595,7 +1675,8 @@
         "2022",
         "2023",
         "2024",
-        "2025"
+        "2025",
+        "2026"
       ],
       "req": "Honda Sensing"
     },
@@ -1873,6 +1954,18 @@
       ],
       "req": "Highway Driving Assist II"
     },
+    "HYUNDAI_IONIQ_6|2023-2024#2": {
+      "label": "Hyundai Ioniq 6 (without HDA II) 2023-24",
+      "id": "HYUNDAI_IONIQ_6",
+      "mk": "Hyundai",
+      "grp": "hyundai",
+      "mdl": "Ioniq 6 (without HDA II)",
+      "yrs": [
+        "2023",
+        "2024"
+      ],
+      "req": "Highway Driving Assist"
+    },
     "HYUNDAI_IONIQ_9|2026": {
       "label": "Hyundai Ioniq 9 2026",
       "id": "HYUNDAI_IONIQ_9",
@@ -1967,14 +2060,15 @@
       ],
       "req": "Smart Cruise Control (SCC)"
     },
-    "HYUNDAI_KONA_2022|2022": {
-      "label": "Hyundai Kona 2022",
+    "HYUNDAI_KONA_2022|2022-2023": {
+      "label": "Hyundai Kona 2022-23",
       "id": "HYUNDAI_KONA_2022",
       "mk": "Hyundai",
       "grp": "hyundai",
       "mdl": "Kona",
       "yrs": [
-        "2022"
+        "2022",
+        "2023"
       ],
       "req": "Smart Cruise Control (SCC)"
     },
@@ -2313,6 +2407,21 @@
       ],
       "req": "Smart Cruise Control (SCC)"
     },
+    "JEEP_CHEROKEE_5TH_GEN|2019-2023": {
+      "label": "Jeep Cherokee 2019-23",
+      "id": "JEEP_CHEROKEE_5TH_GEN",
+      "mk": "Jeep",
+      "grp": "chrysler",
+      "mdl": "Cherokee",
+      "yrs": [
+        "2019",
+        "2020",
+        "2021",
+        "2022",
+        "2023"
+      ],
+      "req": "Adaptive Cruise Control (ACC)"
+    },
     "JEEP_GRAND_CHEROKEE|2016-2018": {
       "label": "Jeep Grand Cherokee 2016-18",
       "id": "JEEP_GRAND_CHEROKEE",
@@ -2372,6 +2481,17 @@
       "yrs": [
         "2019",
         "2020",
+        "2021"
+      ],
+      "req": "Smart Cruise Control (SCC)"
+    },
+    "KIA_CEED_PHEV|2021": {
+      "label": "Kia Ceed Plug-in Hybrid 2021",
+      "id": "KIA_CEED_PHEV",
+      "mk": "Kia",
+      "grp": "hyundai",
+      "mdl": "Ceed Plug-in Hybrid",
+      "yrs": [
         "2021"
       ],
       "req": "Smart Cruise Control (SCC)"
@@ -2592,6 +2712,17 @@
       ],
       "req": "All"
     },
+    "KIA_K7_2017|2017": {
+      "label": "Kia K7 2017",
+      "id": "KIA_K7_2017",
+      "mk": "Kia",
+      "grp": "hyundai",
+      "mdl": "K7",
+      "yrs": [
+        "2017"
+      ],
+      "req": "Smart Cruise Control (SCC)"
+    },
     "KIA_K7_PE|2020": {
       "label": "Kia K7 2020",
       "id": "KIA_K7_PE",
@@ -2719,6 +2850,18 @@
       ],
       "req": "All"
     },
+    "KIA_NIRO_EV_2ND_GEN|2024-2025": {
+      "label": "Kia Niro EV (with HDA II) 2024-25",
+      "id": "KIA_NIRO_EV_2ND_GEN",
+      "mk": "Kia",
+      "grp": "hyundai",
+      "mdl": "Niro EV (with HDA II)",
+      "yrs": [
+        "2024",
+        "2025"
+      ],
+      "req": "Highway Driving Assist II"
+    },
     "KIA_NIRO_PHEV|2018": {
       "label": "Kia Niro Hybrid 2018",
       "id": "KIA_NIRO_PHEV",
@@ -2752,14 +2895,15 @@
       ],
       "req": "Smart Cruise Control (SCC)"
     },
-    "KIA_NIRO_HEV_2ND_GEN|2023": {
-      "label": "Kia Niro Hybrid 2023",
+    "KIA_NIRO_HEV_2ND_GEN|2023-2024": {
+      "label": "Kia Niro Hybrid 2023-24",
       "id": "KIA_NIRO_HEV_2ND_GEN",
       "mk": "Kia",
       "grp": "hyundai",
       "mdl": "Niro Hybrid",
       "yrs": [
-        "2023"
+        "2023",
+        "2024"
       ],
       "req": "Smart Cruise Control (SCC)"
     },
@@ -2975,6 +3119,17 @@
       "mk": "Kia",
       "grp": "hyundai",
       "mdl": "Sportage Hybrid",
+      "yrs": [
+        "2023"
+      ],
+      "req": "Smart Cruise Control (SCC)"
+    },
+    "KIA_SPORTAGE_5TH_GEN|2023#2": {
+      "label": "Kia Sportage Plug-in Hybrid 2023",
+      "id": "KIA_SPORTAGE_5TH_GEN",
+      "mk": "Kia",
+      "grp": "hyundai",
+      "mdl": "Sportage Plug-in Hybrid",
       "yrs": [
         "2023"
       ],
@@ -3400,8 +3555,19 @@
       ],
       "req": "All"
     },
+    "MG_5_EV|2021": {
+      "label": "MG 5 EV 2021",
+      "id": "MG_5_EV",
+      "mk": "MG",
+      "grp": "mg",
+      "mdl": "5 EV",
+      "yrs": [
+        "2021"
+      ],
+      "req": "All"
+    },
     "NISSAN_ALTIMA|2019-2024": {
-      "label": "Nissan Altima 2019-20, 2024",
+      "label": "Nissan Altima 2019-24",
       "id": "NISSAN_ALTIMA",
       "mk": "Nissan",
       "grp": "nissan",
@@ -3409,6 +3575,9 @@
       "yrs": [
         "2019",
         "2020",
+        "2021",
+        "2022",
+        "2023",
         "2024"
       ],
       "req": "ProPILOT Assist"

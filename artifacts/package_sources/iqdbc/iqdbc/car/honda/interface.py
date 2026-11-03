@@ -17,6 +17,9 @@ from iqdbc.lvbs.car.honda.iq_values import HondaFlagsIQ, HondaSafetyFlagsIQ
 TransmissionType = structs.CarParams.TransmissionType
 
 
+MANUAL_DETECTION_MIN_MESSAGES = 10
+
+
 class CarInterface(CarInterfaceBase):
   CarState = CarState
   CarController = CarController
@@ -74,8 +77,7 @@ class CarInterface(CarInterfaceBase):
     if 0x184 in fingerprint[CAN.pt]:
       ret.flags |= HondaFlags.HYBRID.value
 
-    if ret.flags & HondaFlags.ALLOW_MANUAL_TRANS and all(msg not in fingerprint[CAN.pt] for msg in (0x191, 0x1A3)):
-      # Manual transmission support for allowlisted cars only, to prevent silent fall-through on auto-detection failures
+    if len(fingerprint[CAN.pt]) >= MANUAL_DETECTION_MIN_MESSAGES and all(msg not in fingerprint[CAN.pt] for msg in (0x191, 0x1A3)):
       ret.transmissionType = TransmissionType.manual
     elif 0x191 in fingerprint[CAN.pt] and candidate != CAR.ACURA_RDX:
       # Traditional CVTs, gearshift position in GEARBOX_CVT
@@ -117,6 +119,11 @@ class CarInterface(CarInterfaceBase):
 
     elif candidate == CAR.HONDA_CIVIC_2022:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 5120], [0, 5120]]  # TODO: determine if there is a dead zone at the top end
+      ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kpV = [[0, 10], [0.05, 0.5]]
+      ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
+
+    elif candidate == CAR.HONDA_PRELUDE_6G:
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
       ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kpV = [[0, 10], [0.05, 0.5]]
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
 
@@ -200,7 +207,7 @@ class CarInterface(CarInterfaceBase):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]]
 
-    elif candidate == CAR.HONDA_E:
+    elif candidate in (CAR.HONDA_E, CAR.HONDA_E_ADVANCE):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]] # TODO: can probably use some tuning
 
@@ -219,6 +226,16 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kpV = [[0, 10], [0.05, 0.5]]
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
 
+    elif candidate in (CAR.ACURA_MDX_4G, CAR.ACURA_ADX):
+      ret.steerActuatorDelay = 0.15
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3840], [0, 3840]]
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+
+    elif candidate == CAR.HONDA_PILOT_4G_MMR:
+      ret.steerActuatorDelay = 0.15
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3628], [0, 3628]]
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+
     elif candidate == CAR.HONDA_CLARITY:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560], [0, 2560]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]
@@ -232,6 +249,8 @@ class CarInterface(CarInterfaceBase):
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2200]
     elif candidate == CAR.ACURA_RDX_3G:
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2200]
+    elif candidate == CAR.ACURA_RDX_3G_MMR:
+      CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
     elif candidate == CAR.HONDA_CRV_6G and ret.flags & HondaFlags.HYBRID:
       CarControllerParams.BOSCH_GAS_LOOKUP_BP = [-0.3, 2.0]
 

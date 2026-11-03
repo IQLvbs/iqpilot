@@ -1,6 +1,6 @@
 from iqdbc.car import structs
 from iqdbc.car.crc import CRC8J1850
-from iqdbc.car.chrysler.values import RAM_CARS
+from iqdbc.car.chrysler.values import CUSW_CARS, RAM_CARS
 
 GearShifter = structs.CarState.GearShifter
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
@@ -48,7 +48,7 @@ def create_lkas_hud(packer, CP, lkas_active, hud_alert, hud_count, car_model, au
     "LKAS_ICON_COLOR": color,
     "CAR_MODEL": car_model,
     "LKAS_LANE_LINES": lines,
-    "LKAS_ALERTS": alerts,
+    "LKAS_ALERTS": alerts if CP.carFingerprint not in CUSW_CARS else 0,
   }
 
   if CP.carFingerprint in RAM_CARS:

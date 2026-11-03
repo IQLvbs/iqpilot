@@ -1,5 +1,8 @@
+import numpy as np
+
 from iqdbc.can import CANPacker
-from iqdbc.car import Bus, structs
+from iqdbc.car import Bus, DT_CTRL, structs
+from iqdbc.car.common.filter_simple import FirstOrderFilter
 from iqdbc.car.lateral import apply_std_steer_angle_limits
 from iqdbc.car.interfaces import CarControllerBase
 from iqdbc.car.nissan import nissancan
@@ -14,6 +17,7 @@ class CarController(CarControllerBase):
     self.car_fingerprint = CP.carFingerprint
 
     self.apply_angle_last = 0
+    self.angle_filter = FirstOrderFilter(0.0, 0.1, DT_CTRL)
 
     self.packer = CANPacker(dbc_names[Bus.pt])
 
@@ -27,8 +31,14 @@ class CarController(CarControllerBase):
     ### STEER ###
     steer_hud_alert = 1 if hud_control.visualAlert in (VisualAlert.steerRequired, VisualAlert.ldw) else 0
 
+    if CC.latActive:
+      self.angle_filter.update_alpha(float(np.interp(CS.out.vEgo, [5, 10, 20], [0.2, 0.1, 0.0])))
+      self.angle_filter.update(actuators.steeringAngleDeg)
+    else:
+      self.angle_filter.x = actuators.steeringAngleDeg
+
     # windup slower
-    self.apply_angle_last = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgoRaw,
+    self.apply_angle_last = apply_std_steer_angle_limits(self.angle_filter.x, self.apply_angle_last, CS.out.vEgoRaw,
                                                          CS.out.steeringAngleDeg, CC.latActive, CarControllerParams.ANGLE_LIMITS)
 
     lkas_max_torque = 0
@@ -39,8 +49,7 @@ class CarController(CarControllerBase):
       else:
         # Scale max torque based on how much torque the driver is applying to the wheel
         lkas_max_torque = max(
-          # Scale max torque down to half LKAX_MAX_TORQUE as a minimum
-          CarControllerParams.LKAS_MAX_TORQUE * 0.5,
+          CarControllerParams.LKAS_MIN_TORQUE,
           # Start scaling torque at STEER_THRESHOLD
           CarControllerParams.LKAS_MAX_TORQUE - 0.6 * max(0, abs(CS.out.steeringTorque) - CarControllerParams.STEER_THRESHOLD)
         )

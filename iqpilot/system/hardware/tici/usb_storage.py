@@ -64,11 +64,34 @@ def ensure_ncm_gadget() -> bool:
 
 
 INPUT_SUSPEND = "/sys/class/power_supply/battery/input_suspend"
+EMAC_USB_HELPER = "/usr/libexec/iqos/iq-emac-usb"
+
+
+def emac_usb_helper_available() -> bool:
+  return os.access(EMAC_USB_HELPER, os.X_OK)
+
+
+def run_emac_usb_helper(verb: str, timeout: float = 30.0) -> int:
+  try:
+    return subprocess.run(["sudo", "-n", EMAC_USB_HELPER, verb], timeout=timeout, check=False,
+                          capture_output=True).returncode
+  except (OSError, subprocess.SubprocessError):
+    return -1
+
+
+def prepare_emac_usb() -> bool:
+  # the PMIC and the Mac both prefer sink (Try.SNK) and livelock the CC pins every ~1.7 s,
+  # so the port is pinned to sink/device before the Mac can enumerate the gadget
+  if not emac_usb_helper_available():
+    return suspend_usb_input(True)
+  return run_emac_usb_helper("up") == 0
 
 
 def suspend_usb_input(suspend: bool = True) -> bool:
   # a host on the data port makes the PMIC sink USB-PD while OBD-C feeds the same
   # rail; the SOM browns out. This closes the charge path only, data is untouched
+  if emac_usb_helper_available():
+    return run_emac_usb_helper("suspend-input" if suspend else "down") == 0
   if not os.path.exists(INPUT_SUSPEND):
     return False
   try:

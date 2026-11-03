@@ -76,7 +76,6 @@ class HondaFlags(IntFlag):
 
   HAS_ALL_DOOR_STATES = 256  # Some Hondas have all door states, others only driver door
   BOSCH_ALT_RADAR = 512
-  ALLOW_MANUAL_TRANS = 1024
   HYBRID = 2048
   BOSCH_TJA_CONTROL = 4096
 
@@ -173,12 +172,11 @@ class CAR(Platforms):
     # steerRatio: 11.82 is spec end-to-end
     CarSpecs(mass=3279 * CV.LB_TO_KG, wheelbase=2.83, steerRatio=16.33, centerToFrontRatio=0.39, tireStiffnessFactor=0.8467),
     {Bus.pt: 'honda_civic_hatchback_ex_2017_can_generated', Bus.radar: 'honda_radar_scan_generated'},
-    flags=HondaFlags.ALLOW_MANUAL_TRANS,
   )
   HONDA_ACCORD_11G = HondaBoschCANFDPlatformConfig(
     [
       HondaCarDocs("Honda Accord 2023-25", "All"),
-      HondaCarDocs("Honda Accord Hybrid 2023-25", "All"),
+      HondaCarDocs("Honda Accord Hybrid 2023-26", "All"),
   ],
     CarSpecs(mass=3477 * CV.LB_TO_KG, wheelbase=2.83, steerRatio=16.0, centerToFrontRatio=0.39),
   )
@@ -191,7 +189,6 @@ class CAR(Platforms):
     ],
     CarSpecs(mass=1326, wheelbase=2.7, steerRatio=15.38, centerToFrontRatio=0.4),  # steerRatio: 10.93 is end-to-end spec
     {Bus.pt: 'honda_civic_hatchback_ex_2017_can_generated', Bus.radar: 'honda_radar_scan_generated'},
-    flags=HondaFlags.ALLOW_MANUAL_TRANS,
   )
   HONDA_CIVIC_BOSCH_DIESEL = HondaBoschPlatformConfig(
     [],  # don't show in docs
@@ -200,16 +197,16 @@ class CAR(Platforms):
   )
   HONDA_CIVIC_2022 = HondaBoschPlatformConfig(
     [
-      HondaCarDocs("Honda Civic 2022-24", "All", video="https://youtu.be/ytiOT5lcp6Q"),
+      HondaCarDocs("Honda Civic 2022-26", "All", video="https://youtu.be/ytiOT5lcp6Q"),
       HondaCarDocs("Honda Civic Hybrid 2025-26", "All"),
-      HondaCarDocs("Honda Civic Hatchback 2022-24", "All", video="https://youtu.be/ytiOT5lcp6Q"),
+      HondaCarDocs("Honda Civic Hatchback 2022-26", "All", video="https://youtu.be/ytiOT5lcp6Q"),
       HondaCarDocs("Honda Civic Hatchback Hybrid (Europe only) 2023", "All"),
       # TODO: Confirm 2024
       HondaCarDocs("Honda Civic Hatchback Hybrid 2025-26", "All"),
     ],
     HONDA_CIVIC_BOSCH.specs,
     {Bus.pt: 'honda_bosch_radarless_generated'},
-    flags=HondaFlags.BOSCH_RADARLESS | HondaFlags.ALLOW_MANUAL_TRANS
+    flags=HondaFlags.BOSCH_RADARLESS
   )
   HONDA_CRV_5G = HondaBoschPlatformConfig(
     [HondaCarDocs("Honda CR-V 2017-22", min_steer_speed=15. * CV.MPH_TO_MS)],
@@ -222,7 +219,7 @@ class CAR(Platforms):
   HONDA_CRV_6G = HondaBoschCANFDPlatformConfig(
     [
       HondaCarDocs("Honda CR-V 2023-26", "All"),
-      HondaCarDocs("Honda CR-V Hybrid 2023-26", "All"),
+      HondaCarDocs("Honda CR-V Hybrid 2023-27", "All"),
     ],
     CarSpecs(mass=1703, wheelbase=2.7, steerRatio=16.2, centerToFrontRatio=0.42),
   )
@@ -233,7 +230,7 @@ class CAR(Platforms):
     {Bus.pt: 'honda_civic_hatchback_ex_2017_can_generated', Bus.radar: 'honda_radar_scan_generated'},
   )
   HONDA_HRV_3G = HondaBoschPlatformConfig(
-    [HondaCarDocs("Honda HR-V 2023-25", "All")],
+    [HondaCarDocs("Honda HR-V 2023-27", "All")],
     CarSpecs(mass=3125 * CV.LB_TO_KG, wheelbase=2.61, steerRatio=15.2, centerToFrontRatio=0.41, tireStiffnessFactor=0.5),
     {Bus.pt: 'honda_bosch_radarless_generated'},
     flags=HondaFlags.BOSCH_RADARLESS,
@@ -250,6 +247,12 @@ class CAR(Platforms):
     {Bus.pt: 'acura_rdx_2020_can_generated', Bus.radar: 'honda_radar_scan_generated'},
     flags=HondaFlags.BOSCH_ALT_BRAKE,
   )
+  ACURA_RDX_3G_MMR = HondaBoschPlatformConfig(
+    [HondaCarDocs("Acura RDX 2022-24", "All", min_steer_speed=70. * CV.KPH_TO_MS)],
+    CarSpecs(mass=4079 * CV.LB_TO_KG, wheelbase=2.75, centerToFrontRatio=0.41, steerRatio=16.2),
+    {Bus.pt: 'acura_rdx_2020_can_generated'},
+    flags=HondaFlags.BOSCH_ALT_BRAKE | HondaFlags.BOSCH_ALT_RADAR,
+  )
   HONDA_INSIGHT = HondaBoschPlatformConfig(
     [HondaCarDocs("Honda Insight 2019-22", "All", min_steer_speed=3. * CV.MPH_TO_MS)],
     CarSpecs(mass=2987 * CV.LB_TO_KG, wheelbase=2.7, steerRatio=15.0, centerToFrontRatio=0.39, tireStiffnessFactor=0.82),  # as spec
@@ -260,13 +263,34 @@ class CAR(Platforms):
     CarSpecs(mass=3338.8 * CV.LB_TO_KG, wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=16.71, tireStiffnessFactor=0.82),
     {Bus.pt: 'acura_rdx_2020_can_generated', Bus.radar: 'honda_radar_scan_generated'},
   )
+  HONDA_E_ADVANCE = HondaBoschPlatformConfig(
+    [],
+    CarSpecs(mass=1527, wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=16.71, tireStiffnessFactor=0.82),
+    {Bus.pt: 'honda_e_advance_2020_can_generated', Bus.radar: 'honda_radar_scan_generated'},
+  )
   HONDA_PILOT_4G = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Honda Pilot 2023-25", "All")],
     CarSpecs(mass=4660 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.442, steerRatio=17.5),
   )
+  HONDA_PILOT_4G_MMR = HondaBoschCANFDPlatformConfig(
+    [HondaCarDocs("Honda Pilot 2026", "All")],
+    CarSpecs(mass=4528 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.442, steerRatio=19.2),
+  )
   HONDA_PASSPORT_4G = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Honda Passport 2026", "All")],
     CarSpecs(mass=4620 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.442, steerRatio=18.5),
+  )
+  HONDA_PRELUDE_6G = HondaBoschPlatformConfig(
+    [HondaCarDocs("Honda Prelude 2026", "All")],
+    CarSpecs(mass=1480, wheelbase=2.605, steerRatio=13.65, centerToFrontRatio=0.37),
+    {Bus.pt: 'honda_bosch_radarless_generated'},
+    flags=HondaFlags.BOSCH_RADARLESS,
+  )
+  ACURA_MDX_4G = HondaBoschPlatformConfig(
+    [HondaCarDocs("Acura MDX 2022-24", "All", min_steer_speed=70. * CV.KPH_TO_MS)],
+    CarSpecs(mass=4788 * CV.LB_TO_KG, wheelbase=2.89, steerRatio=15.8, centerToFrontRatio=0.428),
+    {Bus.pt: 'honda_common_canfd_generated'},
+    flags=HondaFlags.BOSCH_ALT_RADAR,
   )
   # mid-model refresh
   ACURA_MDX_4G_MMR = HondaBoschCANFDPlatformConfig(
@@ -280,7 +304,7 @@ class CAR(Platforms):
     flags=HondaFlags.BOSCH_ALT_BRAKE | HondaFlags.BOSCH_ALT_RADAR,
   )
   ACURA_TLX_2G = HondaBoschPlatformConfig(
-    [HondaCarDocs("Acura TLX 2021", "All")],
+    [HondaCarDocs("Acura TLX 2021-22", "All")],
     CarSpecs(mass=3982 * CV.LB_TO_KG, wheelbase=2.87, steerRatio=14.0, centerToFrontRatio=0.43),
     {Bus.pt: 'honda_civic_hatchback_ex_2017_can_generated'},
     flags=HondaFlags.BOSCH_ALT_RADAR,
@@ -289,6 +313,12 @@ class CAR(Platforms):
   ACURA_TLX_2G_MMR = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Acura TLX 2025", "All")],
     CarSpecs(mass=3990 * CV.LB_TO_KG, wheelbase=2.87, centerToFrontRatio=0.43, steerRatio=13.7),
+  )
+  ACURA_ADX = HondaBoschPlatformConfig(
+    [HondaCarDocs("Acura ADX 2025-26", "All")],
+    CarSpecs(mass=3578 * CV.LB_TO_KG, wheelbase=2.65, steerRatio=17.6, centerToFrontRatio=0.43),
+    {Bus.pt: 'honda_bosch_radarless_generated'},
+    flags=HondaFlags.BOSCH_RADARLESS,
   )
 
   # Nidec Cars
@@ -338,7 +368,10 @@ class CAR(Platforms):
     flags=HondaFlags.NIDEC_ALT_PCM_ACCEL | HondaFlags.HAS_ALL_DOOR_STATES,
   )
   HONDA_ODYSSEY_TWN = HondaNidecPlatformConfig(
-    [HondaCarDocs("Honda Odyssey (Taiwan) 2018-19")],
+    [
+      HondaCarDocs("Honda Odyssey (Taiwan) 2018-19"),
+      HondaCarDocs("Honda Odyssey (Singapore) 2021"),
+    ],
     CarSpecs(mass=1865, wheelbase=2.9, steerRatio=14.35, centerToFrontRatio=0.44, tireStiffnessFactor=0.82),
     radar_dbc_dict('honda_odyssey_twn_2018_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
@@ -359,7 +392,7 @@ class CAR(Platforms):
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
   HONDA_RIDGELINE = HondaNidecPlatformConfig(
-    [HondaCarDocs("Honda Ridgeline 2017-25", min_steer_speed=12. * CV.MPH_TO_MS)],
+    [HondaCarDocs("Honda Ridgeline 2017-26", min_steer_speed=12. * CV.MPH_TO_MS)],
     CarSpecs(mass=4515 * CV.LB_TO_KG, wheelbase=3.18, centerToFrontRatio=0.41, steerRatio=15.59, tireStiffnessFactor=0.444),  # as spec
     radar_dbc_dict('acura_ilx_2016_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
@@ -403,6 +436,7 @@ STEER_THRESHOLD = {
   CAR.HONDA_CRV_EU: 400,
   CAR.HONDA_ACCORD_11G: 600,
   CAR.HONDA_PILOT_4G: 600,
+  CAR.HONDA_PILOT_4G_MMR: 600,
   CAR.HONDA_PASSPORT_4G: 600,
   CAR.ACURA_MDX_4G_MMR: 600,
   CAR.HONDA_CRV_6G: 600,
@@ -452,9 +486,9 @@ FW_QUERY_CONFIG = FwQueryConfig(
   # Note that we still attempt to match with them when they are present
   # This is or'd with (ALL_ECUS - ESSENTIAL_ECUS) from fw_versions.py
   non_essential_ecus={
-    Ecu.eps: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_E, *HONDA_BOSCH_ALT_RADAR, *HONDA_BOSCH_RADARLESS, *HONDA_BOSCH_CANFD],
+    Ecu.eps: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_E, CAR.HONDA_E_ADVANCE, *HONDA_BOSCH_ALT_RADAR, *HONDA_BOSCH_RADARLESS, *HONDA_BOSCH_CANFD],
     Ecu.vsa: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_CIVIC, CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CRV_5G, CAR.HONDA_CRV_HYBRID,
-              CAR.HONDA_E, CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G, *HONDA_BOSCH_ALT_RADAR, *HONDA_BOSCH_RADARLESS, *HONDA_BOSCH_CANFD],
+              CAR.HONDA_E, CAR.HONDA_E_ADVANCE, CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G, *HONDA_BOSCH_ALT_RADAR, *HONDA_BOSCH_RADARLESS, *HONDA_BOSCH_CANFD],
   },
   extra_ecus=[
     (Ecu.combinationMeter, 0x18da60f1, None),

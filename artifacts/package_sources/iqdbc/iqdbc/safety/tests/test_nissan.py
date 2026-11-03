@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import unittest
 
-from iqdbc.car.nissan.values import NissanSafetyFlags
+from iqdbc.car.nissan.values import CAR, NissanSafetyFlags
 from iqdbc.car.structs import CarParams
 
 # NISSAN_PARAM_IQ_LEAF in safety/modes/nissan.h (IQ safety framework flag)
@@ -21,6 +21,7 @@ class TestNissanSafety(common.CarSafetyTest, common.AngleSteeringSafetyTest):
   EPS_BUS = 0
   CRUISE_BUS = 2
   ACC_MAIN_BUS = 1
+  FILTER_PLATFORM = CAR.NISSAN_XTRAIL
 
   # Angle control limits
   STEER_ANGLE_MAX = 600  # deg, reasonable limit
@@ -94,6 +95,7 @@ class TestNissanSafetyAltEpsBus(TestNissanSafety):
   EPS_BUS = 1
   CRUISE_BUS = 1
   ACC_MAIN_BUS = 2
+  FILTER_PLATFORM = CAR.NISSAN_ALTIMA
 
   def setUp(self):
     self.packer = CANPackerSafety("nissan_x_trail_2017_generated")
@@ -103,6 +105,7 @@ class TestNissanSafetyAltEpsBus(TestNissanSafety):
 
 
 class TestNissanLeafSafety(TestNissanSafety):
+  FILTER_PLATFORM = CAR.NISSAN_LEAF
 
   def setUp(self):
     self.packer = CANPackerSafety("nissan_leaf_2018_generated")
@@ -126,6 +129,26 @@ class TestNissanLeafSafety(TestNissanSafety):
   # TODO: leaf should use its own safety param
   def test_acc_buttons(self):
     pass
+
+  def test_controller_commands_through_the_low_speed_angle_filter_are_accepted(self):
+    import math
+    from iqdbc.car.nissan.tests.test_nissan import drive, ready_interface
+
+    for platform in (self.FILTER_PLATFORM,):
+      ci = ready_interface(platform)
+      for v_ego in (0.5, 2.0, 5.0, 8.0, 12.0, 18.0, 25.0, 35.0):
+        self.safety.init_tests()
+        self.safety.set_controls_allowed(True)
+        self._rx(self._speed_msg(v_ego))
+        measured = 0.0
+        for frame in range(400):
+          command = 70.0 * math.sin(2 * math.pi * frame / 150) + (45.0 if (frame // 100) % 2 else -45.0)
+          ci.CS.out.steeringAngleDeg = measured
+          cc = drive(ci, v_ego, command)
+          applied = cc.apply_angle_last
+          self.assertTrue(self._tx(self._angle_cmd_msg(applied, True)), (platform, v_ego, frame, command, applied, measured))
+          measured = applied
+          self._rx(self._angle_meas_msg(measured))
 
 
 if __name__ == "__main__":

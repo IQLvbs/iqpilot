@@ -98,6 +98,15 @@ class TestFordSafetyBase(common.CarSafetyTest, common.SecondSpeedSafetyTest):
     fudged_speed = max(speed - 1.0, 1.0)
     return int(MAX_LATERAL_JERK / (fudged_speed * fudged_speed) / self.LATERAL_FREQUENCY * self.DEG_TO_CAN) + 1
 
+  def _get_max_curvature_delta_relaxed_can(self, speed):
+    fudged_speed = speed + 1.0
+    return int(MAX_LATERAL_JERK / (fudged_speed * fudged_speed) / self.LATERAL_FREQUENCY * self.DEG_TO_CAN) - 1
+
+  def _get_max_curvature_relaxed_can(self, speed):
+    fudged_speed = speed + 1.0
+    max_curvature_accel_can = int(MAX_LATERAL_ACCEL / (fudged_speed * fudged_speed) * self.DEG_TO_CAN) - 1
+    return min(max_curvature_accel_can, round(self.MAX_CURVATURE * self.DEG_TO_CAN))
+
   def _set_prev_desired_angle(self, t):
     t = round(t * self.DEG_TO_CAN)
     self.safety.set_desired_curvature_last(t)
@@ -383,6 +392,74 @@ class TestFordSafetyBase(common.CarSafetyTest, common.SecondSpeedSafetyTest):
             command = float(np.clip(command, measured - CarControllerParams.CURVATURE_ERROR, measured + CarControllerParams.CURVATURE_ERROR))
           last = limits.apply_limits(command, last, speed, 0., True, steer_step)
           with self.subTest(speed=speed, target=target, frame=frame):
+            self.assertTrue(self._tx(self._lat_ctl_msg(True, 0, 0, last, 0)))
+
+  def test_curvature_error_relaxed_rate_limits(self):
+    self.safety.set_controls_allowed(True)
+    small_curvature = 1 / self.DEG_TO_CAN
+
+    for speed in np.arange(0, 40, 0.5):
+      curvature_accel_limit = self._get_max_curvature_can(speed) / self.DEG_TO_CAN
+      limit_command = speed > self.CURVATURE_ERROR_MIN_SPEED
+      max_delta = self._get_max_curvature_delta_can(speed) / self.DEG_TO_CAN
+      max_delta_relaxed = self._get_max_curvature_delta_relaxed_can(speed) / self.DEG_TO_CAN
+
+      up_cases = (self.MAX_CURVATURE_ERROR * 2, [
+        (not limit_command, 0, 0),
+        (not limit_command, 0, max_delta_relaxed - small_curvature),
+        (True, 0, max_delta_relaxed),
+        (True, 0, max_delta),
+        (False, 0, max_delta + small_curvature),
+        (True, self.MAX_CURVATURE_ERROR - small_curvature, self.MAX_CURVATURE_ERROR - small_curvature),
+        (not limit_command, self.MAX_CURVATURE_ERROR - small_curvature * 2, self.MAX_CURVATURE_ERROR - small_curvature * 2),
+        (not limit_command, self.MAX_CURVATURE_ERROR - small_curvature, self.MAX_CURVATURE_ERROR - small_curvature * 2),
+      ])
+
+      down_cases = (self.MAX_CURVATURE - self.MAX_CURVATURE_ERROR * 2, [
+        (not limit_command, self.MAX_CURVATURE, self.MAX_CURVATURE),
+        (not limit_command, self.MAX_CURVATURE, self.MAX_CURVATURE - max_delta_relaxed + small_curvature),
+        (True, self.MAX_CURVATURE, self.MAX_CURVATURE - max_delta_relaxed),
+        (True, self.MAX_CURVATURE, self.MAX_CURVATURE - max_delta),
+        (False, self.MAX_CURVATURE, self.MAX_CURVATURE - max_delta - small_curvature),
+      ])
+
+      max_curvature_relaxed = self._get_max_curvature_relaxed_can(speed) / self.DEG_TO_CAN
+      max_curvature_allowed_can = min(self._get_max_curvature_can(speed), round(self.MAX_CURVATURE * self.DEG_TO_CAN))
+      winds_down_within_jerk = (max_curvature_allowed_can - self._get_max_curvature_relaxed_can(speed) <=
+                                self._get_max_curvature_delta_can(speed))
+      relaxed_cases = (self.MAX_CURVATURE * 2, [
+        (True, max_curvature_relaxed, max_curvature_relaxed),
+        (not limit_command, max_curvature_relaxed, max_curvature_relaxed - small_curvature),
+        (winds_down_within_jerk, max_curvature_allowed_can / self.DEG_TO_CAN, max_curvature_relaxed),
+      ])
+
+      for sign in (-1, 1):
+        for angle_meas, cases in (up_cases, down_cases, relaxed_cases):
+          self._reset_curvature_measurement(sign * angle_meas, speed)
+          for should_tx, initial_curvature, desired_curvature in cases:
+            if abs(desired_curvature) > self.MAX_CURVATURE:
+              self.assertLess(speed, self.CURVATURE_ERROR_MIN_SPEED)
+              continue
+
+            should_tx = should_tx and abs(desired_curvature) <= curvature_accel_limit
+
+            self._set_prev_desired_angle(sign * initial_curvature)
+            with self.subTest(speed=float(speed), sign=sign, meas=float(angle_meas), initial=float(initial_curvature), desired=float(desired_curvature)):
+              self.assertEqual(should_tx, self._tx(self._lat_ctl_msg(True, 0, 0, sign * desired_curvature, 0)))
+
+  def test_controller_limits_pass_safety_with_curvature_offset(self):
+    limits = CarControllerParams.CURVATURE_LIMITS
+    steer_step = CarControllerParams.STEER_STEP
+    for speed in (12., 20., 30., 38.):
+      for measured in (0.004, -0.004, 0.01, -0.01, 0.02, -0.02):
+        self.safety.set_controls_allowed(True)
+        self.safety.set_desired_curvature_last(0)
+        self._reset_curvature_measurement(measured, speed)
+        last = 0.
+        for frame in range(60):
+          command = float(np.clip(measured, measured - CarControllerParams.CURVATURE_ERROR, measured + CarControllerParams.CURVATURE_ERROR))
+          last = limits.apply_limits(command, last, speed, 0., True, steer_step)
+          with self.subTest(speed=speed, measured=measured, frame=frame):
             self.assertTrue(self._tx(self._lat_ctl_msg(True, 0, 0, last, 0)))
 
   def test_prevent_lkas_action(self):

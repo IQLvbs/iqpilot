@@ -16,6 +16,9 @@
 #define ALIGN(n) ((n + (8 - 1)) & -8)
 
 #define UNUSED(x) (void)x
+
+// Set in a reader's read_uids entry while it sleeps in msgq_poll; uids keep their low 32 bits zero because a pre-socket build reads them as a thread id
+#define MSGQ_READER_WAITING (1ULL << 63)
 #define UNPACK64(higher, lower, input) do {uint64_t tmp = input; higher = tmp >> 32; lower = tmp & 0xFFFFFFFF;} while (0)
 #define PACK64(output, higher, lower) output = ((uint64_t)higher << 32) | ((uint64_t)lower & 0xFFFFFFFF)
 
@@ -35,16 +38,15 @@ struct msgq_queue_t {
   std::atomic<uint64_t> *read_pointers[NUM_READERS];
   std::atomic<uint64_t> *read_valids[NUM_READERS];
   std::atomic<uint64_t> *read_uids[NUM_READERS];
-  char * mmap_p;
+  char * mmap_p = nullptr;
   char * data;
   size_t size;
   int reader_id;
   uint64_t read_uid_local;
   uint64_t write_uid_local;
-  int64_t last_reap_us;
-
   bool read_conflate;
   std::string endpoint;
+  int wake_fd = -1;
 };
 
 struct msgq_msg_t {

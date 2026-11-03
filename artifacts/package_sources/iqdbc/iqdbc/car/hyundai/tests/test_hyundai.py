@@ -24,6 +24,7 @@ NO_DATES_PLATFORMS = {
   CAR.HYUNDAI_ELANTRA,
   CAR.HYUNDAI_ELANTRA_GT_I30,
   CAR.KIA_CEED,
+  CAR.KIA_CEED_PHEV,
   CAR.KIA_FORTE,
   CAR.KIA_OPTIMA_G4,
   CAR.KIA_OPTIMA_G4_FL,
@@ -57,6 +58,7 @@ class TestHyundaiFingerprint:
     for car_model in CAR:
       CP = CarInterface.get_params(car_model, fingerprint, [], False, False, False)
       assert bool(CP.flags & HyundaiFlags.ALT_LIMITS) == bool(CP.safetyConfigs[-1].safetyParam & HyundaiSafetyFlags.ALT_LIMITS)
+      assert bool(CP.flags & HyundaiFlags.ALT_LIMITS_2) == bool(CP.safetyConfigs[-1].safetyParam & HyundaiSafetyFlags.ALT_LIMITS_2)
 
   def test_can_features(self):
     # Test no EV/HEV in any gear lists (should all use ELECT_GEAR)
@@ -135,7 +137,7 @@ class TestHyundaiFingerprint:
   # fingerprint in the absence of full FW matches:
   def test_platform_code_ecus_available(self, subtests):
     # TODO: add queries for these non-CAN FD cars to get EPS
-    no_eps_platforms = CANFD_CAR | {CAR.KIA_SORENTO, CAR.KIA_OPTIMA_G4, CAR.KIA_OPTIMA_G4_FL, CAR.KIA_OPTIMA_H,
+    no_eps_platforms = CANFD_CAR | {CAR.KIA_SORENTO, CAR.KIA_OPTIMA_G4, CAR.KIA_OPTIMA_G4_FL, CAR.KIA_OPTIMA_H, CAR.KIA_K7_2017,
                                     CAR.KIA_OPTIMA_H_G4_FL, CAR.HYUNDAI_SONATA_LF, CAR.HYUNDAI_TUCSON, CAR.GENESIS_G90, CAR.GENESIS_G80, CAR.HYUNDAI_ELANTRA}
 
     # Asserts ECU keys essential for fuzzy fingerprinting are available on all platforms

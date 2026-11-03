@@ -709,6 +709,16 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
     ET.NO_ENTRY: NoEntryAlert("Cruise Fault: Restart the Car"),
   },
 
+  EventName.accFaultedHardDecel: {
+    ET.IMMEDIATE_DISABLE: ImmediateDisableAlert("ACC fault from hard braking"),
+    ET.PERMANENT: NormalPermanentAlert("IQ.Pilot Temporarily Unavailable", "Temporary ACC fault caused by hard braking"),
+    ET.NO_ENTRY: NoEntryAlert("Temporary ACC fault caused by hard braking"),
+  },
+
+  EventName.accFaultedHardDecelLateral: {
+    ET.PERMANENT: NormalPermanentAlert("IQ.Pilot Temporarily Unavailable", "Temporary ACC fault caused by hard braking", duration=5.0, priority=Priority.LOW),
+  },
+
   EventName.cruiseFaultLateralAllowed: {
     ET.PERMANENT: NormalPermanentAlert("Cruise Faulted", "Lane Assist remains available", duration=5.0, priority=Priority.LOW),
   },

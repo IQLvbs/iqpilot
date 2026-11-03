@@ -313,23 +313,43 @@ bool steer_native_curvature_cmd_checks(int desired_curvature, bool steer_control
   if (is_lat_active() && steer_control_enabled) {
     violation |= safety_max_limit_check(desired_curvature, limits.max_curvature, -limits.max_curvature);
 
-    const float max_curvature_rate_sec = MAX_LATERAL_JERK / (fudged_speed * fudged_speed);
-    const float max_curvature_delta = max_curvature_rate_sec / (float)limits.frequency;
-    const int max_curvature_delta_can = (max_curvature_delta * limits.curvature_to_can) + 1.;
-
-    const int highest_desired_curvature = native_curvature_state.desired_last + max_curvature_delta_can;
-    const int lowest_desired_curvature = native_curvature_state.desired_last - max_curvature_delta_can;
-    violation |= safety_max_limit_check(desired_curvature, highest_desired_curvature, lowest_desired_curvature);
-
     const float max_curvature = MAX_LATERAL_ACCEL / (fudged_speed * fudged_speed);
     const int max_curvature_can = (max_curvature * limits.curvature_to_can) + 1.;
     violation |= safety_max_limit_check(desired_curvature, max_curvature_can, -max_curvature_can);
 
+    const float max_curvature_rate_sec = MAX_LATERAL_JERK / (fudged_speed * fudged_speed);
+    const float max_curvature_delta = max_curvature_rate_sec / (float)limits.frequency;
+    const int max_curvature_delta_can = (max_curvature_delta * limits.curvature_to_can) + 1.;
+
+    int highest_desired_curvature = native_curvature_state.desired_last + max_curvature_delta_can;
+    int lowest_desired_curvature = native_curvature_state.desired_last - max_curvature_delta_can;
+
     if (limits.max_curvature_error && ((vehicle_speed.values[0] / VEHICLE_SPEED_FACTOR) > limits.curvature_error_min_speed)) {
+      const float fudged_speed_error = (vehicle_speed.max / VEHICLE_SPEED_FACTOR) + 1.;
+      const float max_curvature_rate_sec_relaxed = MAX_LATERAL_JERK / (fudged_speed_error * fudged_speed_error);
+      const int max_curvature_delta_relaxed_can = (max_curvature_rate_sec_relaxed / (float)limits.frequency * limits.curvature_to_can) - 1.;
+
+      // openpilot clips its command to the lateral accel limit and to the signal range, so requiring more than either can never be met
+      const int max_curvature_accel_can = (MAX_LATERAL_ACCEL / (fudged_speed_error * fudged_speed_error) * limits.curvature_to_can) - 1.;
+      const int max_curvature_relaxed_can = SAFETY_MIN(max_curvature_accel_can, limits.max_curvature);
+
       const int lowest_desired_curvature_error = native_curvature_state.meas.min - limits.max_curvature_error - 1;
       const int highest_desired_curvature_error = native_curvature_state.meas.max + limits.max_curvature_error + 1;
-      violation |= safety_max_limit_check(desired_curvature, highest_desired_curvature_error, lowest_desired_curvature_error);
+
+      if (native_curvature_state.desired_last < lowest_desired_curvature_error) {
+        const int required = SAFETY_MIN(SAFETY_MIN(native_curvature_state.desired_last + max_curvature_delta_relaxed_can,
+                                                   lowest_desired_curvature_error), max_curvature_relaxed_can);
+        lowest_desired_curvature = SAFETY_MAX(lowest_desired_curvature, required);
+      } else if (native_curvature_state.desired_last > highest_desired_curvature_error) {
+        const int required = SAFETY_MAX(SAFETY_MAX(native_curvature_state.desired_last - max_curvature_delta_relaxed_can,
+                                                   highest_desired_curvature_error), -max_curvature_relaxed_can);
+        highest_desired_curvature = SAFETY_MIN(highest_desired_curvature, required);
+      } else {
+        highest_desired_curvature = SAFETY_MIN(highest_desired_curvature, highest_desired_curvature_error);
+        lowest_desired_curvature = SAFETY_MAX(lowest_desired_curvature, lowest_desired_curvature_error);
+      }
     }
+    violation |= safety_max_limit_check(desired_curvature, highest_desired_curvature, lowest_desired_curvature);
 
     violation |= rt_native_curvature_rate_limit_check(limits);
   }

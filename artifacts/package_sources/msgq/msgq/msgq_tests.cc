@@ -1,3 +1,11 @@
+#include <atomic>
+#include <chrono>
+#include <thread>
+#include <vector>
+
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include "catch2/catch.hpp"
 #include "msgq/msgq.h"
 
@@ -429,4 +437,375 @@ TEST_CASE("1 publisher, 2 subscribers", "[integration]")
     msgq_msg_close(&msg1);
     msgq_msg_close(&msg2);
   }
+}
+
+static int64_t millis_since(std::chrono::steady_clock::time_point start)
+{
+  return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+}
+
+static std::thread send_later(msgq_queue_t *q, int delay_ms)
+{
+  return std::thread([=]() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+    uint64_t value = 1;
+    msgq_msg_t msg;
+    msgq_msg_init_data(&msg, (char *)&value, sizeof(value));
+    msgq_msg_send(&msg, q);
+    msgq_msg_close(&msg);
+  });
+}
+
+TEST_CASE("msgq_poll times out")
+{
+  cleanup_test_queue();
+  msgq_queue_t writer, reader;
+  msgq_new_queue(&writer, "test_queue", 1024);
+  msgq_new_queue(&reader, "test_queue", 1024);
+  msgq_init_publisher(&writer);
+  msgq_init_subscriber(&reader);
+
+  msgq_pollitem_t items[] = {{&reader, 0}};
+  auto start = std::chrono::steady_clock::now();
+  REQUIRE(msgq_poll(items, 1, 100) == 0);
+  REQUIRE(millis_since(start) >= 100);
+  REQUIRE(msgq_poll(items, 1, 0) == 0);
+
+  send_later(&writer, 0).join();
+  REQUIRE(msgq_poll(items, 1, 0) == 1);
+
+  msgq_close_queue(&writer);
+  msgq_close_queue(&reader);
+}
+
+TEST_CASE("msgq_poll wakes up on send")
+{
+  cleanup_test_queue();
+  msgq_queue_t writer, reader;
+  msgq_new_queue(&writer, "test_queue", 1024);
+  msgq_new_queue(&reader, "test_queue", 1024);
+  msgq_init_publisher(&writer);
+  msgq_init_subscriber(&reader);
+
+  msgq_pollitem_t items[] = {{&reader, 0}};
+  std::thread sender = send_later(&writer, 50);
+  auto start = std::chrono::steady_clock::now();
+  int n = msgq_poll(items, 1, 5000);
+  int64_t elapsed = millis_since(start);
+  sender.join();
+
+  REQUIRE(n == 1);
+  REQUIRE(elapsed < 1000);
+
+  msgq_close_queue(&writer);
+  msgq_close_queue(&reader);
+}
+
+TEST_CASE("msgq_poll multiple queues")
+{
+  cleanup_test_queue();
+  remove("/dev/shm/msgq_test_queue2");
+  remove("/tmp/msgq_test_queue2");
+  msgq_queue_t writer1, writer2, reader1, reader2;
+  msgq_new_queue(&writer1, "test_queue", 1024);
+  msgq_new_queue(&writer2, "test_queue2", 1024);
+  msgq_new_queue(&reader1, "test_queue", 1024);
+  msgq_new_queue(&reader2, "test_queue2", 1024);
+  msgq_init_publisher(&writer1);
+  msgq_init_publisher(&writer2);
+  msgq_init_subscriber(&reader1);
+  msgq_init_subscriber(&reader2);
+
+  msgq_pollitem_t items[] = {{&reader1, 0}, {&reader2, 0}};
+  std::thread sender = send_later(&writer2, 50);
+  auto start = std::chrono::steady_clock::now();
+  int n = msgq_poll(items, 2, 5000);
+  int64_t elapsed = millis_since(start);
+  sender.join();
+
+  REQUIRE(n == 1);
+  REQUIRE(elapsed < 1000);
+  REQUIRE(items[0].revents == 0);
+  REQUIRE(items[1].revents == 1);
+
+  msgq_close_queue(&writer1);
+  msgq_close_queue(&writer2);
+  msgq_close_queue(&reader1);
+  msgq_close_queue(&reader2);
+}
+
+TEST_CASE("msgq_poll from a different thread than the subscriber")
+{
+  cleanup_test_queue();
+  msgq_queue_t writer, reader;
+  msgq_new_queue(&writer, "test_queue", 1024);
+  msgq_new_queue(&reader, "test_queue", 1024);
+  msgq_init_publisher(&writer);
+  msgq_init_subscriber(&reader);
+
+  int n = -1;
+  int64_t elapsed = -1;
+  std::thread poller([&]() {
+    msgq_pollitem_t items[] = {{&reader, 0}};
+    auto start = std::chrono::steady_clock::now();
+    n = msgq_poll(items, 1, 5000);
+    elapsed = millis_since(start);
+  });
+  send_later(&writer, 50).join();
+  poller.join();
+
+  REQUIRE(n == 1);
+  REQUIRE(elapsed < 1000);
+
+  msgq_close_queue(&writer);
+  msgq_close_queue(&reader);
+}
+
+TEST_CASE("msgq_poll reconnects to a new publisher")
+{
+  cleanup_test_queue();
+  msgq_queue_t writer, reader;
+  msgq_new_queue(&writer, "test_queue", 1024);
+  msgq_new_queue(&reader, "test_queue", 1024);
+  msgq_init_publisher(&writer);
+  msgq_init_subscriber(&reader);
+
+  std::thread restart([&]() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    msgq_init_publisher(&writer);
+    send_later(&writer, 50).join();
+  });
+
+  msgq_pollitem_t items[] = {{&reader, 0}};
+  auto start = std::chrono::steady_clock::now();
+  int n = msgq_poll(items, 1, 5000);
+  int64_t elapsed = millis_since(start);
+  restart.join();
+
+  REQUIRE(n == 1);
+  REQUIRE(elapsed < 1000);
+
+  msgq_close_queue(&writer);
+  msgq_close_queue(&reader);
+}
+
+TEST_CASE("msgq_poll wakes up despite a stuck reader")
+{
+  cleanup_test_queue();
+  msgq_queue_t writer, stuck, reader;
+  msgq_new_queue(&writer, "test_queue", 1024);
+  msgq_new_queue(&stuck, "test_queue", 1024);
+  msgq_new_queue(&reader, "test_queue", 1024);
+  msgq_init_publisher(&writer);
+  msgq_init_subscriber(&stuck);
+  msgq_init_subscriber(&reader);
+
+  *stuck.read_uids[stuck.reader_id] |= MSGQ_READER_WAITING;
+  for (int i = 0; i < 1000; i++) {
+    send_later(&writer, 0).join();
+  }
+
+  msgq_pollitem_t items[] = {{&reader, 0}};
+  msgq_msg_t msg;
+  while (msgq_msg_recv(&msg, &reader) > 0) msgq_msg_close(&msg);
+
+  std::thread sender = send_later(&writer, 50);
+  auto start = std::chrono::steady_clock::now();
+  int n = msgq_poll(items, 1, 5000);
+  int64_t elapsed = millis_since(start);
+  sender.join();
+
+  REQUIRE(n == 1);
+  REQUIRE(elapsed < 1000);
+
+  msgq_close_queue(&writer);
+  msgq_close_queue(&stuck);
+  msgq_close_queue(&reader);
+}
+
+TEST_CASE("msgq_poll keeps waking readers through publisher restarts")
+{
+  cleanup_test_queue();
+  msgq_queue_t writer;
+  msgq_new_queue(&writer, "test_queue", 1 << 16);
+  msgq_init_publisher(&writer);
+
+  const int num_readers = 10;
+  std::atomic<bool> done = false;
+  std::atomic<int> timeouts = 0;
+  std::vector<std::thread> readers;
+  for (int i = 0; i < num_readers; i++) {
+    readers.emplace_back([&]() {
+      msgq_queue_t reader;
+      msgq_new_queue(&reader, "test_queue", 1 << 16);
+      msgq_init_subscriber(&reader);
+      msgq_pollitem_t items[] = {{&reader, 0}};
+      while (!done) {
+        if (msgq_poll(items, 1, 1000) == 0 && !done) timeouts++;
+        msgq_msg_t msg;
+        while (msgq_msg_recv(&msg, &reader) > 0) msgq_msg_close(&msg);
+      }
+      msgq_close_queue(&reader);
+    });
+  }
+
+  auto start = std::chrono::steady_clock::now();
+  for (int i = 0; millis_since(start) < 3000; i++) {
+    if (i % 20 == 0) msgq_init_publisher(&writer);
+    send_later(&writer, 0).join();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  done = true;
+  for (int i = 0; i < 100; i++) {
+    send_later(&writer, 0).join();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  for (auto &t : readers) t.join();
+
+  REQUIRE(timeouts == 0);
+  msgq_close_queue(&writer);
+}
+
+
+TEST_CASE("reader uids leave the low 32 bits clear and the waiting bit unset")
+{
+  cleanup_test_queue();
+  msgq_queue_t writer, reader;
+  msgq_new_queue(&writer, "test_queue", 1024);
+  msgq_new_queue(&reader, "test_queue", 1024);
+  msgq_init_publisher(&writer);
+  msgq_init_subscriber(&reader);
+
+  uint64_t uid = *reader.read_uids[reader.reader_id];
+  REQUIRE(uid != 0);
+  REQUIRE((uid & 0xFFFFFFFFULL) == 0);
+  REQUIRE((uid & MSGQ_READER_WAITING) == 0);
+  REQUIRE(reader.wake_fd >= 0);
+
+  msgq_close_queue(&writer);
+  msgq_close_queue(&reader);
+}
+
+TEST_CASE("a full subscriber table reclaims slots whose wake socket is gone")
+{
+  cleanup_test_queue();
+  msgq_queue_t writer;
+  msgq_new_queue(&writer, "test_queue", 1024);
+  msgq_init_publisher(&writer);
+
+  std::vector<msgq_queue_t> readers(NUM_READERS);
+  for (auto &r : readers) {
+    msgq_new_queue(&r, "test_queue", 1024);
+    REQUIRE(msgq_init_subscriber(&r) == 0);
+  }
+
+  msgq_queue_t extra;
+  msgq_new_queue(&extra, "test_queue", 1024);
+  REQUIRE(msgq_init_subscriber(&extra) == -1);
+  REQUIRE(errno == ENOBUFS);
+
+  int victim_slot = readers[5].reader_id;
+  close(readers[5].wake_fd);
+  readers[5].wake_fd = -1;
+  REQUIRE(msgq_init_subscriber(&extra) == 0);
+  REQUIRE(extra.reader_id == victim_slot);
+
+  for (auto &r : readers) msgq_close_queue(&r);
+  msgq_close_queue(&extra);
+  msgq_close_queue(&writer);
+}
+
+TEST_CASE("closing a queue whose reader is armed still releases its slot")
+{
+  cleanup_test_queue();
+  msgq_queue_t writer, reader;
+  msgq_new_queue(&writer, "test_queue", 1024);
+  msgq_new_queue(&reader, "test_queue", 1024);
+  msgq_init_publisher(&writer);
+  msgq_init_subscriber(&reader);
+
+  int slot = reader.reader_id;
+  *reader.read_uids[slot] |= MSGQ_READER_WAITING;
+  msgq_remove_subscriber(&reader);
+  REQUIRE(*writer.read_uids[slot] == 0);
+
+  msgq_close_queue(&writer);
+  msgq_close_queue(&reader);
+}
+
+TEST_CASE("a send to a dead reader that was armed is harmless")
+{
+  cleanup_test_queue();
+  msgq_queue_t writer, reader;
+  msgq_new_queue(&writer, "test_queue", 1024);
+  msgq_new_queue(&reader, "test_queue", 1024);
+  msgq_init_publisher(&writer);
+  msgq_init_subscriber(&reader);
+
+  *reader.read_uids[reader.reader_id] |= MSGQ_READER_WAITING;
+  close(reader.wake_fd);
+  reader.wake_fd = -1;
+
+  for (int i = 0; i < 100; i++) send_later(&writer, 0).join();
+  REQUIRE((*writer.read_uids[reader.reader_id] & MSGQ_READER_WAITING) == 0);
+
+  msgq_close_queue(&writer);
+  msgq_close_queue(&reader);
+}
+
+TEST_CASE("msgq_poll falls back to checking periodically without a wake socket")
+{
+  cleanup_test_queue();
+  msgq_queue_t writer, reader;
+  msgq_new_queue(&writer, "test_queue", 1024);
+  msgq_new_queue(&reader, "test_queue", 1024);
+  msgq_init_publisher(&writer);
+  msgq_init_subscriber(&reader);
+  close(reader.wake_fd);
+  reader.wake_fd = -1;
+
+  msgq_pollitem_t items[] = {{&reader, 0}};
+  std::thread sender = send_later(&writer, 50);
+  auto start = std::chrono::steady_clock::now();
+  int n = msgq_poll(items, 1, 5000);
+  int64_t elapsed = millis_since(start);
+  sender.join();
+
+  REQUIRE(n == 1);
+  REQUIRE(elapsed < 1000);
+
+  msgq_close_queue(&writer);
+  msgq_close_queue(&reader);
+}
+
+TEST_CASE("msgq_poll never sleeps past a lost wakeup")
+{
+  cleanup_test_queue();
+  msgq_queue_t writer, reader;
+  msgq_new_queue(&writer, "test_queue", 1024);
+  msgq_new_queue(&reader, "test_queue", 1024);
+  msgq_init_publisher(&writer);
+  msgq_init_subscriber(&reader);
+
+  std::thread sender([&]() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    *reader.read_uids[reader.reader_id] &= ~MSGQ_READER_WAITING;
+    uint64_t v = 1;
+    msgq_msg_t msg;
+    msgq_msg_init_data(&msg, (char *)&v, sizeof(v));
+    msgq_msg_send(&msg, &writer);
+    msgq_msg_close(&msg);
+  });
+
+  msgq_pollitem_t items[] = {{&reader, 0}};
+  auto start = std::chrono::steady_clock::now();
+  int n = msgq_poll(items, 1, -1);
+  int64_t elapsed = millis_since(start);
+  sender.join();
+
+  REQUIRE(n == 1);
+  REQUIRE(elapsed < 400);
+
+  msgq_close_queue(&writer);
+  msgq_close_queue(&reader);
 }

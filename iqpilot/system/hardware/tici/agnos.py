@@ -112,7 +112,11 @@ def _extract_image_path(url: str) -> str:
     return url.rsplit("/raw/", 1)[1]
   return url.rsplit("/", 1)[-1]
 
+_k3_identity: dict[str, str] = {}
+
 def _ensure_k3_registered(dongle_id: str) -> str:
+  if dongle_id in _k3_identity:
+    return _k3_identity[dongle_id]
   try:
     import jwt as _jwt
     from datetime import datetime, timedelta, timezone
@@ -136,6 +140,7 @@ def _ensure_k3_registered(dongle_id: str) -> str:
       registered_id = result.get("dongle_id")
       if registered_id:
         _diag(f"IQ.OS proxy: registered with konn3kt as {registered_id}")
+        _k3_identity[dongle_id] = registered_id
         return registered_id
   except Exception as e:
     _diag(f"IQ.OS proxy: k3 registration failed ({type(e).__name__}: {e})")

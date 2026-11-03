@@ -31,9 +31,11 @@
 #define SAFETY_BODY 27U
 #define SAFETY_HYUNDAI_CANFD 28U
 #define SAFETY_VOLKSWAGEN_MQBEVO 29U
+#define SAFETY_CHRYSLER_CUSW 30U
 #define SAFETY_PSA 31U
 #define SAFETY_RIVIAN 33U
 #define SAFETY_VOLKSWAGEN_MEB 34U
+#define SAFETY_MG 38U
 #define SAFETY_TESLA_LEGACY 39U
 
 #define GET_BIT(msg, b) ((bool)!!(((msg)->data[((b) / 8U)] >> ((b) % 8U)) & 0x1U))
@@ -357,6 +359,7 @@ int set_safety_hooks(uint16_t mode, uint16_t param);
 
 extern const safety_hooks body_hooks;
 extern const safety_hooks chrysler_hooks;
+extern const safety_hooks chrysler_cusw_hooks;
 extern const safety_hooks elm327_hooks;
 extern const safety_hooks nooutput_hooks;
 extern const safety_hooks alloutput_hooks;
@@ -380,3 +383,4 @@ extern const safety_hooks volkswagen_meb_hooks;
 extern const safety_hooks volkswagen_pq_hooks;
 extern const safety_hooks rivian_hooks;
 extern const safety_hooks psa_hooks;
+extern const safety_hooks mg_hooks;

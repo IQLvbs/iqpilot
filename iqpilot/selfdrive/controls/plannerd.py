@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from iqpilot.cereal import car, custom
 from iqpilot.common.gps import get_gps_location_service
+from iqpilot.common.iq_perf import StallWatch
 from iqpilot.common.params import Params
 from iqpilot.common.realtime import CycleCollector, Priority, config_realtime_process
 from iqpilot.common.swaglog import cloudlog
@@ -34,6 +35,7 @@ def main():
                             'iqLiveLocation', 'iqLiveData', 'iqNavState', 'iqCarState', 'iqConstructionZone', gps_location_service],
                            poll='modelV2')
   collector = CycleCollector()
+  StallWatch("plannerd").start()
 
   while True:
     sm.update()

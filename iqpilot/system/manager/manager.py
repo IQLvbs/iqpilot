@@ -92,9 +92,11 @@ def manager_init() -> None:
   try:
     from iqpilot.system.hardware import TICI
     if TICI:
-      from iqpilot.system.hardware.tici.usb_storage import ensure_ncm_gadget, suspend_usb_input
+      from iqpilot.system.hardware.tici.usb_storage import ensure_ncm_gadget, prepare_emac_usb, suspend_usb_input
       ensure_ncm_gadget()
-      if Params().get_bool("IQEmacEnabled") or Params().get_bool("IQEgpuEnabled"):
+      if Params().get_bool("IQEmacEnabled"):
+        prepare_emac_usb()
+      elif Params().get_bool("IQEgpuEnabled"):
         suspend_usb_input(True)
   except Exception:
     cloudlog.exception("emac usb setup failed")

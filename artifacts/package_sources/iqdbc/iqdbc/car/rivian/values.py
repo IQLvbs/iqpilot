@@ -22,13 +22,12 @@ class ModelYear(StrEnum):
   P_2023 = "P"
   R_2024 = "R"
   S_2025 = "S"
+  T_2026 = "T"
 
 
 @dataclass
 class RivianCarDocs(CarDocs):
   package: str = "All"
-  car_parts: CarParts = field(default_factory=CarParts.common([CarHarness.rivian]))
-  setup_video: str = "https://youtu.be/uaISd1j7Z4U"
 
 
 @dataclass
@@ -40,17 +39,20 @@ class RivianPlatformConfig(PlatformConfig):
   years: set[ModelYear] = field(default_factory=set)
 
 
+class RivianFlags(IntFlag):
+  GEN2 = 1
+
+
 class CAR(Platforms):
   RIVIAN_R1_GEN1 = RivianPlatformConfig(
-    # TODO: verify this
     [
-      RivianCarDocs("Rivian R1S 2022-24"),
-      RivianCarDocs("Rivian R1T 2022-24"),
+      RivianCarDocs("Rivian R1S 2022-24", setup_video="https://youtu.be/uaISd1j7Z4U", car_parts=CarParts.common([CarHarness.rivian_a])),
+      RivianCarDocs("Rivian R1T 2022-24", setup_video="https://youtu.be/uaISd1j7Z4U", car_parts=CarParts.common([CarHarness.rivian_a])),
     ],
     CarSpecs(mass=3206., wheelbase=3.08, steerRatio=15.2),
     wmis={WMI.RIVIAN_TRUCK, WMI.RIVIAN_MPV},
     lines={ModelLine.R1T, ModelLine.R1S},
-    years={ModelYear.N_2022, ModelYear.P_2023, ModelYear.R_2024},
+    years={ModelYear.N_2022, ModelYear.P_2023, ModelYear.R_2024, ModelYear.S_2025},
   )
 
 

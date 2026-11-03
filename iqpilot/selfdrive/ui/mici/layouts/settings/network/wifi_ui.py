@@ -7,6 +7,7 @@ from collections.abc import Callable
 
 from iqpilot.common.swaglog import cloudlog
 from iqpilot.selfdrive.ui.mici.widgets.stock_dialog import BigInputDialog, BigConfirmationDialog
+from iqpilot.selfdrive.ui.mici.layouts.settings.network.wifi_persistence import NetworkPersistenceFilter
 from iqpilot.selfdrive.ui.mici.widgets.stock_button import BigButton, LABEL_COLOR
 from iqpilot.system.ui.lib.application import gui_app, MousePos, FontWeight
 from iqpilot.system.ui.widgets import Widget
@@ -321,6 +322,7 @@ class WifiUIMici(NavScroller):
     self._scanning_btn = ScanningButton(lambda: self._wifi_manager.is_scanning)
     self._networks: dict[str, Network] = {}
     self._network_signature: tuple[tuple[str, int, bool, int, bool], ...] = ()
+    self._persistence = NetworkPersistenceFilter()
     self._connecting: str | None = None
     self._callback_frame = 0
     self._wifi_manager.add_callbacks(
@@ -337,6 +339,7 @@ class WifiUIMici(NavScroller):
   def show_event(self):
     super().show_event()
     self._wifi_manager.set_active(True)
+    self._persistence.reset_sightings()
     self._callback_frame = 0
     self._update_buttons(re_sort=True)
 
@@ -344,12 +347,18 @@ class WifiUIMici(NavScroller):
     super().hide_event()
     self._wifi_manager.set_active(False)
 
+  def _is_listed(self, network: Network) -> bool:
+    return (network.is_connected or network.is_saved or network.ssid == self._connecting
+            or self._persistence.is_persistent(network.ssid))
+
   def _on_network_updated(self, networks: list[Network]):
-    signature = _wifi_network_signature(networks)
+    self._persistence.observe(n.ssid for n in networks)
+    listed = [n for n in networks if self._is_listed(n)]
+    signature = _wifi_network_signature(listed)
     if signature == self._network_signature:
       return
     self._network_signature = signature
-    self._networks = {n.ssid: n for n in networks}
+    self._networks = {n.ssid: n for n in listed}
     self._update_buttons()
 
   def _on_activated(self):

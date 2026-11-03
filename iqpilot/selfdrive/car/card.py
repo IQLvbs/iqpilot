@@ -40,6 +40,7 @@ CARD_FLAG_CARSTATE_ALIVE = 1 << 1
 CARD_FLAG_SENDCAN_GAP = 1 << 2
 CARD_SENDCAN_GAP_WARN_US = 20_000
 CARD_SENDCAN_GAP_ERROR_US = 60_000
+CARD_CAN_INVALID_REPORT_FRAMES = int(5. / DT_CTRL)
 
 # forward
 carlog.addHandler(ForwardingHandler(cloudlog))
@@ -493,11 +494,21 @@ class Car:
       self.params.put_bool("TeslaStockAutosteerActive", True)
       self.params.put_bool("OnroadCycleRequested", True)
 
+  def _report_can_invalid(self, CS: car.CarState) -> None:
+    if CS.canValid or self.sm.frame % CARD_CAN_INVALID_REPORT_FRAMES:
+      return
+    try:
+      invalid = [message for parser in self.CI.can_parsers.values() for message in parser.invalid_messages()]
+      cloudlog.event("card.can_invalid", invalid=invalid, canTimeout=CS.canTimeout, error=True)
+    except Exception:
+      cloudlog.exception("failed to report invalid CAN messages")
+
   def step(self):
     started_ns = time.monotonic_ns()
     checkpoint_ns = started_ns
 
     CS, CS_IQ, RD = self.state_update()
+    self._report_can_invalid(CS)
     self._yield_to_stock_autosteer(CS)
     state_update_us = (time.monotonic_ns() - checkpoint_ns) // 1000
     checkpoint_ns = time.monotonic_ns()

@@ -319,6 +319,21 @@ class Calibrator:
     pm.send('extrinsicsCalibration', self.get_msg(valid))
 
 
+def discard_calibration_from_other_car(params: Params, CP: car.CarParams) -> None:
+  last_carparams_data = params.get("CarParamsPrevRoute")
+  if last_carparams_data is None:
+    return
+  try:
+    with car.CarParams.from_bytes(last_carparams_data) as last_CP:
+      last_fingerprint, last_brand = last_CP.carFingerprint, last_CP.brand
+  except Exception:
+    cloudlog.exception("calibrationd: unreadable CarParamsPrevRoute, keeping CalibrationParams")
+    return
+  if last_fingerprint != CP.carFingerprint and "mock" not in (last_brand, CP.brand):
+    cloudlog.warning(f"calibrationd: car changed from {last_fingerprint} to {CP.carFingerprint}, discarding CalibrationParams")
+    params.remove("CalibrationParams")
+
+
 def main() -> NoReturn:
   config_realtime_process([0, 1, 2, 3], 5)
 
@@ -327,6 +342,7 @@ def main() -> NoReturn:
 
   params_reader = Params()
   CP = messaging.log_from_bytes(params_reader.get("CarParams", block=True), car.CarParams)
+  discard_calibration_from_other_car(params_reader, CP)
 
   calibrator = Calibrator(param_put=True)
   calibrator.not_car = CP.notCar

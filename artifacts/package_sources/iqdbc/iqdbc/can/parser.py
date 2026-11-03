@@ -93,7 +93,7 @@ class MessageState:
     if self.frequency < 1e-5 and len(self.timestamps) >= 3:
       dt = (self.timestamps[-1] - self.timestamps[0]) * 1e-9
       if (dt > 1.0 or (self.timestamps.maxlen is not None and len(self.timestamps) >= self.timestamps.maxlen)) and dt != 0:
-        self.frequency = min(len(self.timestamps) / dt, 100.0)
+        self.frequency = min((len(self.timestamps) - 1) / dt, 100.0)
         self.timeout_threshold = (1_000_000_000 / self.frequency) * 10
     return True
 
@@ -218,6 +218,15 @@ class CANParser:
     # TODO: probably only want to increment this once per update() call
     self.can_invalid_cnt = 0 if valid else min(self.can_invalid_cnt + 1, CAN_INVALID_CNT)
     return self.can_invalid_cnt < CAN_INVALID_CNT and counters_valid
+
+  def invalid_messages(self) -> list[dict]:
+    bus_timeout = self.bus_timeout
+    return [
+      {"bus": self.bus, "address": hex(state.address), "name": state.name,
+       "frames_seen": len(state.timestamps), "counter_fail": state.counter_fail}
+      for state in self.message_states.values()
+      if state.counter_fail >= MAX_BAD_COUNTER or not state.valid(self._last_update_nanos, bus_timeout)
+    ]
 
   def update(self, strings, sendcan: bool = False):
     if strings and not isinstance(strings[0], list | tuple):

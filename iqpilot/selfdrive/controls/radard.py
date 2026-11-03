@@ -7,6 +7,7 @@ from typing import Any
 import capnp
 from iqpilot.cereal import messaging, log, car, custom
 from iqpilot.common.filter_simple import FirstOrderFilter
+from iqpilot.common.iq_perf import StallWatch
 from iqpilot.common.params import Params
 from iqpilot.common.realtime import DT_MDL, Priority, config_realtime_process
 from iqpilot.common.swaglog import cloudlog
@@ -446,6 +447,7 @@ def main() -> None:
   pm = messaging.PubMaster(['radarState'])
 
   RD = RadarD(CP, CP_IQ, CP.radarDelay)
+  StallWatch("radard").start()
 
   while 1:
     sm.update()

@@ -189,6 +189,9 @@ class CarInterface(CarInterfaceBase):
     if ret.flags & HyundaiFlags.ALT_LIMITS:
       ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.ALT_LIMITS.value
 
+    if ret.flags & HyundaiFlags.ALT_LIMITS_2:
+      ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.ALT_LIMITS_2.value
+
     # Common longitudinal control setup
 
     ret.radarUnavailable = RADAR_START_ADDR not in fingerprint[1] or Bus.radar not in DBC[ret.carFingerprint]

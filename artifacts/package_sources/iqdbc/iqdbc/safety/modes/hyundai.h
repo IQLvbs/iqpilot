@@ -241,6 +241,7 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
 
     int aeb_decel_cmd = GET_BYTE(to_send, 2);
     bool aeb_req = GET_BIT(to_send, 54U);
+    bool aeb_stop_req = GET_BIT(to_send, 55U);
 
     bool violation = false;
 
@@ -248,6 +249,7 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
     violation |= longitudinal_accel_checks(desired_accel_val, HYUNDAI_LONG_LIMITS);
     violation |= (aeb_decel_cmd != 0);
     violation |= aeb_req;
+    violation |= aeb_stop_req;
 
     if (violation) {
       tx = false;

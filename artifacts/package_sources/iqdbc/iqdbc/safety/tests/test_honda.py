@@ -382,6 +382,15 @@ class TestHondaNidecSafetyBase(HondaBase):
     self.assertTrue(self._tx(self._send_brake_msg(0)))
     self.assertFalse(self._tx(self._send_brake_msg(1)))
 
+  def test_block_aeb(self):
+    for controls_allowed in [True, False]:
+      self.safety.set_controls_allowed(controls_allowed)
+      for aeb_signals in ({"AEB_REQ_1": 1}, {"AEB_REQ_2": 1}, {"AEB_REQ_2": 7}, {"AEB_STATUS": 1}, {"AEB_STATUS": 3}):
+        values = {self.BRAKE_SIG: 0, **aeb_signals}
+        msg = self.packer.make_can_msg_safety("BRAKE_COMMAND", self.PT_BUS, values)
+        self.assertFalse(self._tx(msg), msg=aeb_signals)
+      self.assertTrue(self._tx(self._send_brake_msg(0)))
+
 
 class TestHondaNidecPcmSafety(HondaPcmEnableBase, TestHondaNidecSafetyBase):
   """
@@ -551,6 +560,7 @@ class TestHondaBoschLongSafety(HondaButtonEnableBase, TestHondaBoschSafetyBase):
   MIN_ACCEL = -3.5
 
   STEER_BUS = 1
+  LKAS_HUD_LENGTHS = (5, 8)
   TX_MSGS = [[0xE4, 1], [0x1DF, 1], [0x1EF, 1], [0x1FA, 1], [0x30C, 1], [0x33D, 1], [0x33DA, 1], [0x33DB, 1], [0x39F, 1], [0x18DAB0F1, 1]]
   FWD_BLACKLISTED_ADDRS = {}
   # 0x1DF is to test that radar is disabled
@@ -572,6 +582,10 @@ class TestHondaBoschLongSafety(HondaButtonEnableBase, TestHondaBoschSafetyBase):
   # Longitudinal doesn't need to send buttons
   def test_spam_cancel_safety_check(self):
     pass
+
+  def test_lkas_hud_lengths(self):
+    for length in self.LKAS_HUD_LENGTHS:
+      self.assertTrue(self._tx(libsafety_py.make_CANPacket(0x33D, self.STEER_BUS, bytes(length))), length)
 
   def test_diagnostics(self):
     tester_present = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x02\x3E\x80\x00\x00\x00\x00\x00")
@@ -601,6 +615,15 @@ class TestHondaBoschLongSafety(HondaButtonEnableBase, TestHondaBoschSafetyBase):
         self.safety.set_controls_allowed(controls_allowed)
         send = self.MIN_ACCEL <= accel <= self.MAX_ACCEL if controls_allowed else accel == 0
         self.assertEqual(send, self._tx(self._send_gas_brake_msg(self.NO_GAS, accel)), (controls_allowed, accel))
+
+  def test_block_aeb(self):
+    for controls_allowed in [True, False]:
+      self.safety.set_controls_allowed(controls_allowed)
+      for aeb_signals in ({"AEB_STATUS": 1}, {"AEB_PREPARE": 1}, {"AEB_BRAKING": 1}):
+        values = {"GAS_COMMAND": self.NO_GAS, "ACCEL_COMMAND": 0, **aeb_signals}
+        msg = self.packer.make_can_msg_safety("ACC_CONTROL", self.PT_BUS, values)
+        self.assertFalse(self._tx(msg), msg=aeb_signals)
+      self.assertTrue(self._tx(self._send_gas_brake_msg(self.NO_GAS, 0)))
 
 
 class TestHondaBoschRadarlessSafetyBase(TestHondaBoschSafetyBase):
@@ -659,6 +682,15 @@ class TestHondaBoschRadarlessLongSafety(common.LongitudinalAccelSafetyTest, Hond
       "ACCEL_COMMAND": accel,
     }
     return self.packer.make_can_msg_safety("ACC_CONTROL", self.PT_BUS, values)
+
+  def test_block_aeb(self):
+    for controls_allowed in [True, False]:
+      self.safety.set_controls_allowed(controls_allowed)
+      for aeb_signals in ({"AEB_STATUS": 1}, {"AEB_PREPARE": 1}, {"AEB_BRAKING": 1}):
+        values = {"ACCEL_COMMAND": 0, **aeb_signals}
+        msg = self.packer.make_can_msg_safety("ACC_CONTROL", self.PT_BUS, values)
+        self.assertFalse(self._tx(msg), msg=aeb_signals)
+      self.assertTrue(self._tx(self._accel_msg(0)))
 
   # Longitudinal doesn't need to send buttons
   def test_spam_cancel_safety_check(self):
@@ -746,6 +778,7 @@ class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANF
   PT_BUS = 0
   STEER_BUS = 0
   BUTTONS_BUS = 0
+  LKAS_HUD_LENGTHS = (8,)
 
   # the radar look-alikes are sent on both the powertrain bus (0) and the camera bus (2)
   TX_MSGS = [[0xE4, 0], [0x1DF, 0], [0x1EF, 0], [0x30C, 0], [0x33D, 0], [0x39F, 0], [0x296, 2], [0x18DAB0F1, 0],

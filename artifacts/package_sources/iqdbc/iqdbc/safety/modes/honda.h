@@ -273,6 +273,13 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     if (honda_fwd_brake) {
       tx = false;
     }
+
+    bool aeb_req = GET_BIT(msg, 29U);
+    int aeb_req_2 = msg->data[3] & 0x7U;
+    int aeb_status = msg->data[5] & 0x3U;
+    if (aeb_req || (aeb_req_2 != 0) || (aeb_status != 0)) {
+      tx = false;
+    }
   }
 
   // BRAKE/GAS: safety check (bosch)
@@ -286,6 +293,9 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     bool violation = false;
     violation |= longitudinal_accel_checks(accel, HONDA_BOSCH_LONG_LIMITS);
     violation |= longitudinal_gas_checks(gas, HONDA_BOSCH_LONG_LIMITS);
+    violation |= GET_BIT(msg, 33U);
+    violation |= GET_BIT(msg, 43U);
+    violation |= GET_BIT(msg, 47U);
     if (violation) {
       tx = false;
     }
@@ -298,6 +308,9 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
 
     bool violation = false;
     violation |= longitudinal_accel_checks(accel, HONDA_BOSCH_LONG_LIMITS);
+    violation |= GET_BIT(msg, 33U);
+    violation |= GET_BIT(msg, 43U);
+    violation |= GET_BIT(msg, 47U);
     if (violation) {
       tx = false;
     }
@@ -451,7 +464,7 @@ static safety_config honda_bosch_init(uint16_t param) {
 
   static CanMsg HONDA_BOSCH_LONG_TX_MSGS[] = {{0xE4, 1, 5, .check_relay = true}, {0x1DF, 1, 8, .check_relay = true}, {0x1EF, 1, 8, .check_relay = false},
                                               {0x1FA, 1, 8, .check_relay = false}, {0x30C, 1, 8, .check_relay = false}, {0x33D, 1, 5, .check_relay = true},
-                                              {0x33DA, 1, 5, .check_relay = true}, {0x33DB, 1, 8, .check_relay = true}, {0x39F, 1, 8, .check_relay = false},
+                                              {0x33D, 1, 8, .check_relay = true}, {0x33DA, 1, 5, .check_relay = true}, {0x33DB, 1, 8, .check_relay = true}, {0x39F, 1, 8, .check_relay = false},
                                               {0x18DAB0F1, 1, 8, .check_relay = false}};  // Bosch w/ gas and brakes
 
   static CanMsg HONDA_RADARLESS_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x296, 2, 4, .check_relay = false}, {0x33D, 0, 8, .check_relay = true}};  // Bosch radarless

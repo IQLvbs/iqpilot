@@ -3,7 +3,7 @@ from iqdbc.car.interfaces import CarInterfaceBase
 from iqdbc.car.rivian.carcontroller import CarController
 from iqdbc.car.rivian.carstate import CarState
 from iqdbc.car.rivian.radar_interface import RadarInterface
-from iqdbc.car.rivian.values import RivianSafetyFlags
+from iqdbc.car.rivian.values import RivianFlags, RivianSafetyFlags
 from iqdbc.lvbs.car.rivian.values import RivianFlagsIQ
 
 
@@ -18,6 +18,9 @@ class CarInterface(CarInterfaceBase):
 
     ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.rivian)]
 
+    if 0x321 not in fingerprint[0]:
+      ret.flags |= RivianFlags.GEN2.value
+
     ret.steerActuatorDelay = 0.15
     ret.steerLimitTimer = 0.4
     CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
@@ -27,10 +30,6 @@ class CarInterface(CarInterfaceBase):
 
     # TODO: pending finding/handling missing set speed
     ret.alphaLongitudinalAvailable = False
-    if alpha_long:
-      ret.openpilotLongitudinalControl = True
-      ret.safetyConfigs[0].safetyParam |= RivianSafetyFlags.LONG_CONTROL.value
-
     ret.longitudinalActuatorDelay = 0.35
     ret.stopAccel = 0
 
