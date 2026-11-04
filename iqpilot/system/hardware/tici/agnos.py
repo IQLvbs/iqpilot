@@ -99,11 +99,33 @@ def _custodian_signer():
   except Exception:
     return None
 
-def _sign_device_token(dongle_id: str, claims: dict) -> tuple[str, str]:
+_clock_offset: list[int] = []
+
+def _local_now() -> int:
+  from datetime import UTC, datetime
+  return int(datetime.now(UTC).timestamp())
+
+# A freshly flashed device can boot with its clock behind real time, which makes every token it signs look expired to konn3kt.
+def _trusted_now() -> int:
+  local = _local_now()
+  if not _clock_offset:
+    offset = 0
+    try:
+      from email.utils import parsedate_to_datetime
+      date = requests.head(_api_host(), timeout=10).headers.get("Date")
+      if date:
+        offset = max(0, int(parsedate_to_datetime(date).timestamp()) - local)
+    except Exception as e:
+      _diag(f"IQ.OS proxy: could not read konn3kt time ({type(e).__name__}: {e})")
+    _clock_offset.append(offset if offset > 60 else 0)
+  return local + _clock_offset[0]
+
+def _sign_device_token(dongle_id: str, claims: dict, install_key: bool = False) -> tuple[str, str]:
   import jwt
-  from datetime import UTC, datetime, timedelta
-  now = int(datetime.now(UTC).timestamp())
-  payload = {"identity": dongle_id, "nbf": now, "iat": now, "exp": now + int(timedelta(hours=1).total_seconds()), **claims}
+  now = _trusted_now()
+  payload = {"identity": dongle_id, "nbf": now, "iat": now, "exp": now + 3600, **claims}
+  if install_key:
+    payload["serial"] = _device_serial()
   errors = []
   for name in ("id_rsa", "id_ecdsa"):
     key_path = os.path.join(PERSIST_COMMA, name)
@@ -111,6 +133,8 @@ def _sign_device_token(dongle_id: str, claims: dict) -> tuple[str, str]:
       continue
     try:
       key, alg, public_pem = _load_device_key(key_path)
+      if install_key:
+        payload["install_key"] = public_pem
       return jwt.encode(payload, key, algorithm=alg), public_pem
     except PermissionError:
       signer = _custodian_signer()
@@ -123,6 +147,8 @@ def _sign_device_token(dongle_id: str, claims: dict) -> tuple[str, str]:
       if signer is None:
         errors.append(f"{name}: unreadable and no custodian signer")
         continue
+      if install_key:
+        payload["install_key"] = public_pem
       return signer(dongle_id, payload, "ES256" if name == "id_ecdsa" else "RS256"), public_pem
     except Exception as e:
       errors.append(f"{name}: {type(e).__name__}: {e}")
@@ -202,9 +228,23 @@ def _ensure_k3_registered(dongle_id: str | None) -> str:
         break
   raise RuntimeError(f"konn3kt registration failed for {dongle_id or 'a device without a dongle id'}: {last_error}")
 
+_k3_download_identity: dict[str, str] = {}
+_k3_registration_error: dict[str, str] = {}
+
+def _download_identity(persist_id: str | None) -> str:
+  cache_key = persist_id or ""
+  if cache_key not in _k3_download_identity:
+    try:
+      _k3_download_identity[cache_key] = _ensure_k3_registered(persist_id)
+    except RuntimeError as e:
+      _diag(f"IQ.OS proxy: {e}; downloading with the device's own key instead")
+      _k3_registration_error[cache_key] = str(e)
+      _k3_download_identity[cache_key] = persist_id or "register"
+  return _k3_download_identity[cache_key]
+
 def _k3_proxy_url(url: str) -> tuple[str, dict] | None:
-  dongle_id = _ensure_k3_registered(_read_dongle_id())
-  token, _ = _sign_device_token(dongle_id, {})
+  dongle_id = _download_identity(_read_dongle_id())
+  token, _ = _sign_device_token(dongle_id, {}, install_key=True)
   api_host = _api_host()
   mod = _image_auth_module()
   if mod is not None and hasattr(mod, 'os_image_proxy'):
@@ -250,11 +290,18 @@ def _open_image_response(url: str, offset: int = 0) -> requests.Response:
   proxy = _k3_proxy_url(url)
   if proxy is not None:
     proxy_url, proxy_headers = proxy
-    if offset:
-      resp = _ranged_get(proxy_url, {'Accept-Encoding': None, **proxy_headers}, offset)
-    else:
-      resp = requests.get(proxy_url, stream=True, headers={'Accept-Encoding': None, **proxy_headers}, timeout=120)
-    resp.raise_for_status()
+    try:
+      if offset:
+        resp = _ranged_get(proxy_url, {'Accept-Encoding': None, **proxy_headers}, offset)
+      else:
+        resp = requests.get(proxy_url, stream=True, headers={'Accept-Encoding': None, **proxy_headers}, timeout=120)
+      resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+      status = e.response.status_code if e.response is not None else 0
+      registration_error = _k3_registration_error.get(_read_dongle_id() or "")
+      if status in (401, 403) and registration_error:
+        raise RuntimeError(f"konn3kt refused the IQ.OS download (HTTP {status}) after {registration_error}") from e
+      raise
     return resp
   auth = _download_headers(url)
   if _is_private_os_image(url) and not auth:

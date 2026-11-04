@@ -639,6 +639,7 @@ struct IQNavState @0xaae9afb364368cd9 {
   cameraSourceAge @61 :Float32;
   mapboxSpeedLimit @62 :Float32;
   mapboxSpeedLimitValid @63 :Bool;
+  turnSignalDirection @64 :NavDirection;
 
   enum CameraType {
     none @0;
