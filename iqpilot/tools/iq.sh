@@ -209,6 +209,43 @@ iq_pkg() {
   fi
 }
 
+iq_was_published() {
+  local commit="$1" tracking="$2" previous="$3" log
+  [[ "$commit" = "$previous" ]] && return 0
+  log="$(git -C "$IQ_ROOT" rev-parse --git-path "logs/$tracking")"
+  [[ "$log" = /* ]] || log="$IQ_ROOT/$log"
+  [[ -f "$log" ]] && grep -Fqx "$commit" <<<"$(awk '{ print $1; print $2 }' "$log")"
+}
+
+iq_pull() {
+  local branch remote upstream tracking previous head target
+  branch="$(git -C "$IQ_ROOT" branch --show-current)"
+  [[ -n "$branch" ]] || { iq_fail 'HEAD is detached; use iq switch BRANCH'; return 1; }
+  remote="$(git -C "$IQ_ROOT" config "branch.$branch.remote" || printf origin)"
+  upstream="$(git -C "$IQ_ROOT" config "branch.$branch.merge" || printf 'refs/heads/%s' "$branch")"
+  tracking="refs/remotes/$remote/${upstream#refs/heads/}"
+  previous="$(git -C "$IQ_ROOT" rev-parse -q --verify "$tracking^{commit}" || true)"
+  iq_run git -C "$IQ_ROOT" fetch --progress "$remote" "+$upstream:$tracking"
+  head="$(git -C "$IQ_ROOT" rev-parse HEAD)"
+  target="$(git -C "$IQ_ROOT" rev-parse -q --verify "$tracking^{commit}" || true)"
+  if [[ -z "$target" ]]; then
+    [[ "$IQ_DRY" = 1 ]] && return 0
+    iq_fail "$remote has no ${upstream#refs/heads/} branch"
+    return 1
+  fi
+  if [[ "$head" = "$target" ]]; then
+    iq_ok "already up to date  ${head:0:7}"
+  elif git -C "$IQ_ROOT" merge-base --is-ancestor HEAD "$target"; then
+    iq_run git -C "$IQ_ROOT" merge --ff-only "$target"
+  elif iq_was_published "$head" "$tracking" "$previous" && git -C "$IQ_ROOT" diff --quiet HEAD --; then
+    iq_note "$remote republished ${upstream#refs/heads/} with new history; moving ${head:0:7} to ${target:0:7}"
+    iq_run git -C "$IQ_ROOT" reset --hard "$target"
+  else
+    iq_fail "local commits or changes on $branch are not on $remote; keep them with git, or discard them with iq switch $branch"
+    return 1
+  fi
+}
+
 iq_update() {
   local fast=0
   iq_require_root
@@ -217,9 +254,11 @@ iq_update() {
     fast=1
   fi
   iq_title 'updating IQ.Pilot'
-  iq_run git -C "$IQ_ROOT" pull
+  iq_pull
   iq_pkg
-  [[ "$fast" = 1 ]] && iq_fast_restart
+  if [[ "$fast" = 1 ]]; then
+    iq_fast_restart
+  fi
 }
 
 iq_status() {
