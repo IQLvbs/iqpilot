@@ -3,7 +3,6 @@ Copyright © IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved, licensed u
 """
 import raylib_nb as rl
 from iqpilot.selfdrive.controls.lib.accel_boost import ACCEL_BOOST_MAX
-from iqpilot.selfdrive.ui.mici.onroad import SIDE_PANEL_WIDTH
 from iqpilot.selfdrive.ui.ui_state import ui_state
 from iqpilot.system.ui.widgets import Widget
 
@@ -14,7 +13,7 @@ FILL_COLOR = rl.Color(0, 255, 204, 255)
 
 class BoostBar(Widget):
   def _render(self, rect: rl.Rectangle):
-    bar_rect = rl.Rectangle(rect.x + rect.width - (SIDE_PANEL_WIDTH + BAR_WIDTH) / 2, rect.y + 24, BAR_WIDTH, rect.height - 48)
+    bar_rect = rl.Rectangle(rect.x + (rect.width - BAR_WIDTH) / 2, rect.y, BAR_WIDTH, rect.height)
     rl.draw_rectangle_rounded(bar_rect, 1.0, 10, TRACK_COLOR)
 
     boost = ui_state.sm['iqPlan'].accelBoost if ui_state.engaged else 0.0

@@ -69,40 +69,71 @@ def _is_private_os_image(url: str) -> bool:
 
 def _read_dongle_id() -> str | None:
   import re
-  for path in ("/persist/comma/dongle_id", "/data/params/d/DongleId"):
+  for path in (os.path.join(PERSIST_COMMA, "dongle_id"), "/data/params/d/DongleId"):
     try:
-      v = open(path).read().strip()
+      with open(path) as f:
+        v = f.read().strip()
       if re.fullmatch(r"[a-fA-F0-9]{16}", v):
         return v.lower()
     except Exception:
       pass
   return None
 
-def _sign_device_jwt(dongle_id: str) -> str | None:
+PERSIST_COMMA = "/persist/comma"
+
+def _load_device_key(key_path: str):
+  from cryptography.hazmat.primitives import serialization
+  from cryptography.hazmat.primitives.asymmetric import ec
+  with open(key_path, "rb") as f:
+    pem = f.read()
+  key = serialization.load_pem_private_key(pem, password=None)
+  alg = "ES256" if isinstance(key, ec.EllipticCurvePrivateKey) else "RS256"
+  public_pem = key.public_key().public_bytes(serialization.Encoding.PEM,
+                                             serialization.PublicFormat.SubjectPublicKeyInfo).decode()
+  return key, alg, public_pem
+
+def _custodian_signer():
+  try:
+    from iqpilot.common.api.base import _custodian_available, _custodian_sign_jwt
+    return _custodian_sign_jwt if _custodian_available() else None
+  except Exception:
+    return None
+
+def _sign_device_token(dongle_id: str, claims: dict) -> tuple[str, str]:
   import jwt
-  from datetime import datetime, timedelta, timezone
-  for key_path in ("/persist/comma/id_rsa", "/persist/comma/id_ecdsa"):
+  from datetime import UTC, datetime, timedelta
+  now = int(datetime.now(UTC).timestamp())
+  payload = {"identity": dongle_id, "nbf": now, "iat": now, "exp": now + int(timedelta(hours=1).total_seconds()), **claims}
+  errors = []
+  for name in ("id_rsa", "id_ecdsa"):
+    key_path = os.path.join(PERSIST_COMMA, name)
+    if not os.path.exists(key_path):
+      continue
     try:
-      with open(key_path) as f:
-        private_key = f.read()
-      now = datetime.now(timezone.utc).replace(tzinfo=None)
-      alg = "ES256" if "EC" in private_key[:40] else "RS256"
-      return jwt.encode({"identity": dongle_id, "nbf": now, "iat": now, "exp": now + timedelta(hours=1)}, private_key, algorithm=alg)
+      key, alg, public_pem = _load_device_key(key_path)
+      return jwt.encode(payload, key, algorithm=alg), public_pem
     except PermissionError:
+      signer = _custodian_signer()
       try:
-        from iqpilot.common.api.base import _custodian_available, _custodian_sign_jwt
-        if _custodian_available():
-          now = datetime.now(timezone.utc).replace(tzinfo=None)
-          alg = "ES256" if "ecdsa" in key_path else "RS256"
-          payload = {"identity": dongle_id, "nbf": now.isoformat(), "iat": now.isoformat(),
-                     "exp": (now + timedelta(hours=1)).isoformat()}
-          return _custodian_sign_jwt(dongle_id, payload, alg)
-      except Exception:
-        pass
-      continue
-    except Exception:
-      continue
-  return None
+        with open(key_path + ".pub") as f:
+          public_pem = f.read()
+      except OSError as e:
+        errors.append(f"{name}.pub: {e}")
+        continue
+      if signer is None:
+        errors.append(f"{name}: unreadable and no custodian signer")
+        continue
+      return signer(dongle_id, payload, "ES256" if name == "id_ecdsa" else "RS256"), public_pem
+    except Exception as e:
+      errors.append(f"{name}: {type(e).__name__}: {e}")
+  raise RuntimeError(f"no usable device key in {PERSIST_COMMA} (" + "; ".join(errors or ["no key files"]) + ")")
+
+def _sign_device_jwt(dongle_id: str) -> str | None:
+  try:
+    return _sign_device_token(dongle_id, {})[0]
+  except Exception as e:
+    _diag(f"IQ.OS proxy: device token signing failed ({e})")
+    return None
 
 def _extract_image_path(url: str) -> str:
   if "/raw/branch/" in url:
@@ -114,81 +145,74 @@ def _extract_image_path(url: str) -> str:
 
 _k3_identity: dict[str, str] = {}
 
-def _ensure_k3_registered(dongle_id: str) -> str:
-  if dongle_id in _k3_identity:
-    return _k3_identity[dongle_id]
+def _api_host() -> str:
+  return os.environ.get("API_HOST", "https://api-iqlabs.konn3kt.com").rstrip("/")
+
+def _device_serial() -> str:
   try:
-    import jwt as _jwt
-    from datetime import datetime, timedelta, timezone
-    from iqpilot.common.api import api_get, get_key_pair
-    from iqpilot.common.api.base import _CUSTODIAN_KEY, _custodian_sign_jwt
-    from iqpilot.konn3kt.registration import get_registration_identifiers
-    jwt_algo, private_key, public_key = get_key_pair()
-    if not public_key or private_key is None:
-      return dongle_id
-    serial, imei1, imei2 = get_registration_identifiers(wait_timeout=5, show_spinner=False)
-    payload = {'register': True, 'exp': datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)}
-    if private_key is _CUSTODIAN_KEY:
-      serializable = {k: v.isoformat() if isinstance(v, datetime) else v for k, v in payload.items()}
-      register_token = _custodian_sign_jwt(dongle_id, serializable, jwt_algo)
-    else:
-      register_token = _jwt.encode(payload, private_key, algorithm=jwt_algo)
-    resp = api_get("v2/pilotauth", method='POST', timeout=15,
-                   imei=imei1, imei2=imei2, serial=serial, public_key=public_key, register_token=register_token)
+    with open("/proc/cmdline") as f:
+      for arg in f.read().split():
+        if arg.startswith("androidboot.serialno="):
+          return arg.split("=", 1)[1]
+  except OSError:
+    pass
+  try:
+    from iqpilot.system.hardware import HARDWARE
+    return HARDWARE.get_serial() or ""
+  except Exception:
+    return ""
+
+def _device_imeis() -> tuple[str, str]:
+  try:
+    from iqpilot.system.hardware import HARDWARE
+    return HARDWARE.get_imei(0) or "", HARDWARE.get_imei(1) or ""
+  except Exception:
+    return "", ""
+
+# The IQ.OS update runs under the stock OS's /usr/local/venv, where IQ.Pilot's own modules may not import, so registration uses only requests, jwt and /persist.
+def _ensure_k3_registered(dongle_id: str | None) -> str:
+  cache_key = dongle_id or ""
+  if cache_key in _k3_identity:
+    return _k3_identity[cache_key]
+  serial = _device_serial()
+  imei1, imei2 = _device_imeis()
+  last_error = "no attempt"
+  for attempt in range(3):
+    if attempt:
+      time.sleep(2 * attempt)
+    try:
+      register_token, public_pem = _sign_device_token(dongle_id or "register", {"register": True})
+      resp = requests.post(f"{_api_host()}/v2/pilotauth", timeout=15, params={
+        "imei": imei1, "imei2": imei2, "serial": serial, "public_key": public_pem, "register_token": register_token})
+    except Exception as e:
+      last_error = f"{type(e).__name__}: {e}"
+      continue
     if resp.ok:
-      result = resp.json()
-      registered_id = result.get("dongle_id")
-      if registered_id:
+      registered_id = (resp.json().get("dongle_id") or "").lower()
+      if len(registered_id) == 16:
+        if dongle_id and registered_id != dongle_id:
+          _diag(f"IQ.OS proxy: konn3kt kept {registered_id} instead of {dongle_id}")
         _diag(f"IQ.OS proxy: registered with konn3kt as {registered_id}")
-        _k3_identity[dongle_id] = registered_id
+        _k3_identity[cache_key] = registered_id
         return registered_id
-  except Exception as e:
-    _diag(f"IQ.OS proxy: k3 registration failed ({type(e).__name__}: {e})")
-  return dongle_id
+      last_error = f"HTTP {resp.status_code} without a dongle_id"
+    else:
+      last_error = f"HTTP {resp.status_code}: {resp.text[:200]}"
+      if resp.status_code in (400, 401, 403):
+        break
+  raise RuntimeError(f"konn3kt registration failed for {dongle_id or 'a device without a dongle id'}: {last_error}")
 
 def _k3_proxy_url(url: str) -> tuple[str, dict] | None:
+  dongle_id = _ensure_k3_registered(_read_dongle_id())
+  token, _ = _sign_device_token(dongle_id, {})
+  api_host = _api_host()
   mod = _image_auth_module()
-  try:
-    root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
-    if root not in sys.path:
-      sys.path.insert(0, root)
-    from iqpilot.konn3kt.registration import get_cached_dongle_id, is_valid_dongle_id, register
-    dongle_id = get_cached_dongle_id()
-    if not is_valid_dongle_id(dongle_id):
-      import threading
-      registered: list = [None]
-      worker = threading.Thread(target=lambda: registered.__setitem__(0, register()), daemon=True)
-      worker.start()
-      worker.join(timeout=90)
-      dongle_id = registered[0]
-    if not is_valid_dongle_id(dongle_id):
-      raise RuntimeError("device is not registered")
-    dongle_id = _ensure_k3_registered(dongle_id)
-    from iqpilot.common.api import Api
-    from iqpilot.common.api.konn3kt import API_HOST
-    token = Api(dongle_id).get_token(expiry_hours=1)
-    if not token:
-      raise RuntimeError("could not sign device token")
-    if mod is not None and hasattr(mod, 'os_image_proxy'):
-      return mod.os_image_proxy(url, dongle_id, token, API_HOST)
-    proxy_url = f"{API_HOST.rstrip('/')}/v1/devices/{dongle_id}/assets/iqos/{_extract_image_path(url)}"
-    return proxy_url, {"Authorization": f"JWT {token}"}
-  except Exception as e:
-    _diag(f"IQ.OS proxy: primary path failed ({type(e).__name__}: {e}), trying minimal fallback")
-
-  dongle_id = _read_dongle_id()
-  if not dongle_id:
-    print("Error: IQ.OS proxy unavailable: no dongle_id on /persist or /data", flush=True)
-    return None
-  dongle_id = _ensure_k3_registered(dongle_id)
-  token = _sign_device_jwt(dongle_id)
-  if not token:
-    print("Error: IQ.OS proxy unavailable: could not sign JWT (key unreadable)", flush=True)
-    return None
-  api_host = os.environ.get("API_HOST", "https://api-iqlabs.konn3kt.com")
-  proxy_url = f"{api_host.rstrip('/')}/v1/devices/{dongle_id}/assets/iqos/{_extract_image_path(url)}"
-  _diag(f"IQ.OS proxy: minimal fallback → {proxy_url}")
-  return proxy_url, {"Authorization": f"JWT {token}"}
+  if mod is not None and hasattr(mod, 'os_image_proxy'):
+    try:
+      return mod.os_image_proxy(url, dongle_id, token, api_host)
+    except Exception as e:
+      _diag(f"IQ.OS proxy: private image proxy failed ({type(e).__name__}: {e}), using the konn3kt device proxy")
+  return f"{api_host}/v1/devices/{dongle_id}/assets/iqos/{_extract_image_path(url)}", {"Authorization": f"JWT {token}"}
 
 def _download_headers(url: str) -> dict:
   mod = _image_auth_module()

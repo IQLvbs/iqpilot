@@ -10,29 +10,25 @@ def scene(monkeypatch):
   nav = SimpleNamespace(active=True, destinationValid=True, destinationLatitude=41.0, destinationLongitude=-87.0,
                         nextManeuverValid=True, nextManeuverDistance=3000.0, nextManeuverDescription='Turn left onto Main Street',
                         nextManeuverType=SimpleNamespace(raw=1), nextManeuverDirection=SimpleNamespace(raw=1))
-  render = SimpleNamespace(active=True, destinationLatitude=41.0, destinationLongitude=-87.0,
-                           nextManeuverLatitude=40.5, nextManeuverLongitude=-87.0)
 
   class Messages(dict):
-    alive = {'iqNavState': True, 'iqNavRenderState': True}
-    valid = {'iqNavState': True, 'iqNavRenderState': True}
+    alive = {'iqNavState': True}
+    valid = {'iqNavState': True}
 
   params = {'NavigationDestination': {'latitude': 41.0, 'longitude': -87.0}, 'NavigationActive': True, 'NavigationEnabled': True}
-  sm = Messages(iqNavState=nav, iqNavRenderState=render)
+  sm = Messages(iqNavState=nav)
   state = SimpleNamespace(started=True, is_metric=False, sm=sm,
                           params=SimpleNamespace(get=params.get, get_bool=lambda key: bool(params.get(key))))
-  clock = SimpleNamespace(now=10.0)
   monkeypatch.setattr(navigation, 'ui_state', state)
   monkeypatch.setattr(navigation, 'gui_app', SimpleNamespace(font=lambda _: None))
-  monkeypatch.setattr(navigation.time, 'monotonic', lambda: clock.now)
   screen = navigation.MiciNavigation()
   screen.update()
-  return SimpleNamespace(screen=screen, nav=nav, render=render, sm=sm, state=state, params=params, clock=clock)
+  return SimpleNamespace(screen=screen, nav=nav, sm=sm, state=state, params=params)
 
 
 @pytest.mark.parametrize('invalid', ['missing', 'malformed', 'cancelled', 'disabled', 'offroad', 'stale', 'invalid_message',
                                      'inactive', 'wrong_destination', 'no_destination', 'no_maneuver', 'nan', 'negative'])
-def test_invalid_guidance_returns_to_camera(scene, invalid):
+def test_invalid_guidance_hides_indicator(scene, invalid):
   assert scene.screen.active
   if invalid == 'missing':
     scene.params.pop('NavigationDestination')
@@ -57,72 +53,13 @@ def test_invalid_guidance_returns_to_camera(scene, invalid):
   assert not scene.screen.active
 
 
-def dismiss(scene):
-  scene.screen.tap()
-  assert scene.screen.active
-  scene.clock.now += 0.2
-  scene.screen.tap()
-  assert not scene.screen.active
-
-
-def test_double_tap_hides_until_point_nine_miles(scene):
-  dismiss(scene)
-  scene.nav.nextManeuverDistance = navigation.RETURN_DISTANCE_M + 1
-  scene.screen.update()
-  assert not scene.screen.active
-  scene.nav.nextManeuverDistance = navigation.RETURN_DISTANCE_M
-  scene.screen.update()
-  assert scene.screen.active
-
-
-def test_nearby_maneuver_can_be_dismissed_until_following_turn(scene):
-  scene.nav.nextManeuverDistance = 500
-  scene.screen.update()
-  dismiss(scene)
-  scene.nav.nextManeuverDistance = 100
-  scene.screen.update()
-  assert not scene.screen.active
-  # Next turn has the same instruction, but a different location.
-  scene.render.nextManeuverLatitude += 0.001
-  scene.nav.nextManeuverDistance = 180
-  scene.screen.update()
-  assert scene.screen.active
-
-
-def test_render_stream_dropout_does_not_undo_dismissal(scene):
-  scene.nav.nextManeuverDistance = 500
-  scene.screen.update()
-  dismiss(scene)
-  scene.sm.alive['iqNavRenderState'] = False
-  scene.screen.update()
-  assert not scene.screen.active
-
-
-def test_slow_taps_do_not_dismiss(scene):
-  scene.screen.tap()
-  scene.clock.now += 1
-  scene.screen.tap()
-  assert scene.screen.active
-
-
-def test_new_destination_clears_dismissal_but_waits_for_matching_guidance(scene):
-  dismiss(scene)
-  scene.params['NavigationDestination']['latitude'] = 42
-  scene.screen.update()
-  assert not scene.screen.active
-  scene.nav.destinationLatitude = 42
-  scene.screen.update()
-  assert scene.screen.active
-
-
-def test_guidance_recovers_without_waiting_screen(scene):
+def test_guidance_recovers_after_stale_stream(scene):
   scene.sm.alive['iqNavState'] = False
   scene.screen.update()
   assert not scene.screen.active
   scene.sm.alive['iqNavState'] = True
   scene.screen.update()
   assert scene.screen.active
-  assert scene.screen._street == 'Turn left onto Main Street'
 
 
 def test_master_switch_hides_live_guidance_and_can_reenable_it(scene):
@@ -134,16 +71,27 @@ def test_master_switch_hides_live_guidance_and_can_reenable_it(scene):
   assert scene.screen.active
 
 
-def test_navigation_taps_are_consumed_before_home_callback(scene, mocker):
-  import raylib_nb as rl
-  from iqpilot.selfdrive.ui.mici.onroad.augmented_road_view import AugmentedRoadView
-  from iqpilot.system.ui.lib.application import MousePos
+@pytest.mark.parametrize('maneuver_type, direction, icon', [
+  (1, 1, 'direction_turn_left.png'), (1, 2, 'direction_turn_right.png'), (2, 2, 'direction_off_ramp_right.png'),
+  (3, 1, 'direction_merge_left.png'), (4, 2, 'direction_fork_right.png'), (6, 1, 'direction_arrive.png'), (0, 0, None),
+])
+def test_maneuver_icon(scene, maneuver_type, direction, icon):
+  scene.nav.nextManeuverType.raw = maneuver_type
+  scene.nav.nextManeuverDirection.raw = direction
+  scene.screen.update()
+  assert scene.screen._icon == icon
 
-  view = SimpleNamespace(_navigation=scene.screen, _content_rect=rl.Rectangle(0, 0, 476, 240),
-                         _bookmark_icon=mocker.Mock())
-  AugmentedRoadView._handle_mouse_release(view, MousePos(200, 100))
-  assert scene.screen.active
-  scene.clock.now += 0.2
-  AugmentedRoadView._handle_mouse_release(view, MousePos(200, 100))
-  assert not scene.screen.active
-  view._bookmark_icon.interacting.assert_not_called()
+
+@pytest.mark.parametrize('distance, metric, expected', [
+  (3000.0, False, ('1.9', 'mi')), (100.0, False, ('330', 'ft')), (3000.0, True, ('3.0', 'km')), (456.0, True, ('460', 'm')),
+])
+def test_distance_format(distance, metric, expected):
+  assert navigation.format_distance(distance, metric) == expected
+
+
+def test_distance_follows_guidance(scene):
+  assert (scene.screen._value, scene.screen._unit) == ('1.9', 'mi')
+  scene.nav.nextManeuverDistance = 150.0
+  scene.screen.update()
+  assert (scene.screen._value, scene.screen._unit) == ('490', 'ft')
+

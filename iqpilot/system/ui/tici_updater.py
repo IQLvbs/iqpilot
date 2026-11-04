@@ -10,6 +10,7 @@ from iqpilot.system.ui.lib.application import gui_app, FontWeight, FONT_SCALE
 from iqpilot.system.ui.lib.wifi_manager import WifiManager
 from iqpilot.system.ui.widgets import Widget
 from iqpilot.system.ui.widgets.button import Button, ButtonStyle
+from iqpilot.system.ui.lib.updater_output import drain_stderr, failure_reason
 from iqpilot.system.ui.widgets.label import gui_text_box, gui_label
 from iqpilot.system.ui.widgets.network import WifiManagerUI
 
@@ -40,6 +41,7 @@ class Updater(Widget):
 
     self.progress_value = 0
     self.progress_text = "Loading..."
+    self.failure_reason = ""
     self.show_reboot_button = False
     self.process = None
     self.update_thread = None
@@ -58,6 +60,7 @@ class Updater(Widget):
     self.set_current_screen(Screen.PROGRESS)
     self.progress_value = 0
     self.progress_text = "Downloading..."
+    self.failure_reason = ""
     self.show_reboot_button = False
 
     # Start the update process in a separate thread
@@ -70,9 +73,14 @@ class Updater(Widget):
     cmd = [self.updater, "--swap", self.manifest]
     self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     text=True, bufsize=1, universal_newlines=True)
+    stderr_tail = drain_stderr(self.process)
+    error = ""
 
     if self.process.stdout is not None:
       for line in self.process.stdout:
+        if line.startswith("Error:"):
+          error = line[len("Error:"):].strip()
+          continue
         parts = line.strip().split(":")
         if len(parts) == 2:
           self.progress_text = parts[0]
@@ -85,6 +93,7 @@ class Updater(Widget):
     if exit_code == 0:
       HARDWARE.reboot()
     else:
+      self.failure_reason = failure_reason(error, stderr_tail)
       self.progress_text = "Update failed"
       self.show_reboot_button = True
 
@@ -136,6 +145,10 @@ class Updater(Widget):
     if progress_width > 0:
       progress_rect = rl.Rectangle(bar_rect.x, bar_rect.y, progress_width, bar_rect.height)
       rl.draw_rectangle_rounded(progress_rect, 0.5, 10, PROGRESS_COLOR)
+
+    if self.failure_reason:
+      reason_rect = rl.Rectangle(bar_rect.x, bar_rect.y + PROGRESS_BAR_HEIGHT + 50, bar_rect.width, BODY_FONT_SIZE * FONT_SCALE * 4)
+      gui_text_box(reason_rect, self.failure_reason, BODY_FONT_SIZE)
 
     # Show reboot button if needed
     if self.show_reboot_button:

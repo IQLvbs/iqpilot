@@ -10,6 +10,7 @@ from iqpilot.system.ui.lib.application import gui_app, FontWeight
 from iqpilot.system.ui.lib.text_measure import measure_text_cached
 from iqpilot.system.ui.lib.wifi_manager import WifiManager, Network
 from iqpilot.system.ui.widgets import Widget
+from iqpilot.system.ui.lib.updater_output import drain_stderr, failure_reason
 from iqpilot.system.ui.widgets.label import gui_text_box, gui_label, UnifiedLabel
 from iqpilot.system.ui.widgets.button import FullRoundedButton
 from iqpilot.system.ui.mici_setup import NetworkSetupPage, FailedPage, NetworkConnectivityMonitor
@@ -101,9 +102,14 @@ class Updater(Widget):
     cmd = [self.updater, "--swap", self.manifest]
     self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     text=True, bufsize=1, universal_newlines=True)
+    stderr_tail = drain_stderr(self.process)
+    error = ""
 
     if self.process.stdout is not None:
       for line in self.process.stdout:
+        if line.startswith("Error:"):
+          error = line[len("Error:"):].strip()
+          continue
         parts = line.strip().split(":")
         if len(parts) == 2:
           self.progress_text = parts[0].lower()
@@ -116,6 +122,7 @@ class Updater(Widget):
     if exit_code == 0:
       HARDWARE.reboot()
     else:
+      self._update_failed_page.set_reason(failure_reason(error, stderr_tail))
       self.set_current_screen(Screen.FAILED)
 
   def render_prompt_screen(self, rect: rl.Rectangle):

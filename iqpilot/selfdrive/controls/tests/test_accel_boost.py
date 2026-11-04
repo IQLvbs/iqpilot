@@ -162,11 +162,16 @@ def test_planner_latches_model_limit_after_cruise_update(monkeypatch, e2e, a_mod
   assert cruise_calls[-1][-1] == lp.A_CRUISE_MIN_NAV
 
 
-def test_boost_bar_only_replaces_the_confidence_ball_with_the_param_on(monkeypatch):
+def test_boost_bar_only_draws_with_the_param_on(monkeypatch, mocker):
   from types import SimpleNamespace
 
+  import raylib_nb as rl
   from iqpilot.selfdrive.ui.mici.onroad import augmented_road_view
-  view = SimpleNamespace(_boost_bar="bar", _confidence_ball="ball")
-  for enabled, expected in ((False, "ball"), (True, "bar")):
+  view = SimpleNamespace(rect=rl.Rectangle(0, 0, 536, 240), _boost_bar=mocker.Mock(), _navigation=mocker.Mock(),
+                         _draw_long_mode_icon=mocker.Mock())
+  view._side_panel_rect = lambda: augmented_road_view.AugmentedRoadView._side_panel_rect(view)
+  monkeypatch.setattr(augmented_road_view.ui_state, "started", True, raising=False)
+  for enabled in (False, True):
     monkeypatch.setattr(augmented_road_view.ui_state, "gas_override_boost", enabled, raising=False)
-    assert augmented_road_view.AugmentedRoadView._side_panel(view) == expected
+    augmented_road_view.AugmentedRoadView._draw_side_panel(view)
+    assert view._boost_bar.render.call_count == int(enabled)

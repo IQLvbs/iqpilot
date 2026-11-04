@@ -42,8 +42,6 @@ def test_offset_change_reprojects_without_a_new_model_frame(layout, monkeypatch)
                           status=module.UIStatus.DISENGAGED)
   monkeypatch.setattr(module, 'ui_state', state)
   monkeypatch.setattr(module, 'get_render_path_height', lambda _: 0.0)
-  if layout.startswith('mici'):
-    monkeypatch.setattr(module.driving_confidence, 'update', lambda: None)
   renderer = object.__new__(module.ModelRenderer)
   renderer._set_render_preferences(RenderPreferences())
   renderer._transform_dirty = False

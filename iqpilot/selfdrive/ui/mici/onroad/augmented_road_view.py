@@ -5,16 +5,14 @@ Copyright © IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved, licensed u
 import time
 import numpy as np
 import raylib_nb as rl
-from iqpilot.cereal import messaging, car, log
+from iqpilot.cereal import messaging, log
 from iqpilot.common.params import Params
 from iqpilot.cereal.visionipc import VisionStreamType
-from iqpilot.selfdrive.ui.ui_state import ui_state, UIStatus
+from iqpilot.selfdrive.ui.ui_state import ui_state
 from iqpilot.selfdrive.ui.mici.onroad import SIDE_PANEL_WIDTH
 from iqpilot.selfdrive.ui.mici.onroad.alert_renderer import AlertRenderer
-from iqpilot.selfdrive.ui.mici.onroad.driver_state import DriverStateRenderer
 from iqpilot.selfdrive.ui.mici.onroad.hud_renderer import HudRenderer
 from iqpilot.selfdrive.ui.mici.onroad.model_renderer import ModelRenderer
-from iqpilot.selfdrive.ui.mici.onroad.confidence_ball import ConfidenceBall
 from iqpilot.selfdrive.ui.mici.onroad.boost_bar import BoostBar
 from iqpilot.selfdrive.ui.mici.onroad.cameraview import CameraView
 from iqpilot.system.ui.lib.application import FontWeight, gui_app, MousePos, MouseEvent, TextAlignment, TextAlignmentVertical
@@ -33,8 +31,6 @@ if gui_app.iqpilot_ui():
   from iqpilot.ui.mici.onroad.hud_renderer import IQMiciHudRenderer as HudRenderer
   from iqpilot.selfdrive.ui.ui_state import OnroadTimerStatus
 
-OpState = log.SelfdriveState.OpenpilotState
-CALIBRATED = log.ExtrinsicsCalibration.Status.calibrated
 ROAD_CAM = VisionStreamType.VISION_STREAM_ROAD
 WIDE_CAM = VisionStreamType.VISION_STREAM_WIDE_ROAD
 DEFAULT_DEVICE_CAMERA = DEVICE_CAMERAS["tici", "ar0231"]
@@ -45,22 +41,23 @@ class BookmarkState(IntEnum):
   DRAGGING = 1
   TRIGGERED = 2
 
-WIDE_CAM_MAX_SPEED = 5.0  # m/s (11 mph)
-ROAD_CAM_MIN_SPEED = 10.0  # m/s (22 mph)
+
+WIDE_CAM_MAX_SPEED = 5.0
+ROAD_CAM_MIN_SPEED = 10.0
 
 CAM_Y_OFFSET = 20
 MICI_BORDER_THICKNESS = 50
 MICI_BORDER_ROUNDNESS = 0.2 * 1.02
-MICI_EXPERIMENTAL_ICON_SIZE = 28
-MICI_EXPERIMENTAL_ICON_SLOT = 60
-MICI_EXPERIMENTAL_ICON_MARGIN_X = 16
-MICI_EXPERIMENTAL_ICON_MARGIN_Y = 10
+LONG_MODE_ICON_SIZE = 28
+LONG_MODE_ICON_MARGIN_BOTTOM = 16
+BOOST_BAR_TOP = 104
+BOOST_BAR_BOTTOM = 56
 
 
 class BookmarkIcon(Widget):
-  PEEK_THRESHOLD = 50  # If icon peeks out this much, snap it fully visible
-  FULL_VISIBLE_OFFSET = 200  # How far onscreen when fully visible
-  HIDDEN_OFFSET = -50  # How far offscreen when hidden
+  PEEK_THRESHOLD = 50
+  FULL_VISIBLE_OFFSET = 200
+  HIDDEN_OFFSET = -50
 
   def __init__(self, bookmark_callback):
     super().__init__()
@@ -70,7 +67,6 @@ class BookmarkIcon(Widget):
     self._active_icon = self._icon
     self._offset_filter = BounceFilter(0.0, 0.1, 1 / gui_app.target_fps)
 
-    # State
     self._interacting = False
     self._state = BookmarkState.HIDDEN
     self._swipe_start_x = 0.0
@@ -80,7 +76,6 @@ class BookmarkIcon(Widget):
     self._triggered_time: float = 0.0
 
   def is_swiping_left(self) -> bool:
-    """Check if currently swiping left (for scroller to disable)."""
     return self._is_swiping_left
 
   def interacting(self):
@@ -89,15 +84,12 @@ class BookmarkIcon(Widget):
 
   def _update_state(self):
     if self._state == BookmarkState.DRAGGING:
-      # Allow pulling past activated position with rubber band effect
       swipe_offset = self._swipe_start_x - self._swipe_current_x
       swipe_offset = min(swipe_offset, self.FULL_VISIBLE_OFFSET + 50)
       self._offset_filter.update(swipe_offset)
 
     elif self._state == BookmarkState.TRIGGERED:
-      # Continue animating to fully visible
       self._offset_filter.update(self.FULL_VISIBLE_OFFSET)
-      # Stay in TRIGGERED state for 1 second
       if rl.get_time() - self._triggered_time >= 1.5:
         self._state = BookmarkState.HIDDEN
 
@@ -113,7 +105,6 @@ class BookmarkIcon(Widget):
       return
 
     if mouse_event.left_pressed:
-      # Store relative position within widget
       self._swipe_start_x = mouse_event.pos.x
       self._swipe_current_x = mouse_event.pos.x
       self._is_swiping = True
@@ -132,32 +123,27 @@ class BookmarkIcon(Widget):
       if self._is_swiping:
         swipe_distance = self._swipe_start_x - self._swipe_current_x
 
-        # If peeking past threshold, transition to animating to fully visible and bookmark
         if swipe_distance > self.PEEK_THRESHOLD:
           self._state = BookmarkState.TRIGGERED
           self._triggered_time = rl.get_time()
           self._active_icon = self._icon_fill
           self._bookmark_callback()
         else:
-          # Otherwise, transition back to hidden
           self._state = BookmarkState.HIDDEN
 
-        # Reset swipe state
         self._is_swiping = False
         self._is_swiping_left = False
 
   def _render(self, _):
-    """Render the bookmark icon."""
     if self._offset_filter.x > 0:
       icon_x = self.rect.x + self.rect.width - round(self._offset_filter.x)
-      icon_y = self.rect.y + (self.rect.height - self._active_icon.height) / 2  # Vertically centered
+      icon_y = self.rect.y + (self.rect.height - self._active_icon.height) / 2
       rl.draw_texture(self._active_icon, int(icon_x), int(icon_y), rl.WHITE)
 
 
 class AugmentedRoadView(CameraView):
   def __init__(self, bookmark_callback=None, stream_type: VisionStreamType = VisionStreamType.VISION_STREAM_ROAD):
     super().__init__("camerad", stream_type)
-    self._bookmark_callback = bookmark_callback
     self._set_placeholder_color(rl.BLACK)
 
     self.device_camera: DeviceCameraConfig | None = None
@@ -167,9 +153,7 @@ class AugmentedRoadView(CameraView):
     self._matrix_cache_key: tuple | None = None
     self._cached_matrix: np.ndarray | None = None
     self._content_rect = rl.Rectangle()
-    self._last_click_time = 0.0
 
-    # Bookmark icon with swipe gesture
     self._bookmark_icon = BookmarkIcon(bookmark_callback)
     self._params = Params()
     self._iq_dynamic_mode: bool = False
@@ -179,118 +163,66 @@ class AugmentedRoadView(CameraView):
     self._model_renderer = ModelRenderer()
     self._hud_renderer = HudRenderer()
     self._alert_renderer = AlertRenderer()
-    self._driver_state_renderer = DriverStateRenderer()
-    self._confidence_ball = ConfidenceBall()
     self._boost_bar = BoostBar()
     self._experimental_txt = gui_app.texture("icons_mici/experimental_mode_mici.png",
-                                             MICI_EXPERIMENTAL_ICON_SIZE,
-                                             MICI_EXPERIMENTAL_ICON_SIZE)
+                                             LONG_MODE_ICON_SIZE,
+                                             LONG_MODE_ICON_SIZE)
     self._iqdynamic_txt = gui_app.texture("icons_mici/iqdynamic_mode_mici_28.png",
-                                          MICI_EXPERIMENTAL_ICON_SIZE,
-                                          MICI_EXPERIMENTAL_ICON_SIZE)
+                                          LONG_MODE_ICON_SIZE,
+                                          LONG_MODE_ICON_SIZE)
     self._iqstandard_txt = gui_app.texture("icons_mici/iqstandard_mode_mici_28.png",
-                                           MICI_EXPERIMENTAL_ICON_SIZE,
-                                           MICI_EXPERIMENTAL_ICON_SIZE)
+                                           LONG_MODE_ICON_SIZE,
+                                           LONG_MODE_ICON_SIZE)
     self._offroad_label = UnifiedLabel(tr("start the car to\nuse IQ.Pilot"), 54, FontWeight.DISPLAY,
                                        text_color=rl.Color(255, 255, 255, int(255 * 0.9)),
                                        alignment=TextAlignment.CENTER,
                                        alignment_vertical=TextAlignmentVertical.MIDDLE)
 
-    # debug
     self._pm = messaging.PubMaster(['uiDebug'])
 
   def is_swiping_left(self) -> bool:
-    """Check if currently swiping left (for scroller to disable)."""
     return self._bookmark_icon.is_swiping_left()
 
   def _update_state(self):
     super()._update_state()
     self._navigation.update()
-    # IQDynamicMode only changes from the settings UI; don't pay a Params syscall every frame on
-    # the onroad hot path. Refresh ~1s (60 frames), matching model_renderer's throttled reads.
     self._iq_dynamic_refresh -= 1
     if self._iq_dynamic_refresh <= 0:
       self._iq_dynamic_refresh = 60
       self._iq_dynamic_mode = self._params.get_bool("IQDynamicMode")
 
-    # update offroad label
     if ui_state.panda_type == log.PandaState.PandaType.unknown:
       self._offroad_label.set_text(tr("system booting"))
     else:
       self._offroad_label.set_text(tr("start the car to\nuse IQ.Pilot"))
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
-    if self._navigation.active and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._content_rect):
-      self._navigation.tap()
-      return
-    # Don't trigger click callback if bookmark was triggered
     if not self._bookmark_icon.interacting():
       super()._handle_mouse_release(mouse_pos)
 
   def _render(self, _):
     start_draw = time.monotonic()
-    # Create inner content area with border padding
-    self._content_rect = rl.Rectangle(
-      self.rect.x,
-      self.rect.y,
-      self.rect.width - SIDE_PANEL_WIDTH,
-      self.rect.height,
-    )
-
-    if self._navigation.active:
-      self._navigation.render(self._content_rect)
-      self._alert_renderer.render(self._content_rect)
-      self._side_panel().render(self.rect)
-      return
+    self._content_rect = rl.Rectangle(self.rect.x, self.rect.y, self.rect.width - SIDE_PANEL_WIDTH, self.rect.height)
 
     self._switch_stream_if_needed(ui_state.sm)
     self._update_calibration()
 
-    # Enable scissor mode to clip all rendering within content rectangle boundaries
-    # This creates a rendering viewport that prevents graphics from drawing outside the border
-    rl.begin_scissor_mode(
-      int(self._content_rect.x),
-      int(self._content_rect.y),
-      int(self._content_rect.width),
-      int(self._content_rect.height)
-    )
+    rl.begin_scissor_mode(int(self._content_rect.x), int(self._content_rect.y), int(self._content_rect.width), int(self._content_rect.height))
 
-    # Render the base camera view
     super()._render(self._content_rect)
 
-    # Draw all UI overlays
     self._model_renderer.render(self._content_rect)
 
-    alert_to_render, not_animating_out = self._alert_renderer.will_render()
-
-    # Hide DMoji when disengaged unless AlwaysOnDM is enabled
-    should_draw_dmoji = (not self._hud_renderer.drawing_top_icons() and ui_state.is_onroad() and
-                         (ui_state.status != UIStatus.DISENGAGED or ui_state.always_on_dm))
-    self._driver_state_renderer.set_should_draw(should_draw_dmoji)
-    self._driver_state_renderer.set_position(self._rect.x + 16, self._rect.y + 10)
-    self._driver_state_renderer.render()
-
+    alert_to_render, _ = self._alert_renderer.will_render()
     self._hud_renderer.set_can_draw_top_icons(alert_to_render is None)
-    self._hud_renderer.set_wheel_critical_icon(alert_to_render is not None and not not_animating_out and
-                                               alert_to_render.visual_alert == car.CarControl.HUDControl.VisualAlert.steerRequired)
-    # TODO: have alert renderer draw offroad mici label below
     if ui_state.started:
       self._alert_renderer.render(self._content_rect)
     self._hud_renderer.render(self._content_rect)
-    # don't draw the experimental/IQ.Dynamic icon over alert text (it falls back to the
-    # top-left alert anchor when the DMoji is hidden while disengaged)
-    if alert_to_render is None:
-      self._draw_experimental_icon()
 
-    # End clipping region
     rl.end_scissor_mode()
 
     self._draw_border()
-
-    # Custom UI extension point - add custom overlays here
-    # Use self._content_rect for positioning within camera bounds
-    self._side_panel().render(self.rect)
-
+    self._draw_side_panel()
     self._bookmark_icon.render(self.rect)
 
     draw_time_ms = (time.monotonic() - start_draw) * 1000
@@ -305,15 +237,23 @@ class AugmentedRoadView(CameraView):
     msg.uiDebug.drawTimeMillis = draw_time_ms
     self._pm.send('uiDebug', msg)
 
-    # Draw darkened background and text if not onroad
     if not ui_state.started:
       rl.draw_rectangle(int(self.rect.x), int(self.rect.y), int(self.rect.width), int(self.rect.height), rl.Color(0, 0, 0, 175))
       self._offroad_label.render(self._content_rect)
 
-  def _draw_experimental_icon(self) -> None:
+  def _side_panel_rect(self) -> rl.Rectangle:
+    return rl.Rectangle(self.rect.x + self.rect.width - SIDE_PANEL_WIDTH, self.rect.y, SIDE_PANEL_WIDTH, self.rect.height)
+
+  def _draw_side_panel(self) -> None:
     if not ui_state.started:
       return
+    panel = self._side_panel_rect()
+    self._navigation.render(panel)
+    if ui_state.gas_override_boost:
+      self._boost_bar.render(rl.Rectangle(panel.x, panel.y + BOOST_BAR_TOP, panel.width, panel.height - BOOST_BAR_TOP - BOOST_BAR_BOTTOM))
+    self._draw_long_mode_icon(panel)
 
+  def _draw_long_mode_icon(self, panel: rl.Rectangle) -> None:
     if not ui_state.sm['carParams'].openpilotLongitudinalControl:
       return
 
@@ -322,14 +262,9 @@ class AugmentedRoadView(CameraView):
     else:
       icon = self._iqstandard_txt
 
-    slot_x = self._content_rect.x + self._content_rect.width - MICI_EXPERIMENTAL_ICON_MARGIN_X - MICI_EXPERIMENTAL_ICON_SLOT
-    slot_y = self._content_rect.y + MICI_EXPERIMENTAL_ICON_MARGIN_Y
-    pos_x = slot_x + (MICI_EXPERIMENTAL_ICON_SLOT - icon.width) / 2
-    pos_y = slot_y + (MICI_EXPERIMENTAL_ICON_SLOT - icon.height) / 2
+    pos_x = panel.x + (panel.width - icon.width) / 2
+    pos_y = panel.y + panel.height - LONG_MODE_ICON_MARGIN_BOTTOM - icon.height
     rl.draw_texture(icon, int(pos_x), int(pos_y), rl.WHITE)
-
-  def _side_panel(self):
-    return self._boost_bar if ui_state.gas_override_boost else self._confidence_ball
 
   def _draw_border(self):
     rl.draw_rectangle_rounded_lines_ex(self._content_rect, MICI_BORDER_ROUNDNESS, 10, MICI_BORDER_THICKNESS, rl.BLACK)
@@ -342,7 +277,6 @@ class AugmentedRoadView(CameraView):
       elif v_ego > ROAD_CAM_MIN_SPEED:
         target = ROAD_CAM
       else:
-        # Hysteresis zone - keep current stream
         target = self.stream_type
     else:
       target = ROAD_CAM
@@ -350,7 +284,6 @@ class AugmentedRoadView(CameraView):
     self.switch_stream(target)
 
   def _update_calibration(self):
-    # Update device camera if not already set
     sm = ui_state.sm
     if not self.device_camera and sm.seen['roadCameraState'] and sm.seen['deviceState']:
       self.device_camera = DEVICE_CAMERAS[(str(sm['deviceState'].deviceType), str(sm['roadCameraState'].sensor))]
@@ -363,13 +296,11 @@ class AugmentedRoadView(CameraView):
     if calib_rpy is None:
       return
 
-    # Update view_from_calib matrix
     prev_view_from_calib = self.view_from_calib.copy()
     prev_view_from_wide_calib = self.view_from_wide_calib.copy()
     device_from_calib = rot_from_euler(calib_rpy)
     self.view_from_calib = view_frame_from_device_frame @ device_from_calib
 
-    # Update wide calibration if available
     if hasattr(calib, 'wideFromDeviceEuler') and len(calib.wideFromDeviceEuler) == 3:
       wide_from_device = rot_from_euler(calib.wideFromDeviceEuler)
       self.view_from_wide_calib = view_frame_from_device_frame @ wide_from_device @ device_from_calib
@@ -380,9 +311,6 @@ class AugmentedRoadView(CameraView):
       self._cached_matrix = None
 
   def _calc_frame_matrix(self, rect: rl.Rectangle) -> np.ndarray:
-    # Early-return the cached matrix when nothing that affects it changed. The key deliberately
-    # excludes rect.x/y — those are applied as a draw-time offset in ModelRenderer (below), so the
-    # cache stays hot while the onroad view translates during a scroll/transition (stock PR #37948).
     cache_key = (
       ui_state.sm.recv_frame['extrinsicsCalibration'],
       int(self._content_rect.width),
@@ -393,7 +321,6 @@ class AugmentedRoadView(CameraView):
     if cache_key == self._matrix_cache_key and self._cached_matrix is not None:
       return self._cached_matrix
 
-    # Get camera configuration
     device_camera = self.device_camera or DEFAULT_DEVICE_CAMERA
     is_wide_camera = self.stream_type == WIDE_CAM
     intrinsic = device_camera.ecam.intrinsics if is_wide_camera else device_camera.fcam.intrinsics
@@ -403,21 +330,17 @@ class AugmentedRoadView(CameraView):
     else:
       zoom = np.interp(ui_state.sm['carState'].vEgo, [10, 30], [0.8, 1.0])
 
-    # Calculate transforms for vanishing point
     inf_point = np.array([1000.0, 0.0, 0.0])
     calib_transform = intrinsic @ calibration
     kep = calib_transform @ inf_point
 
-    # Calculate center points and dimensions (rect.x/y are NOT used here — applied at draw time)
     w, h = self._content_rect.width, self._content_rect.height
     cx, cy = intrinsic[0, 2], intrinsic[1, 2]
 
-    # Calculate max allowed offsets with margins
     margin = 5
     max_x_offset = cx * zoom - w / 2 - margin
     max_y_offset = cy * zoom - h / 2 - margin
 
-    # Calculate and clamp offsets to prevent out-of-bounds issues
     try:
       if abs(kep[2]) > 1e-6:
         x_offset = np.clip((kep[0] / kep[2] - cx) * zoom, -max_x_offset, max_x_offset)
@@ -427,7 +350,6 @@ class AugmentedRoadView(CameraView):
     except (ZeroDivisionError, OverflowError):
       x_offset, y_offset = 0, 0
 
-    # Cache the computed transformation matrix to avoid recalculations
     self._matrix_cache_key = cache_key
     self._cached_matrix = np.array([
       [zoom * 2 * cx / w, 0, -x_offset / w * 2],
@@ -435,8 +357,6 @@ class AugmentedRoadView(CameraView):
       [0, 0, 1.0]
     ])
 
-    # Built WITHOUT rect.x/y so the matrix (and the model_renderer projection it drives) stays
-    # cache-stable while the view slides; ModelRenderer adds (rect.x, rect.y) as a draw-time offset.
     video_transform = np.array([
       [zoom, 0.0, (w / 2 - x_offset) - (cx * zoom)],
       [0.0, zoom, (h / 2 - y_offset) - (cy * zoom)],
@@ -454,18 +374,3 @@ class AugmentedRoadView(CameraView):
     if gui_app.iqpilot_ui():
       ui_state.reset_onroad_sleep_timer(OnroadTimerStatus.PAUSE)
 
-
-if __name__ == "__main__":
-  gui_app.init_window("OnRoad Camera View")
-  road_camera_view = AugmentedRoadView(ROAD_CAM)
-  print("***press space to switch camera view***")
-  try:
-    for _ in gui_app.render():
-      ui_state.update()
-      if rl.is_key_released(rl.KeyboardKey.KEY_SPACE):
-        if WIDE_CAM in road_camera_view.available_streams:
-          stream = ROAD_CAM if road_camera_view.stream_type == WIDE_CAM else WIDE_CAM
-          road_camera_view.switch_stream(stream)
-      road_camera_view.render(rl.Rectangle(0, 0, gui_app.width, gui_app.height))
-  finally:
-    road_camera_view.close()
