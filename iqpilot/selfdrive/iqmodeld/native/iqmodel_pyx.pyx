@@ -88,8 +88,8 @@ cdef class FrameProjector(_ProjectionBridge):
 cdef class RoadProjector(FrameProjector):
   cdef RoadFrameBridge * _road_ptr
 
-  def __cinit__(self, WarpContext context, int buffer_length=2):
-    self._road_ptr = new RoadFrameBridge(context.device_id, context.context, buffer_length)
+  def __cinit__(self, WarpContext context, int buffer_length=2, int output_width=512, int output_height=256):
+    self._road_ptr = new RoadFrameBridge(context.device_id, context.context, buffer_length, output_width, output_height)
     self._attach(<NativeFrameBridge*>self._road_ptr, self._road_ptr.buf_size)
 
 cdef class CabinProjector(FrameProjector):

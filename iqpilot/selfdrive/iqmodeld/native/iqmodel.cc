@@ -50,9 +50,12 @@ void FrameCropperBase::project_frame(cl_mem yuv_cl, int output_width, int output
                         output_width, output_height, projection);
 }
 
-RoadHistoryAssembler::RoadHistoryAssembler(cl_device_id device_id, cl_context context, uint8_t history_slots)
-    : FrameCropperBase(device_id, context), frame_bytes_(kFrameBytes * sizeof(uint8_t)), history_slots_(history_slots) {
-  buf_size = kExportBytes;
+RoadHistoryAssembler::RoadHistoryAssembler(cl_device_id device_id, cl_context context, uint8_t history_slots,
+                                           int output_width, int output_height)
+    : FrameCropperBase(device_id, context), output_width_(output_width), output_height_(output_height),
+      frame_bytes_(static_cast<size_t>(output_width) * output_height * 3 / 2), history_slots_(history_slots) {
+  assert(output_width % 16 == 0 && output_height % 2 == 0);
+  buf_size = static_cast<int>(frame_bytes_ * 2);
   staging_bytes_ = std::make_unique<uint8_t[]>(buf_size);
   publish_pair_cl_ = CL_CHECK_ERR(clCreateBuffer(context, CL_MEM_READ_WRITE, buf_size, NULL, &err));
   timeline_cl_ = CL_CHECK_ERR(clCreateBuffer(context, CL_MEM_READ_WRITE, history_slots_ * frame_bytes_, NULL, &err));
@@ -61,12 +64,12 @@ RoadHistoryAssembler::RoadHistoryAssembler(cl_device_id device_id, cl_context co
   latest_region_.size = frame_bytes_;
   latest_slot_cl_ = CL_CHECK_ERR(clCreateSubBuffer(timeline_cl_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &latest_region_, &err));
 
-  packed_frame_kernels_init(&packer_, context, device_id, kOutputWidth, kOutputHeight);
-  configure_planar_tiles(device_id, context, kOutputWidth, kOutputHeight);
+  packed_frame_kernels_init(&packer_, context, device_id, output_width_, output_height_);
+  configure_planar_tiles(device_id, context, output_width_, output_height_);
 }
 
 cl_mem *RoadHistoryAssembler::project_to_cl(cl_mem yuv_cl, int frame_width, int frame_height, int frame_stride, int frame_uv_offset, const mat3 &projection) {
-  project_frame(yuv_cl, kOutputWidth, kOutputHeight, frame_width, frame_height, frame_stride, frame_uv_offset, projection);
+  project_frame(yuv_cl, output_width_, output_height_, frame_width, frame_height, frame_stride, frame_uv_offset, projection);
   rotate_history_window(work_queue_, timeline_cl_, history_slots_, frame_bytes_);
   packed_frame_emit(&packer_, work_queue_, y_plane_tile_cl_, u_plane_tile_cl_, v_plane_tile_cl_, latest_slot_cl_);
   packed_frame_clone_range(&packer_, work_queue_, timeline_cl_, publish_pair_cl_, 0, 0, frame_bytes_);

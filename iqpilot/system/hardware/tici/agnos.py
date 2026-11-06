@@ -172,7 +172,8 @@ def _extract_image_path(url: str) -> str:
 _k3_identity: dict[str, str] = {}
 
 def _api_host() -> str:
-  return os.environ.get("API_HOST", "https://api-iqlabs.konn3kt.com").rstrip("/")
+  # Konik's setup image exports API_HOST=https://api.konik.ai into /data/continue.sh on every boot; that host has no konn3kt /assets/iqos route, so the IQ.OS endpoints must ignore the generic API_HOST and use konn3kt's own host.
+  return os.environ.get("KONN3KT_API_HOST", "https://api-iqlabs.konn3kt.com").rstrip("/")
 
 def _device_serial() -> str:
   try:

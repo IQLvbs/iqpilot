@@ -22,7 +22,7 @@ cdef extern from "iqpilot/selfdrive/iqmodeld/native/iqmodel.h":
 
   cppclass RoadFrameBridge "RoadHistoryAssembler":
     int buf_size
-    RoadFrameBridge(cl_device_id, cl_context, unsigned char)
+    RoadFrameBridge(cl_device_id, cl_context, unsigned char, int, int)
 
   cppclass CabinFrameBridge "CabinFrameSampler":
     int buf_size

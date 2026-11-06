@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[2]
 ASSET_DIR = ROOT / "artifacts" / "runtime" / "boot_branding"
 BG_ASSET = ASSET_DIR / "bg.jpg"
 SPLASH_BMP_ASSET = ASSET_DIR / "splash_embedded.bmp"
+SPLASH_BMP_PARTNER_ASSET = ASSET_DIR / "splash_embedded_partner.bmp"
 
 BG_TARGET = Path("/usr/comma/bg.jpg")
 SPLASH_TARGET = Path("/dev/block/bootdevice/by-name/splash")
@@ -40,6 +41,27 @@ BACKUP_DIR = STATE_DIR / "backups"
 META_PATH = BACKUP_DIR / "metadata.json"
 BG_BACKUP = BACKUP_DIR / "bg.jpg.orig"
 SPLASH_BACKUP = BACKUP_DIR / "splash.partition.orig.img"
+VARIANT_MARKER = STATE_DIR / "variant"
+
+
+def splash_asset() -> Path:
+  try:
+    if VARIANT_MARKER.read_text(encoding="utf-8").strip() == "partner" and SPLASH_BMP_PARTNER_ASSET.exists():
+      return SPLASH_BMP_PARTNER_ASSET
+  except OSError:
+    pass
+  return SPLASH_BMP_ASSET
+
+
+def ensure_state_dir_writable() -> None:
+  """The variant marker is written by the non-root daemon; this root script owns the directory it lands in, so hand it to the source user."""
+  try:
+    import pwd
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    source = pwd.getpwnam(SOURCE_USER)
+    os.chown(STATE_DIR, source.pw_uid, source.pw_gid)
+  except Exception:
+    pass
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -211,7 +233,7 @@ def apply_branding() -> bool:
   backup_if_missing()
 
   bg_asset_bytes = BG_ASSET.read_bytes()
-  splash_asset_bytes = SPLASH_BMP_ASSET.read_bytes()
+  splash_asset_bytes = splash_asset().read_bytes()
 
   current_bg_hash = sha256_path(BG_TARGET)
   current_splash_hash = sha256_bytes(read_splash_bytes(SPLASH_BMP_OFFSET, len(splash_asset_bytes)))
@@ -278,7 +300,7 @@ def status() -> dict[str, object]:
     result["bg_asset_sha256"] = sha256_path(BG_ASSET)
     result["bg_current_sha256"] = sha256_path(BG_TARGET)
   if SPLASH_BMP_ASSET.exists() and SPLASH_TARGET.exists():
-    splash_asset_bytes = SPLASH_BMP_ASSET.read_bytes()
+    splash_asset_bytes = splash_asset().read_bytes()
     result["splash_asset_sha256"] = sha256_bytes(splash_asset_bytes)
     result["splash_current_sha256"] = sha256_bytes(read_splash_bytes(SPLASH_BMP_OFFSET, len(splash_asset_bytes)))
   return result
@@ -287,6 +309,8 @@ def status() -> dict[str, object]:
 def main() -> int:
   if os.geteuid() != 0:
     raise SystemExit("apply_boot_branding.py must run as root")
+
+  ensure_state_dir_writable()
 
   parser = argparse.ArgumentParser()
   group = parser.add_mutually_exclusive_group()

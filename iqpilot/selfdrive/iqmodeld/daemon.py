@@ -22,7 +22,13 @@ from iqpilot.common.params import Params
 from iqpilot.common.realtime import DT_MDL, config_realtime_process
 from iqpilot.common.swaglog import cloudlog
 from iqpilot.common.transformations.camera import DEVICE_CAMERAS
-from iqpilot.common.transformations.model import get_warp_matrix
+from iqpilot.common.transformations.model import (
+  FULLFRAME_INPUT_SIZE,
+  MEDMODEL_INPUT_SIZE,
+  get_fullframe_warp_matrix,
+  get_warp_matrix,
+  model_frame_size,
+)
 from iqpilot.selfdrive.controls.lib.action_engine import ActionEngine
 from iqpilot.selfdrive.controls.lib.drive_helpers import (
   MODEL_SMOOTHING_MAX_TOTAL_SEC,
@@ -267,10 +273,16 @@ class NeuralEngineState(InferenceStateBase):
     self.model_smoothing_max_extra_sec = 0.0
 
     context_depth = 5 if runner.is_20hz else 2
-    self.frames = {
-      stream_name: RoadProjector(gpu_context, context_depth)
+    shapes = runner.input_shapes
+    frame_sizes = {
+      stream_name: model_frame_size(shapes[stream_name]) if stream_name in shapes else MEDMODEL_INPUT_SIZE
       for stream_name in runner.vision_input_names
     }
+    self.frames = {
+      stream_name: RoadProjector(gpu_context, context_depth, *frame_sizes[stream_name])
+      for stream_name in runner.vision_input_names
+    }
+    self.fullframe = FULLFRAME_INPUT_SIZE in frame_sizes.values()
 
     self._ledger = ReplayLedger(runner.input_shapes, runner.vision_input_names, getattr(runner, "input_dtypes", {}))
     self.numpy_inputs = self._ledger.inputs
@@ -477,7 +489,8 @@ class CameraIngress:
 
 
 class CalibrationAtlas:
-  def __init__(self):
+  def __init__(self, fullframe: bool = False):
+    self.fullframe = fullframe
     self.main_warp = np.zeros((3, 3), dtype=np.float32)
     self.extra_warp = np.zeros((3, 3), dtype=np.float32)
     self.ready = False
@@ -503,8 +516,14 @@ class CalibrationAtlas:
     main_intrinsics = device_camera.ecam.intrinsics if main_is_wide else device_camera.fcam.intrinsics
     extra_uses_wide_camera = dual_camera or main_is_wide
     extra_intrinsics = device_camera.ecam.intrinsics if extra_uses_wide_camera else device_camera.fcam.intrinsics
-    self.main_warp = get_warp_matrix(rpy, main_intrinsics, False).astype(np.float32)
-    self.extra_warp = get_warp_matrix(rpy, extra_intrinsics, True).astype(np.float32)
+    if self.fullframe:
+      main_camera = device_camera.ecam if main_is_wide else device_camera.fcam
+      extra_camera = device_camera.ecam if extra_uses_wide_camera else device_camera.fcam
+      self.main_warp = get_fullframe_warp_matrix(main_intrinsics, main_camera.width, main_camera.height).astype(np.float32)
+      self.extra_warp = get_fullframe_warp_matrix(extra_intrinsics, extra_camera.width, extra_camera.height).astype(np.float32)
+    else:
+      self.main_warp = get_warp_matrix(rpy, main_intrinsics, False).astype(np.float32)
+      self.extra_warp = get_warp_matrix(rpy, extra_intrinsics, True).astype(np.float32)
     self.main_warp, self.extra_warp = self._offset_tuner.update(
       self.main_warp, self.extra_warp, sm, main_is_wide, extra_uses_wide_camera
     )
@@ -565,7 +584,7 @@ class InferenceDaemon:
     self._message_memory = DrivePacketMemory()
     self._params = Params()
     self._frame_meter = FrameDropMeter(self._runtime.constants.MODEL_FREQ)
-    self._warps = CalibrationAtlas()
+    self._warps = CalibrationAtlas(self._runtime.fullframe)
     self._perf = PerfTraceEmitter("iqmodeld", pubmaster=self._pub)
     self._perf_ring = PerfTraceRing()
 

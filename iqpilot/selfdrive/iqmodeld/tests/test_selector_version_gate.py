@@ -10,6 +10,7 @@ private bundle fails here rather than on a device.
 """
 from iqpilot.selfdrive.iqmodeld.emac_model_meta import EMAC_BUNDLE_MIN_SELECTOR_VERSION
 from iqpilot.selfdrive.iqmodeld.models.helpers import is_bundle_version_compatible
+from iqpilot.selfdrive.iqmodeld.models.runners.tinygrad.stateful_runner import STATEFUL_BUNDLE_MIN_SELECTOR_VERSION
 
 
 def test_gate_accepts_the_version_our_emac_bundles_ship():
@@ -35,7 +36,12 @@ def test_gate_accepts_encrypted_iqc_bundles():
   assert is_bundle_version_compatible({"minimumSelectorVersion": 20})
 
 
+def test_gate_accepts_stateful_supercombo_bundles():
+  assert is_bundle_version_compatible({"minimumSelectorVersion": STATEFUL_BUNDLE_MIN_SELECTOR_VERSION})
+
+
 def test_bundles_kept_only_for_older_builds_are_hidden():
   assert not is_bundle_version_compatible({"minimumSelectorVersion": 18, "maximum_selector_version": "19"})
   assert not is_bundle_version_compatible({"minimumSelectorVersion": 18, "maximumSelectorVersion": 19})
-  assert is_bundle_version_compatible({"minimumSelectorVersion": 18, "maximum_selector_version": 20})
+  assert not is_bundle_version_compatible({"minimumSelectorVersion": 18, "maximum_selector_version": 20})
+  assert is_bundle_version_compatible({"minimumSelectorVersion": 18, "maximum_selector_version": 21})

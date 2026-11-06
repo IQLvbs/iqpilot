@@ -214,3 +214,36 @@ def test_ensure_iq_user_failure_is_swallowed_by_main(monkeypatch, capsys):
   assert rc == 0
   assert "ensure_iq_user failed: simulated failure" in out
   assert "changed" in out  # branding ran, so combined result is still "changed"
+
+
+def test_splash_asset_defaults_without_marker(monkeypatch, tmp_path):
+  monkeypatch.setattr(abb, "VARIANT_MARKER", tmp_path / "variant")
+  monkeypatch.setattr(abb, "SPLASH_BMP_ASSET", tmp_path / "default.bmp")
+  monkeypatch.setattr(abb, "SPLASH_BMP_PARTNER_ASSET", tmp_path / "partner.bmp")
+  assert abb.splash_asset() == tmp_path / "default.bmp"
+
+
+def test_splash_asset_partner_when_marked(monkeypatch, tmp_path):
+  (tmp_path / "variant").write_text("partner\n", encoding="utf-8")
+  (tmp_path / "partner.bmp").write_bytes(b"BM")
+  monkeypatch.setattr(abb, "VARIANT_MARKER", tmp_path / "variant")
+  monkeypatch.setattr(abb, "SPLASH_BMP_ASSET", tmp_path / "default.bmp")
+  monkeypatch.setattr(abb, "SPLASH_BMP_PARTNER_ASSET", tmp_path / "partner.bmp")
+  assert abb.splash_asset() == tmp_path / "partner.bmp"
+
+
+def test_splash_asset_defaults_when_partner_asset_absent(monkeypatch, tmp_path):
+  (tmp_path / "variant").write_text("partner", encoding="utf-8")
+  monkeypatch.setattr(abb, "VARIANT_MARKER", tmp_path / "variant")
+  monkeypatch.setattr(abb, "SPLASH_BMP_ASSET", tmp_path / "default.bmp")
+  monkeypatch.setattr(abb, "SPLASH_BMP_PARTNER_ASSET", tmp_path / "partner.bmp")
+  assert abb.splash_asset() == tmp_path / "default.bmp"
+
+
+def test_splash_asset_defaults_on_unknown_marker(monkeypatch, tmp_path):
+  (tmp_path / "variant").write_text("something-else", encoding="utf-8")
+  (tmp_path / "partner.bmp").write_bytes(b"BM")
+  monkeypatch.setattr(abb, "VARIANT_MARKER", tmp_path / "variant")
+  monkeypatch.setattr(abb, "SPLASH_BMP_ASSET", tmp_path / "default.bmp")
+  monkeypatch.setattr(abb, "SPLASH_BMP_PARTNER_ASSET", tmp_path / "partner.bmp")
+  assert abb.splash_asset() == tmp_path / "default.bmp"

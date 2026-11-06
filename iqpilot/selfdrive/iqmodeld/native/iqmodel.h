@@ -50,16 +50,17 @@ protected:
 
 class RoadHistoryAssembler : public FrameCropperBase {
 public:
-  RoadHistoryAssembler(cl_device_id device_id, cl_context context, uint8_t history_slots);
+  RoadHistoryAssembler(cl_device_id device_id, cl_context context, uint8_t history_slots,
+                       int output_width = kDefaultOutputWidth, int output_height = kDefaultOutputHeight);
   ~RoadHistoryAssembler() override;
   cl_mem *project_to_cl(cl_mem yuv_cl, int frame_width, int frame_height, int frame_stride, int frame_uv_offset, const mat3 &projection) override;
 
-  static constexpr int kOutputWidth = 512;
-  static constexpr int kOutputHeight = 256;
-  static constexpr int kFrameBytes = kOutputWidth * kOutputHeight * 3 / 2;
-  static constexpr int kExportBytes = kFrameBytes * 2;
+  static constexpr int kDefaultOutputWidth = 512;
+  static constexpr int kDefaultOutputHeight = 256;
 
 private:
+  int output_width_;
+  int output_height_;
   PackedFrameKernels packer_;
   cl_mem timeline_cl_;
   cl_mem latest_slot_cl_;

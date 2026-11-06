@@ -23,7 +23,7 @@ if [ -z "$AGNOS_VERSION" ]; then
 
   case "$DEVICE_MODEL" in
     *)
-      export AGNOS_VERSION="4.9.9.9.4"
+      export AGNOS_VERSION="4.9.9.9.5"
       export AGNOS_COMPAT_VERSIONS=""
       ;;
   esac
