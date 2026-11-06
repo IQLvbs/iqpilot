@@ -1,0 +1,76 @@
+import numpy as np
+
+from iqpilot.common.transformations.orientation import rot_from_euler
+from iqpilot.common.transformations.camera import get_view_frame_from_calib_frame, view_frame_from_device_frame, _ar_ox_fisheye
+
+# MED model
+MEDMODEL_INPUT_SIZE = (512, 256)
+MEDMODEL_CY = 47.6
+
+medmodel_fl = 910.0
+medmodel_intrinsics = np.array([
+  [medmodel_fl,  0.0,  0.5 * MEDMODEL_INPUT_SIZE[0]],
+  [0.0,  medmodel_fl,                   MEDMODEL_CY],
+  [0.0,  0.0,                                   1.0]])
+
+
+# SBIG model (big model with the size of small model)
+SBIGMODEL_INPUT_SIZE = (512, 256)
+sbigmodel_fl = 455.0
+sbigmodel_intrinsics = np.array([
+  [sbigmodel_fl,  0.0,  0.5 * SBIGMODEL_INPUT_SIZE[0]],
+  [0.0,  sbigmodel_fl,      0.5 * (256 + MEDMODEL_CY)],
+  [0.0,  0.0,                                     1.0]])
+
+
+# FULL FRAME model (c4, whole sensor with no warp)
+FULLFRAME_INPUT_SIZE = (1024, 512)
+
+fullframe_intrinsics = np.array([
+  [869.714,  0.0,  0.5 * FULLFRAME_INPUT_SIZE[0]],
+  [0.0,  769.011,  0.5 * FULLFRAME_INPUT_SIZE[1]],
+  [0.0,  0.0,                               1.0]])
+
+fullframe_wide_intrinsics = np.array([
+  [324.0,  0.0,    0.5 * FULLFRAME_INPUT_SIZE[0]],
+  [0.0,  286.484,  0.5 * FULLFRAME_INPUT_SIZE[1]],
+  [0.0,  0.0,                               1.0]])
+
+DM_INPUT_SIZE = (1440, 960)
+dmonitoringmodel_fl = _ar_ox_fisheye.focal_length
+dmonitoringmodel_intrinsics = np.array([
+  [dmonitoringmodel_fl,  0.0, DM_INPUT_SIZE[0]/2],
+  [0.0, dmonitoringmodel_fl, DM_INPUT_SIZE[1]/2 - (_ar_ox_fisheye.height - DM_INPUT_SIZE[1])/2],
+  [0.0,  0.0, 1.0]])
+
+sbigmodel_frame_from_calib_frame = np.dot(sbigmodel_intrinsics,
+  get_view_frame_from_calib_frame(0, 0, 0, 0))
+
+medmodel_frame_from_calib_frame = np.dot(medmodel_intrinsics,
+  get_view_frame_from_calib_frame(0, 0, 0, 0))
+
+calib_from_medmodel = np.linalg.inv(medmodel_frame_from_calib_frame[:, :3])
+calib_from_sbigmodel = np.linalg.inv(sbigmodel_frame_from_calib_frame[:, :3])
+
+# This function is verified to give similar results to xx.uncommon.utils.transform_img
+def get_warp_matrix(device_from_calib_euler: np.ndarray, intrinsics: np.ndarray, bigmodel_frame: bool = False) -> np.ndarray:
+  calib_from_model = calib_from_sbigmodel if bigmodel_frame else calib_from_medmodel
+  device_from_calib = rot_from_euler(device_from_calib_euler)
+  camera_from_calib = intrinsics @ view_frame_from_device_frame @ device_from_calib
+  warp_matrix: np.ndarray = camera_from_calib @ calib_from_model
+  return warp_matrix
+
+
+def get_fullframe_intrinsics(intrinsics: np.ndarray, camera_width: int, camera_height: int) -> np.ndarray:
+  scale = np.diag([FULLFRAME_INPUT_SIZE[0] / camera_width, FULLFRAME_INPUT_SIZE[1] / camera_height, 1.0])
+  model_intrinsics: np.ndarray = scale @ intrinsics
+  return model_intrinsics
+
+
+def get_fullframe_warp_matrix(intrinsics: np.ndarray, camera_width: int, camera_height: int) -> np.ndarray:
+  warp_matrix: np.ndarray = intrinsics @ np.linalg.inv(get_fullframe_intrinsics(intrinsics, camera_width, camera_height))
+  return warp_matrix
+
+
+def model_frame_size(packed_shape) -> tuple[int, int]:
+  return int(packed_shape[-1]) * 2, int(packed_shape[-2]) * 2
