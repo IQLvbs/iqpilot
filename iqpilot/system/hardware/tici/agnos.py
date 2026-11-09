@@ -727,10 +727,24 @@ def select_for_board(update: list, device: str | None = None) -> list:
   return chosen
 
 
+# IQ.OS 4.9.9.9.5 leaves the shared splash partition root:disk, so the move keeps the current boot picture there
+COSMETIC_PARTITIONS = frozenset(("splash",))
+
+
+def drop_unwritable_cosmetic(update: list[dict], target_slot_number: int, cloudlog) -> list[dict]:
+  kept = []
+  for partition in update:
+    if partition['name'] in COSMETIC_PARTITIONS and _find_route(get_partition_path(target_slot_number, partition)) is None:
+      cloudlog.warning(f"IQ.OS 5 move: {partition['name']} is not writable on this OS, keeping the current one")
+      continue
+    kept.append(partition)
+  return kept
+
+
 def flash_iqos5_update(manifest_path: str, target_slot_number: int, cloudlog) -> None:
   """Flash IQ.OS 5 to the target slot from AGNOS with this build's flasher; the new tree's code never runs here."""
   verify_manifest_signature(manifest_path)
-  update = select_for_board(json.load(open(manifest_path)))
+  update = drop_unwritable_cosmetic(select_for_board(json.load(open(manifest_path))), target_slot_number, cloudlog)
   cloudlog.info(f"IQ.OS 5 target slot {target_slot_number}: {', '.join(p['name'] for p in update)}")
   preflight_partition_io([get_partition_path(target_slot_number, p) for p in update], cloudlog)
 

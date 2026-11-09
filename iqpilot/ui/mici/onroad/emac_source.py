@@ -20,7 +20,7 @@ _MAC_ICON_W = 62
 _MAC_FAILED_ICON_W = 78
 _WHEEL_H = 50
 _MARGIN_R = 12
-_MARGIN_B = 14
+_MARGIN_B = 52
 
 
 class EmacSourceIndicator:

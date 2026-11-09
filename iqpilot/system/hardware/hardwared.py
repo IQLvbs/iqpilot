@@ -30,6 +30,7 @@ from iqpilot.system.loggerd.config import get_available_percent
 from iqpilot.common.swaglog import cloudlog
 from iqpilot.system.hardware.power_monitoring import PowerMonitoring, VBATT_LOW_POWER_EXIT
 from iqpilot.system.hardware.fan_controller import FanController
+from iqpilot.system.hardware.nvme import storage_missing
 from iqpilot.system.version import terms_version, training_version
 
 ThermalStatus = log.DeviceState.ThermalStatus
@@ -581,6 +582,9 @@ def hardware_thread(end_event, hw_queue, memory_queue) -> None:
     extra_text = f"{offroad_comp_temp:.1f}C"
     show_alert = (not onroad_conditions["device_temp_good"] or not startup_conditions["device_temp_engageable"]) and onroad_conditions["ignition"]
     set_offroad_alert_if_changed("Offroad_TemperatureTooHigh", show_alert, extra_text=extra_text)
+
+    if (count % int(10. / DT_HW)) == 0:
+      set_offroad_alert_if_changed("Offroad_StorageMissing", storage_missing(HARDWARE.get_device_type()))
 
     # Handle offroad/onroad transition
     should_start = all(onroad_conditions.values())

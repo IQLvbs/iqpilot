@@ -57,8 +57,8 @@ class SettingsBigButton(BigButton):
 
 
 class CruiseModeButton(SettingsBigButton):
-  """Cruise menu button whose icon reflects the active longitudinal mode."""
   _ICON_SIZE = 60
+  _ICON_SCALES = (0.8, 1.0, 1.0)
 
   def __init__(self):
     super().__init__(tr("cruise"), "", gui_app.texture("icons_mici/speedometer.png", self._ICON_SIZE, self._ICON_SIZE))
@@ -78,7 +78,9 @@ class CruiseModeButton(SettingsBigButton):
 
   def _update_state(self):
     super()._update_state()
-    self.set_icon(self._icons[self._mode_index()])
+    idx = self._mode_index()
+    self.set_icon(self._icons[idx])
+    self._icon_scale = self._ICON_SCALES[idx]
 
 
 class SettingsLayout(NavScroller):

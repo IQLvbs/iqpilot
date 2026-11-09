@@ -81,6 +81,8 @@ class Log:
   def info(self, line):
     self.lines.append(line)
 
+  warning = info
+
 
 def test_preflight_falls_back_to_sg_and_logs_it(otaflash_only):
   log = Log()
@@ -126,6 +128,23 @@ def test_direct_route_is_preferred(tmp_path, monkeypatch):
   monkeypatch.setattr(agnos, '_partition_routes', {})
   agnos.preflight_partition_io([str(partition)], Log())
   assert agnos._partition_routes == {str(partition): 'direct'}
+
+
+def test_unwritable_splash_is_left_alone_but_slot_partitions_are_not(otaflash_only, tmp_path, monkeypatch):
+  (tmp_path / 'bin' / 'sg').write_text('#!/bin/sh\nexit 1\n')
+  monkeypatch.setattr(agnos, 'get_partition_path', lambda _slot, p: str(otaflash_only.parent / p['name']))
+  update = [{'name': 'boot'}, {'name': 'splash', 'has_ab': False}, {'name': 'system'}]
+  log = Log()
+  assert agnos.drop_unwritable_cosmetic(update, 1, log) == [update[0], update[2]]
+  assert log.lines == ['IQ.OS 5 move: splash is not writable on this OS, keeping the current one']
+
+
+def test_writable_splash_is_still_flashed(tmp_path, monkeypatch):
+  monkeypatch.setattr(agnos, '_partition_routes', {})
+  (tmp_path / 'splash').write_bytes(b'\x00' * 4096)
+  monkeypatch.setattr(agnos, 'get_partition_path', lambda _slot, p: str(tmp_path / p['name']))
+  update = [{'name': 'boot'}, {'name': 'splash', 'has_ab': False}]
+  assert agnos.drop_unwritable_cosmetic(update, 1, Log()) == update
 
 
 def test_board_filter_keeps_only_this_boards_xbl():

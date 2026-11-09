@@ -9,17 +9,15 @@ from iqpilot.cereal import messaging, log
 from iqpilot.common.params import Params
 from iqpilot.cereal.visionipc import VisionStreamType
 from iqpilot.selfdrive.ui.ui_state import ui_state
-from iqpilot.selfdrive.ui.mici.onroad import SIDE_PANEL_WIDTH
 from iqpilot.selfdrive.ui.mici.onroad.alert_renderer import AlertRenderer
 from iqpilot.selfdrive.ui.mici.onroad.hud_renderer import HudRenderer
 from iqpilot.selfdrive.ui.mici.onroad.model_renderer import ModelRenderer
-from iqpilot.selfdrive.ui.mici.onroad.boost_bar import BoostBar
 from iqpilot.selfdrive.ui.mici.onroad.cameraview import CameraView
 from iqpilot.system.ui.lib.application import FontWeight, gui_app, MousePos, MouseEvent, TextAlignment, TextAlignmentVertical
 from iqpilot.system.ui.widgets.label import UnifiedLabel
 from iqpilot.system.ui.widgets import Widget
 from iqpilot.common.issue_debug import log_issue_limited
-from iqpilot.common.filter_simple import BounceFilter
+from iqpilot.common.filter_simple import BounceFilter, FirstOrderFilter
 from iqpilot.common.transformations.camera import DEVICE_CAMERAS, DeviceCameraConfig, view_frame_from_device_frame
 from iqpilot.common.transformations.orientation import rot_from_euler
 from iqpilot.selfdrive.locationd.calibration_helpers import get_calibrated_rpy
@@ -49,9 +47,33 @@ CAM_Y_OFFSET = 20
 MICI_BORDER_THICKNESS = 50
 MICI_BORDER_ROUNDNESS = 0.2 * 1.02
 LONG_MODE_ICON_SIZE = 28
-LONG_MODE_ICON_MARGIN_BOTTOM = 16
-BOOST_BAR_TOP = 104
-BOOST_BAR_BOTTOM = 56
+LONG_MODE_ICON_MARGIN = 18
+VIGNETTE_WIDTH = 100
+VIGNETTE_HEIGHT = 88
+VIGNETTE_ALPHA = 235
+VIGNETTE_SHAPE = 4.0
+VIGNETTE_CORE = 0.1
+
+
+def corner_vignette_alpha(width: int, height: int) -> np.ndarray:
+  dx = (width - (np.arange(width) + 0.5)) / width
+  dy = (height - (np.arange(height) + 0.5)) / height
+  dist = (dx[None, :] ** VIGNETTE_SHAPE + dy[:, None] ** VIGNETTE_SHAPE) ** (1 / VIGNETTE_SHAPE)
+  t = np.clip((dist - VIGNETTE_CORE) / (1 - VIGNETTE_CORE), 0.0, 1.0)
+  return (VIGNETTE_ALPHA * (1 - t * t * (3 - 2 * t))).astype(np.uint8)
+
+
+def corner_vignette_texture() -> rl.Texture:
+  rgba = np.zeros((VIGNETTE_HEIGHT, VIGNETTE_WIDTH, 4), dtype=np.uint8)
+  rgba[..., 3] = corner_vignette_alpha(VIGNETTE_WIDTH, VIGNETTE_HEIGHT)
+  image = rl.gen_image_color(VIGNETTE_WIDTH, VIGNETTE_HEIGHT, rl.BLANK)
+  try:
+    texture = rl.load_texture_from_image(image)
+  finally:
+    rl.unload_image(image)
+  rl.update_texture(texture, rgba.tobytes())
+  rl.set_texture_filter(texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+  return texture
 
 
 class BookmarkIcon(Widget):
@@ -163,7 +185,7 @@ class AugmentedRoadView(CameraView):
     self._model_renderer = ModelRenderer()
     self._hud_renderer = HudRenderer()
     self._alert_renderer = AlertRenderer()
-    self._boost_bar = BoostBar()
+    self._nav_alpha = FirstOrderFilter(0.0, 0.15, 1 / gui_app.target_fps)
     self._experimental_txt = gui_app.texture("icons_mici/experimental_mode_mici.png",
                                              LONG_MODE_ICON_SIZE,
                                              LONG_MODE_ICON_SIZE)
@@ -173,6 +195,7 @@ class AugmentedRoadView(CameraView):
     self._iqstandard_txt = gui_app.texture("icons_mici/iqstandard_mode_mici_28.png",
                                            LONG_MODE_ICON_SIZE,
                                            LONG_MODE_ICON_SIZE)
+    self._vignette = corner_vignette_texture()
     self._offroad_label = UnifiedLabel(tr("start the car to\nuse IQ.Pilot"), 54, FontWeight.DISPLAY,
                                        text_color=rl.Color(255, 255, 255, int(255 * 0.9)),
                                        alignment=TextAlignment.CENTER,
@@ -202,7 +225,7 @@ class AugmentedRoadView(CameraView):
 
   def _render(self, _):
     start_draw = time.monotonic()
-    self._content_rect = rl.Rectangle(self.rect.x, self.rect.y, self.rect.width - SIDE_PANEL_WIDTH, self.rect.height)
+    self._content_rect = rl.Rectangle(self.rect.x, self.rect.y, self.rect.width, self.rect.height)
 
     self._switch_stream_if_needed(ui_state.sm)
     self._update_calibration()
@@ -214,6 +237,10 @@ class AugmentedRoadView(CameraView):
     self._model_renderer.render(self._content_rect)
 
     alert_to_render, _ = self._alert_renderer.will_render()
+    nav_alpha = self._nav_alpha.update(1.0 if ui_state.started and self._navigation.active and alert_to_render is None else 0.0)
+    if ui_state.started:
+      self._draw_long_mode_icon()
+      self._navigation.render(self._content_rect, nav_alpha)
     self._hud_renderer.set_can_draw_top_icons(alert_to_render is None)
     if ui_state.started:
       self._alert_renderer.render(self._content_rect)
@@ -222,7 +249,6 @@ class AugmentedRoadView(CameraView):
     rl.end_scissor_mode()
 
     self._draw_border()
-    self._draw_side_panel()
     self._bookmark_icon.render(self.rect)
 
     draw_time_ms = (time.monotonic() - start_draw) * 1000
@@ -241,19 +267,7 @@ class AugmentedRoadView(CameraView):
       rl.draw_rectangle(int(self.rect.x), int(self.rect.y), int(self.rect.width), int(self.rect.height), rl.Color(0, 0, 0, 175))
       self._offroad_label.render(self._content_rect)
 
-  def _side_panel_rect(self) -> rl.Rectangle:
-    return rl.Rectangle(self.rect.x + self.rect.width - SIDE_PANEL_WIDTH, self.rect.y, SIDE_PANEL_WIDTH, self.rect.height)
-
-  def _draw_side_panel(self) -> None:
-    if not ui_state.started:
-      return
-    panel = self._side_panel_rect()
-    self._navigation.render(panel)
-    if ui_state.gas_override_boost:
-      self._boost_bar.render(rl.Rectangle(panel.x, panel.y + BOOST_BAR_TOP, panel.width, panel.height - BOOST_BAR_TOP - BOOST_BAR_BOTTOM))
-    self._draw_long_mode_icon(panel)
-
-  def _draw_long_mode_icon(self, panel: rl.Rectangle) -> None:
+  def _draw_long_mode_icon(self) -> None:
     if not ui_state.sm['carParams'].openpilotLongitudinalControl:
       return
 
@@ -262,8 +276,11 @@ class AugmentedRoadView(CameraView):
     else:
       icon = self._iqstandard_txt
 
-    pos_x = panel.x + (panel.width - icon.width) / 2
-    pos_y = panel.y + panel.height - LONG_MODE_ICON_MARGIN_BOTTOM - icon.height
+    right = self._content_rect.x + self._content_rect.width
+    bottom = self._content_rect.y + self._content_rect.height
+    rl.draw_texture(self._vignette, int(right - VIGNETTE_WIDTH), int(bottom - VIGNETTE_HEIGHT), rl.WHITE)
+    pos_x = right - LONG_MODE_ICON_MARGIN - icon.width
+    pos_y = bottom - LONG_MODE_ICON_MARGIN - icon.height
     rl.draw_texture(icon, int(pos_x), int(pos_y), rl.WHITE)
 
   def _draw_border(self):

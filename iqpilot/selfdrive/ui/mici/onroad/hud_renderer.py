@@ -1,11 +1,15 @@
+from enum import IntEnum
+
 import raylib_nb as rl
 from iqpilot.common.filter_simple import FirstOrderFilter
+from iqpilot.common.params import Params
 from iqpilot.selfdrive.ui.mici.onroad.torque_bar import TorqueBar
 from iqpilot.selfdrive.ui.ui_state import ui_state
 from iqpilot.system.ui.lib.application import gui_app, FontWeight
 from iqpilot.system.ui.lib.multilang import tr
 from iqpilot.system.ui.lib.raylib_compat import draw_circle_gradient
 from iqpilot.system.ui.widgets import Widget
+from iqpilot.ui.mici.onroad.lead_stats import LeadStatsBubble
 
 SET_SPEED_NA = 255
 KM_TO_MILE = 0.621371
@@ -13,6 +17,21 @@ SET_SPEED_PERSISTENCE = 2.5
 SET_SPEED_FONT_SIZE = 112
 MAX_FONT_SIZE = 36
 SET_SPEED_SHADOW_RADIUS = 81
+BOTTOM_DISPLAY_PARAM = "IQMiciBottomDisplay"
+BOTTOM_DISPLAY_REFRESH_FRAMES = 60
+
+
+class BottomDisplay(IntEnum):
+  OFF = 0
+  TORQUE_BAR = 1
+  LEAD_STATS = 2
+
+
+def read_bottom_display(params: Params) -> BottomDisplay:
+  try:
+    return BottomDisplay(int(params.get(BOTTOM_DISPLAY_PARAM, return_default=True)))
+  except (TypeError, ValueError):
+    return BottomDisplay.TORQUE_BAR
 
 
 class HudRenderer(Widget):
@@ -27,13 +46,22 @@ class HudRenderer(Widget):
     self._font_semi_bold = gui_app.font(FontWeight.SEMI_BOLD)
     self._font_display = gui_app.font(FontWeight.DISPLAY)
 
+    self._params = Params()
+    self._bottom_display = read_bottom_display(self._params)
+    self._bottom_display_refresh = BOTTOM_DISPLAY_REFRESH_FRAMES
     self._torque_bar = TorqueBar()
+    self._lead_stats = LeadStatsBubble()
     self._set_speed_alpha_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps)
 
   def set_can_draw_top_icons(self, can_draw_top_icons: bool):
     self._can_draw_top_icons = can_draw_top_icons
 
   def _update_state(self) -> None:
+    self._bottom_display_refresh -= 1
+    if self._bottom_display_refresh <= 0:
+      self._bottom_display_refresh = BOTTOM_DISPLAY_REFRESH_FRAMES
+      self._bottom_display = read_bottom_display(self._params)
+
     sm = ui_state.sm
     if sm.recv_frame["carState"] < ui_state.started_frame:
       self.is_cruise_set = False
@@ -50,7 +78,10 @@ class HudRenderer(Widget):
     self.is_cruise_set = 0 < self.set_speed < SET_SPEED_NA
 
   def _render(self, rect: rl.Rectangle) -> None:
-    self._torque_bar.render(rect)
+    if self._bottom_display == BottomDisplay.TORQUE_BAR:
+      self._torque_bar.render(rect)
+    elif self._bottom_display == BottomDisplay.LEAD_STATS:
+      self._lead_stats.render(rect)
     if self.is_cruise_set:
       self._draw_set_speed(rect)
 

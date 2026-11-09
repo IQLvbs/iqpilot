@@ -14,7 +14,6 @@ from iqpilot.selfdrive.ui.ui_state import ui_state, UIStatus, log_param_from_byt
 from iqpilot.system.ui.lib.application import gui_app
 from iqpilot.system.ui.lib.shader_polygon import draw_polygon, Gradient
 from iqpilot.system.ui.widgets import Widget
-from iqpilot.ui.mici.onroad.lead_metrics import MiciChevronMetrics
 from iqpilot.ui.onroad.model_renderer_helpers import BACKUP_PATH_WIDTH, ModelRendererHelpers
 from iqpilot.ui.theme import NeonTheme
 
@@ -76,7 +75,6 @@ class LeadVehicle:
 class ModelRenderer(ModelRendererHelpers, Widget):
   def __init__(self):
     super().__init__()
-    self.chevron_metrics = MiciChevronMetrics()
     self._longitudinal_control = False
     self._experimental_mode = False
     self._blend_filter = FirstOrderFilter(1.0, 0.25, 1 / gui_app.target_fps)
@@ -146,9 +144,7 @@ class ModelRenderer(ModelRendererHelpers, Widget):
       self._draw_path(sm)
 
     if radar_state is not None:
-      leads = self._screen_leads()
-      self._draw_lead_indicator(leads)
-      self.chevron_metrics.draw_lead_status(sm, radar_state, self._rect, leads)
+      self._draw_lead_indicator(self._screen_leads())
 
   def _update_model(self, lead, path_x_array):
     max_distance = np.clip(path_x_array[-1], MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE)

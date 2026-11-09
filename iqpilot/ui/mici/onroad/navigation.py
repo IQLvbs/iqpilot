@@ -4,13 +4,16 @@ import raylib_nb as rl
 
 from iqpilot.selfdrive.ui.ui_state import ui_state
 from iqpilot.system.ui.lib.application import FontWeight, gui_app
-from iqpilot.system.ui.lib.text_measure import measure_text_cached
+from iqpilot.ui.mici.onroad.bubble import ValueUnit, draw_bubble, faded
 
-ICON_SIZE = 44
-ICON_TOP = 12
-VALUE_SIZE = 22
-UNIT_SIZE = 15
-UNIT_COLOR = rl.Color(255, 255, 255, 190)
+ICON_SIZE = 32
+VALUE_SIZE = 30
+UNIT_SIZE = 17
+BUBBLE_HEIGHT = 46
+BUBBLE_MARGIN = 12
+PAD_LEFT = 10
+PAD_RIGHT = 16
+ICON_GAP = 6
 
 
 def format_distance(distance_m: float, metric: bool) -> tuple[str, str]:
@@ -26,8 +29,7 @@ class MiciNavigation:
     self._icon: str | None = None
     self._value = ""
     self._unit = ""
-    self._value_font = gui_app.font(FontWeight.BOLD)
-    self._unit_font = gui_app.font(FontWeight.MEDIUM)
+    self._text = ValueUnit(gui_app.font(FontWeight.BOLD), gui_app.font(FontWeight.MEDIUM), VALUE_SIZE, UNIT_SIZE)
 
   def update(self):
     self.active = False
@@ -61,17 +63,18 @@ class MiciNavigation:
     else:
       self._icon = f'direction_{kind}_{direction}.png'
 
-  def render(self, rect: rl.Rectangle):
-    if not self.active:
+  def render(self, rect: rl.Rectangle, alpha: float = 1.0):
+    if alpha < 1e-2 or not self._value:
       return
-    cx = rect.x + rect.width / 2
-    y = rect.y + ICON_TOP
+    icon_w = ICON_SIZE + ICON_GAP if self._icon else 0
+    width = PAD_LEFT + icon_w + self._text.width(self._value, self._unit) + PAD_RIGHT
+    bubble = rl.Rectangle(rect.x + rect.width - BUBBLE_MARGIN - width, rect.y + BUBBLE_MARGIN, width, BUBBLE_HEIGHT)
+    draw_bubble(bubble, alpha)
+
+    x = bubble.x + PAD_LEFT
+    mid = bubble.y + BUBBLE_HEIGHT / 2
     if self._icon:
       icon = gui_app.texture('navigation/' + self._icon, ICON_SIZE, ICON_SIZE)
-      rl.draw_texture(icon, int(cx - icon.width / 2), int(y), rl.WHITE)
-    y += ICON_SIZE + 4
-    for text, font, size, color in ((self._value, self._value_font, VALUE_SIZE, rl.WHITE),
-                                    (self._unit, self._unit_font, UNIT_SIZE, UNIT_COLOR)):
-      width = measure_text_cached(font, text, size).x
-      rl.draw_text_ex(font, text, rl.Vector2(cx - width / 2, y), size, 0, color)
-      y += size
+      rl.draw_texture(icon, int(x), int(mid - icon.height / 2), faded(rl.WHITE, alpha))
+      x += icon_w
+    self._text.draw(x, mid, self._value, self._unit, alpha)

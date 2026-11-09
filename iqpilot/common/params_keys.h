@@ -145,6 +145,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"SshEnabled", {PERSISTENT, BOOL}},
     {"TermsVersion", {PERSISTENT, STRING}},
     {"IQSteerEffortArc", {PERSISTENT, BOOL, "1"}},
+    {"IQMiciBottomDisplay", {PERSISTENT, INT, "1"}},
     {"TrainingVersion", {PERSISTENT, STRING}},
     {"UbloxAvailable", {PERSISTENT, BOOL}},
     {"UsbStorageEnabled", {PERSISTENT, BOOL}},
