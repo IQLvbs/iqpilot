@@ -2,6 +2,9 @@
 
 #include "llfdcan_declarations.h"
 
+uint8_t fdcan_spas2_owner = FDCAN_SPAS2_NO_OWNER;
+bool fdcan_layout_transition = false;
+
 // kbps multiplied by 10
 const uint32_t speeds[SPEEDS_ARRAY_SIZE] = {100U, 200U, 500U, 1000U, 1250U, 2500U, 5000U, 10000U};
 const uint32_t data_speeds[DATA_SPEEDS_ARRAY_SIZE] = {100U, 200U, 500U, 1000U, 1250U, 2500U, 5000U, 10000U, 20000U, 50000U};
@@ -108,7 +111,7 @@ bool llcan_set_speed(FDCAN_GlobalTypeDef *FDCANx, uint32_t speed, uint32_t data_
     if (silent) {
       FDCANx->CCCR |= FDCAN_CCCR_MON;
     }
-    ret = fdcan_exit_init(FDCANx);
+    ret = fdcan_layout_transition || fdcan_exit_init(FDCANx);
     if (!ret) {
       print(CAN_NAME_FROM_CANIF(FDCANx)); print(" set_speed timed out! (2)\n");
     }
@@ -176,21 +179,25 @@ bool llcan_init(FDCAN_GlobalTypeDef *FDCANx) {
     FDCANx->GFC &= ~(FDCAN_GFC_ANFE); // Accept extended frames to FIFO 0
     FDCANx->GFC &= ~(FDCAN_GFC_ANFS); // Accept standard frames to FIFO 0
 
-    uint32_t RxFIFO0SA = FDCAN_START_ADDRESS + (can_number * FDCAN_OFFSET);
-    uint32_t TxFIFOSA = RxFIFO0SA + (FDCAN_RX_FIFO_0_EL_CNT * FDCAN_RX_FIFO_0_EL_SIZE);
+    uint32_t rx_offset = fdcan_layout_rx_offset(can_number, fdcan_spas2_owner);
+    uint32_t tx_offset = fdcan_layout_tx_offset(can_number, fdcan_spas2_owner);
+    uint32_t dedicated_count = fdcan_layout_dedicated_count(can_number, fdcan_spas2_owner);
+    uint32_t RxFIFO0SA = FDCAN_START_ADDRESS + rx_offset;
+    uint32_t TxFIFOSA = FDCAN_START_ADDRESS + tx_offset;
 
     // RX FIFO 0
-    FDCANx->RXF0C |= (FDCAN_RX_FIFO_0_OFFSET + (can_number * FDCAN_OFFSET_W)) << FDCAN_RXF0C_F0SA_Pos;
-    FDCANx->RXF0C |= FDCAN_RX_FIFO_0_EL_CNT << FDCAN_RXF0C_F0S_Pos;
+    FDCANx->RXF0C = ((rx_offset / 4U) << FDCAN_RXF0C_F0SA_Pos) |
+                   (FDCAN_RX_FIFO_0_EL_CNT << FDCAN_RXF0C_F0S_Pos);
     // RX FIFO 0 switch to non-blocking (overwrite) mode
     FDCANx->RXF0C |= FDCAN_RXF0C_F0OM;
 
     // TX FIFO (mode set earlier)
-    FDCANx->TXBC |= (FDCAN_TX_FIFO_OFFSET + (can_number * FDCAN_OFFSET_W)) << FDCAN_TXBC_TBSA_Pos;
-    FDCANx->TXBC |= FDCAN_TX_FIFO_EL_CNT << FDCAN_TXBC_TFQS_Pos;
+    FDCANx->TXBC = ((tx_offset / 4U) << FDCAN_TXBC_TBSA_Pos) |
+                  (dedicated_count << FDCAN_TXBC_NDTB_Pos) |
+                  (FDCAN_TX_FIFO_EL_CNT << FDCAN_TXBC_TFQS_Pos);
 
     // Flush allocated RAM
-    uint32_t EndAddress = TxFIFOSA + (FDCAN_TX_FIFO_EL_CNT * FDCAN_TX_FIFO_EL_SIZE);
+    uint32_t EndAddress = TxFIFOSA + ((FDCAN_TX_FIFO_EL_CNT + dedicated_count) * FDCAN_TX_FIFO_EL_SIZE);
     for (uint32_t RAMcounter = RxFIFO0SA; RAMcounter < EndAddress; RAMcounter += 4U) {
         *(uint32_t *)(RAMcounter) = 0x00000000;
     }
@@ -207,12 +214,14 @@ bool llcan_init(FDCAN_GlobalTypeDef *FDCANx) {
     FDCANx->ILS |= FDCAN_ILS_TFEL;
     FDCANx->IE |= FDCAN_IE_TFEE; // Tx FIFO empty
 
-    ret = fdcan_exit_init(FDCANx);
+    ret = fdcan_layout_transition || fdcan_exit_init(FDCANx);
     if(!ret) {
       print(CAN_NAME_FROM_CANIF(FDCANx)); print(" llcan_init timed out (2)!\n");
     }
 
-    llcan_irq_enable(FDCANx);
+    if (!fdcan_layout_transition) {
+      llcan_irq_enable(FDCANx);
+    }
 
   } else {
     print(CAN_NAME_FROM_CANIF(FDCANx)); print(" llcan_init timed out (1)!\n");

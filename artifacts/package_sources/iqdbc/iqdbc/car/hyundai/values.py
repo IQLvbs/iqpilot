@@ -86,6 +86,7 @@ class HyundaiSafetyFlags(IntFlag):
   CANFD_LKA_STEERING_ALT = 128
   FCEV_GAS = 256
   ALT_LIMITS_2 = 512
+  CANFD_SPAS2_BLINKERS = 1024
 
 
 class HyundaiSafetyFlagsIQ:
@@ -162,6 +163,9 @@ class HyundaiFlags(IntFlag):
   FCEV = 2 ** 25
 
   ALT_LIMITS_2 = 2 ** 26
+
+  # Independently qualified SPAS2-only receiver; never enables the HDA2 parking ECU path.
+  CANFD_SPAS2_BLINKERS = 2 ** 27
 
   CC_ONLY_CAR = 2 ** 31
 

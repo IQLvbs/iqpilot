@@ -17,6 +17,10 @@
 #define FDCAN_OFFSET 3384UL // bytes for each FDCAN module, equally
 #define FDCAN_OFFSET_W 846UL // words for each FDCAN module, equally
 
+#include "fdcan_spas2_layout.h"
+extern uint8_t fdcan_spas2_owner;
+extern bool fdcan_layout_transition;
+
 // FDCAN_RX_FIFO_0_EL_CNT + FDCAN_TX_FIFO_EL_CNT can't exceed 47 elements (47 * 72 bytes = 3,384 bytes) per FDCAN module
 
 // RX FIFO 0
@@ -33,6 +37,13 @@
 #define FDCAN_TX_FIFO_DATA_SIZE 64UL // bytes
 #define FDCAN_TX_FIFO_EL_SIZE (FDCAN_TX_FIFO_HEAD_SIZE + FDCAN_TX_FIFO_DATA_SIZE)
 #define FDCAN_TX_FIFO_OFFSET (FDCAN_RX_FIFO_0_OFFSET + (FDCAN_RX_FIFO_0_EL_CNT * FDCAN_RX_FIFO_0_EL_W_SIZE))
+
+_Static_assert(FDCAN_NORMAL_BANK_BYTES == FDCAN_OFFSET, "FDCAN bank geometry changed");
+_Static_assert(FDCAN_NORMAL_RX_BYTES == (FDCAN_RX_FIFO_0_EL_CNT * FDCAN_RX_FIFO_0_EL_SIZE), "FDCAN RX geometry changed");
+_Static_assert(FDCAN_SPAS2_BUFFER_BYTES == FDCAN_TX_FIFO_EL_SIZE, "FDCAN TX element geometry changed");
+// ST ES0491 section 2.22.2: one pending FIFO element avoids the dedicated-TX
+// buffer/FIFO ordering inversion erratum when both are enabled.
+_Static_assert(FDCAN_TX_FIFO_EL_CNT == 1UL, "Mixed dedicated/FIFO TX requires the one-element workaround");
 
 #define CAN_NAME_FROM_CANIF(CAN_DEV) (((CAN_DEV)==FDCAN1) ? "FDCAN1" : (((CAN_DEV) == FDCAN2) ? "FDCAN2" : "FDCAN3"))
 #define CAN_NUM_FROM_CANIF(CAN_DEV) (((CAN_DEV)==FDCAN1) ? 0UL : (((CAN_DEV) == FDCAN2) ? 1UL : 2UL))

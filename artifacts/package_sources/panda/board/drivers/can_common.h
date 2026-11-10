@@ -1,6 +1,9 @@
 #pragma once
 
 #include "can_common_declarations.h"
+#ifdef STM32H7
+#include "board/drivers/fdcan_declarations.h"
+#endif
 
 uint32_t safety_tx_blocked = 0;
 uint32_t safety_rx_invalid = 0;
@@ -142,6 +145,9 @@ bus_config_t bus_config[PANDA_CAN_CNT] = {
 };
 
 void can_init_all(void) {
+  #ifdef STM32H7
+  fdcan_spas2_layout_begin();
+  #endif
   for (uint8_t i=0U; i < PANDA_CAN_CNT; i++) {
     bus_config[i].canfd_enabled = false;
     // NOTE: do NOT reset can_data_speed here. Matching stock panda, can_init_all() only clears
@@ -152,9 +158,17 @@ void can_init_all(void) {
     can_clear(can_queues[i]);
     (void)can_init(i);
   }
+  #ifdef STM32H7
+  fdcan_spas2_layout_end();
+  #endif
 }
 
 void can_set_orientation(bool flipped) {
+  #ifdef STM32H7
+  if (bus_config[0].can_num_lookup != (flipped ? 2U : 0U)) {
+    fdcan_spas2_orientation_changing();
+  }
+  #endif
   bus_config[0].bus_lookup = flipped ? 2U : 0U;
   bus_config[0].can_num_lookup = flipped ? 2U : 0U;
   bus_config[2].bus_lookup = flipped ? 0U : 2U;
@@ -397,8 +411,28 @@ bool can_check_checksum(CANPacket_t *packet) {
 }
 
 void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
-  if (skip_tx_hook || safety_tx_hook(to_push) != 0) {
+  bool allowed;
+  if (!skip_tx_hook && hyundai_spas2_enabled() && (GET_ADDR(to_push) == 0x16A) && (GET_BUS(to_push) == 0U)) {
+    // Keep feature admission's epoch/priming updates atomic with RX revocation.
+    ENTER_CRITICAL();
+    allowed = safety_tx_hook(to_push) != 0;
+    EXIT_CRITICAL();
+  } else {
+    allowed = skip_tx_hook || (safety_tx_hook(to_push) != 0);
+  }
+  if (allowed) {
     if (bus_number < PANDA_CAN_CNT) {
+      #ifdef STM32H7
+      if (fdcan_spas2_route(to_push, bus_number, skip_tx_hook)) {
+        return;
+      }
+      #else
+      // CAN-FD feature packets must never enter a classic-CAN transmit FIFO.
+      if (hyundai_spas2_enabled() && (GET_ADDR(to_push) == 0x16A) && (bus_number == 0U)) {
+        safety_tx_blocked += 1U;
+        return;
+      }
+      #endif
       // add CAN packet to send queue
       tx_buffer_overflow += can_push(can_queues[bus_number], to_push) ? 0U : 1U;
       process_can(CAN_NUM_FROM_BUS_NUM(bus_number));

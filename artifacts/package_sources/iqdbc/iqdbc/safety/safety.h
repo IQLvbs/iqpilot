@@ -223,6 +223,8 @@ bool safety_rx_hook(const CANPacket_t *msg) {
     heartbeat_engaged_mismatches = 0;
   }
 
+  hyundai_spas2_rx_observe(msg);
+
   return valid;
 }
 

@@ -78,6 +78,13 @@ void set_timer(uint32_t t);
 
 void safety_tick_current_safety_config();
 bool safety_config_valid();
+void spas2_test_rx_context(bool valid);
+bool spas2_test_packet_valid(const CANPacket_t *msg);
+bool spas2_test_enabled(void);
+void spas2_test_invalidate(void);
+void spas2_test_sender_conflict(void);
+void spas2_test_reset_gear(void);
+void spas2_test_bad_rx(int kind);
 
 void init_tests(void);
 

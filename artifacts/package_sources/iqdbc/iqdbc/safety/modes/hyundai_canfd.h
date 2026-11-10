@@ -2,6 +2,7 @@
 
 #include "iqdbc/safety/declarations.h"
 #include "iqdbc/safety/modes/hyundai_common.h"
+#include "iqdbc/safety/modes/hyundai_spas2.h"
 
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #pragma GCC diagnostic ignored "-Wunused-function"
@@ -137,6 +138,18 @@ const CanMsg HYUNDAI_CANFD_HDA1_CAMERA_SCC_TX_MSGS[] = {
 const CanMsg HYUNDAI_CANFD_HDA1_CAMERA_SCC_LONG_TX_MSGS[] = {
   HYUNDAI_CANFD_HDA1_TX_MSGS_COMMON(true)
   HYUNDAI_CANFD_HDA1_CAMERA_SCC_EXTRA_TX_MSGS
+};
+
+// The opt-in capability is confined to these HDA1 camera-SCC profiles.
+const CanMsg HYUNDAI_CANFD_HDA1_CAMERA_SCC_SPAS2_TX_MSGS[] = {
+  HYUNDAI_CANFD_HDA1_TX_MSGS_COMMON(false)
+  HYUNDAI_CANFD_HDA1_CAMERA_SCC_EXTRA_TX_MSGS
+  {0x16A, 0, 32, .check_relay = false},
+};
+const CanMsg HYUNDAI_CANFD_HDA1_CAMERA_SCC_LONG_SPAS2_TX_MSGS[] = {
+  HYUNDAI_CANFD_HDA1_TX_MSGS_COMMON(true)
+  HYUNDAI_CANFD_HDA1_CAMERA_SCC_EXTRA_TX_MSGS
+  {0x16A, 0, 32, .check_relay = false},
 };
 
 
@@ -417,6 +430,10 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *to_push) {
 
 static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
 
+  if (GET_ADDR(to_send) == 0x16A) {
+    return hyundai_spas2_tx_hook(to_send);
+  }
+
   bool tx = true;
   int addr = GET_ADDR(to_send);
   bool violation = false;
@@ -508,6 +525,7 @@ static safety_config hyundai_canfd_init(uint16_t param) {
   }
 
   hyundai_common_init(param);
+  hyundai_spas2_init(GET_FLAG(param, HYUNDAI_PARAM_CANFD_SPAS2_BLINKERS) && !hyundai_canfd_hda2 && hyundai_camera_scc);
 
   gen_crc_lookup_table_16(0x1021, hyundai_canfd_crc_lut);
   hyundai_canfd_alt_buttons = GET_FLAG(param, HYUNDAI_PARAM_CANFD_ALT_BUTTONS);
@@ -593,6 +611,10 @@ static safety_config hyundai_canfd_init(uint16_t param) {
     }
   }
 
+  if (hyundai_spas2_capability) {
+    ret.tx_msgs = hyundai_longitudinal ? HYUNDAI_CANFD_HDA1_CAMERA_SCC_LONG_SPAS2_TX_MSGS : HYUNDAI_CANFD_HDA1_CAMERA_SCC_SPAS2_TX_MSGS;
+    ret.tx_msgs_len = hyundai_longitudinal ? sizeof(HYUNDAI_CANFD_HDA1_CAMERA_SCC_LONG_SPAS2_TX_MSGS) / sizeof(CanMsg) : sizeof(HYUNDAI_CANFD_HDA1_CAMERA_SCC_SPAS2_TX_MSGS) / sizeof(CanMsg);
+  }
   return ret;
 }
 

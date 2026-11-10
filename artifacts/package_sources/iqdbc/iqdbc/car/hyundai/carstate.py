@@ -186,6 +186,7 @@ class CarState(CarStateBase):
     self.time_zone = "UTC"
 
     self.cp = None
+    self.spas2_native_sender_seen = False
     self.cp_cam = None
     self.cp_alt = None
     self.controls_ready_count = 0
@@ -816,6 +817,8 @@ class CarState(CarStateBase):
 
   def get_can_parsers_canfd(self, CP, CP_IQ=None):
     msgs = []
+    if CP.flags & HyundaiFlags.CANFD_SPAS2_BLINKERS:
+      msgs += [("GEAR_ALT", 100), ("WHEEL_SPEEDS", 100), ("TCS", 100), ("BLINKERS", 5)]
     if not (CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS):
       # TODO: this can be removed once we add dynamic support to vl_all
       msgs += [

@@ -385,6 +385,9 @@ class Car:
       started = time.monotonic_ns()
       now_nanos = self.can_log_mono_time if REPLAY else time.monotonic_ns()
       invalidate_stale_longitudinal_comfort(cc_iq, now_nanos, self.sm.logMonoTime['iqCarControl'], self.sm.valid['iqCarControl'])
+      context_hook = getattr(self.CI.CC, "set_car_control_context", None)
+      if context_hook is not None:
+        context_hook(self.sm.logMonoTime['carControl'], self.sm.all_checks(['carControl']))
       if self._pair_actuator_feedback:
         request_time = self.sm.logMonoTime['carControl'] if self.sm.all_checks(['carControl']) else 0
         feedback = AppliedActuators.capture(CC, request_time, now_nanos)
@@ -427,6 +430,9 @@ class Car:
 
         started = time.monotonic_ns()
         now_nanos = self.can_log_mono_time if REPLAY else time.monotonic_ns()
+        context_hook = getattr(self.CI.CC, "set_car_control_context", None)
+        if context_hook is not None:
+          context_hook(0, False)
         if self._pair_actuator_feedback:
           feedback = AppliedActuators.capture(fallback_cc, 0, now_nanos)
         self.last_actuators_output, can_sends = self.CI.apply(fallback_cc.as_reader(), cc_iq, now_nanos)
