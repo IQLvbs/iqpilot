@@ -40,9 +40,6 @@ hardware-transmission check are used: TX-hook admission alone cannot expire
 a frame already queued in the CAN controller. Cleanup must affect only feature
 traffic.
 
-The private navigation producer’s Hyundai eligibility and its response to
-lamp feedback remain unverified; this integration does not modify that binary.
-
 The MCU lease measures time since packet admission. SPAS2 contains no original
 CarControl timestamp, so this does not prove end-to-end command age. A
 replace-latest buffer can also create gaps in the wire counter sequence.
@@ -50,6 +47,35 @@ replace-latest buffer can also create gaps in the wire counter sequence.
 This version generates no MCU neutral packets. Dropping or aborting stale output
 does not establish that the receiver released a lamp request. Host loss, reset,
 SILENT, bus faults and ignition transitions may prevent any neutral transmission.
+
+## Navigation integration
+
+The private navigation producer is unchanged. Its next build needs to admit this
+Tucson and publish the existing `CarControl` fields; a vehicle allowlist change
+alone does not activate or qualify the lamp controller.
+
+- Use the separate `HyundaiFlags.CANFD_SPAS2_BLINKERS` capability for this path.
+  Do not set the existing HDA2 `ENABLE_BLINKERS` flag or disable a parking ECU.
+- Publish exactly one of `leftBlinker` or `rightBlinker` while requesting that
+  direction, with `enabled` and `latActive` true. Continuously refresh valid
+  `carControl` messages; the controller rejects source age above 100 ms. Card
+  supplies the original publisher timestamp, so no navigation timestamp API is
+  needed.
+- Publish both directions false to cancel and to rearm before another request.
+  The controller must first observe a fresh neutral request. A held direction
+  cannot restart itself after the ten-second direction limit.
+- Allow about 3.1 seconds of neutral preparation, plus scheduling/transport,
+  before directional output. Keep the requested direction valid throughout
+  that interval; a brief pulse does not activate the lamps. Validate navigation
+  lead time against the actual maneuver.
+- Review how the private producer interprets `CarState.leftBlinker` and
+  `rightBlinker`: these are lamp feedback, not independent proof of stalk input.
+  Its response to lamps activated by its own request still needs verification.
+
+A combined stable-release build has been installed and boot-checked with the
+expected controller imports and Panda firmware signature. Lamp output remains
+disabled; no positive qualification record was installed. This startup check
+does not qualify navigation operation or add to the physical lamp evidence above.
 
 ## Activation remains unqualified
 
