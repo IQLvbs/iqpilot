@@ -34,6 +34,23 @@ READY_COUNT_OK = 200
 TRAILER_DISCONNECT_GRACE_FRAMES = int(5.0 / DT_CTRL)
 EV_MODE_STATUS_TIMEOUT_NS = 500_000_000
 
+# The camera-SCC safety profile blocks these stock frames when the relay closes.
+# Register them before that handoff, and cache only successfully parsed frames.
+TUCSON_CAMERA_SCC_REPLACEMENTS = (
+  (Bus.pt, "TCS", "tcs", 50),
+  (Bus.pt, "MDPS", "mdps", 100),
+  (Bus.cam, "SCC_CONTROL", "scc_control", 50),
+  (Bus.cam, "LFA", "lfa", 100),
+  (Bus.cam, "LFAHDA_CLUSTER", "lfahda_cluster", 20),
+)
+
+
+def tucson_camera_scc_sync(CP):
+  return (CP.carFingerprint == CAR.HYUNDAI_TUCSON_4TH_GEN and CP.openpilotLongitudinalControl
+          and CP.flags & HyundaiFlags.CANFD and CP.flags & HyundaiFlags.CANFD_CAMERA_SCC
+          and not CP.flags & (HyundaiFlags.CANFD_HDA2 | HyundaiFlags.ANGLE_CONTROL)
+          and CanBus(CP).ECAN == 0)
+
 
 def _get_ev_mode_state(cp: CANParser) -> tuple[bool, bool]:
   timestamps = cp.ts_nanos.get(EV_MODE_STATUS_MSG)
@@ -141,6 +158,10 @@ class CarState(CarStateBase):
     self.op_params = Params()
 
     self.main_enabled = True if self.op_params.get_int("AutoEngage") == 2 else False
+    self.panda_sync = bool(tucson_camera_scc_sync(CP))
+    # Latched until the next apply; CAN updates can arrive without CarControl.
+    self.lfa_rejected = False
+    self.lfa_echo_nanos = 0
     self.gear_shifter = GearShifter.drive # Gear_init for Nexo ?? unknown 21.02.23.LSW
 
     self.totalDistance = 0.0
@@ -197,6 +218,14 @@ class CarState(CarStateBase):
     self.trailer_status = None
 
   def monitor_fingerprint(self, can_parsers, canfd):
+    if self.panda_sync:
+      for bus, name, attr, _ in TUCSON_CAMERA_SCC_REPLACEMENTS:
+        parser = can_parsers[bus]
+        address = parser.dbc.name_to_msg[name].address
+        if (getattr(self, attr) is None and address in parser.dat
+            and any(parser.ts_nanos[address].values())):
+          setattr(self, attr, parser.vl[name])
+
     if self.controls_ready_count <= READY_COUNT_OK:
       if Params().get_bool("ControlsReady"):
         self.controls_ready_count += 1
@@ -220,6 +249,10 @@ class CarState(CarStateBase):
         if parser is None:
           return False
         add_if_seen(parser, name, ignore_counter)
+        if self.panda_sync and any(attr == replacement[2] for replacement in TUCSON_CAMERA_SCC_REPLACEMENTS):
+          address = parser.dbc.name_to_msg[name].address
+          if address not in parser.dat or not any(parser.ts_nanos[address].values()):
+            return False
         if name in parser.vl:   # 등록 성공했을 때만
           setattr(self, attr, parser.vl[name])
           return True
@@ -525,6 +558,16 @@ class CarState(CarStateBase):
       self.speedLimitDistance = self.totalDistance
     ret.speedLimitDistance = self.speedLimitDistance - self.totalDistance
 
+  def note_lfa_rejections(self, can_packets):
+    # Source 192 is Panda's rejected TX echo on logical bus0. Stock camera
+    # frames, returned frames and another bus must not reset this limiter.
+    newest = self.lfa_echo_nanos
+    for nanos, frames in can_packets:
+      if nanos > self.lfa_echo_nanos:
+        self.lfa_rejected |= any(addr == 0x12A and src == 192 and len(data) == 16 for addr, data, src in frames)
+        newest = max(newest, nanos)
+    self.lfa_echo_nanos = newest
+
   def update_canfd(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
@@ -823,6 +866,10 @@ class CarState(CarStateBase):
       ]
 
     CAN = CanBus(CP)
+    cam_msgs = []
+    if tucson_camera_scc_sync(CP):
+      msgs += [(name, hz) for bus, name, _, hz in TUCSON_CAMERA_SCC_REPLACEMENTS if bus == Bus.pt]
+      cam_msgs = [(name, hz) for bus, name, _, hz in TUCSON_CAMERA_SCC_REPLACEMENTS if bus == Bus.cam]
     pt_parser = CANParser(DBC[CP.carFingerprint][Bus.pt], msgs, CAN.ECAN)
     if CP.extFlags & HyundaiExtFlags.EV_MODE_STATUS_230:
       # Display-only while the signal is fleet-validated: checksum and freshness
@@ -831,7 +878,7 @@ class CarState(CarStateBase):
 
     return {
       Bus.pt: pt_parser,
-      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CAN.CAM),
+      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], cam_msgs, CAN.CAM),
       Bus.alt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CAN.ACAN),
     }
 

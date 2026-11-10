@@ -259,6 +259,11 @@ class CarController(CarControllerBase):
 
     # steering torque
     new_torque = int(round(actuators.torque * self.params.STEER_MAX))
+    # Native torque checks reset their reference after a violation. Continuing
+    # from the unsent torque can otherwise reject every subsequent frame.
+    if CS.panda_sync and CS.lfa_rejected:
+      self.apply_torque_last = 0
+      CS.lfa_rejected = False
     apply_torque = apply_driver_steer_torque_limits(new_torque, self.apply_torque_last, CS.out.steeringTorque, self.params)
 
     # >90 degree steering fault prevention
