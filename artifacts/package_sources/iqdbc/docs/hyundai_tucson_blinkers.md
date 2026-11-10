@@ -29,7 +29,7 @@ validity, checks actual CAN receive timestamps, limits direction duration, and s
 a finite neutral sequence on cancellation. A held request cannot continuously
 restart itself after its duration limit. One CANPacker owns the packet counter.
 The filtered CarState lamp status does not establish independent driver intent.
-After idle, a new request first sends a bounded neutral preamble lasting about
+Each new directional request first sends a bounded neutral preamble lasting about
 3.1 seconds, plus scheduling and transport. It activates only if that same request remains fresh and all
 gates still hold. This latency requires actual navigation lead-time validation.
 
@@ -59,11 +59,13 @@ alone does not activate or qualify the lamp controller.
 - Publish exactly one of `leftBlinker` or `rightBlinker` while requesting that
   direction, with `enabled` and `latActive` true. Continuously refresh valid
   `carControl` messages; the controller rejects source age above 100 ms. Card
-  supplies the original publisher timestamp, so no navigation timestamp API is
-  needed.
+  supplies the original publisher timestamp. This establishes CarControl
+  freshness; the private producer must still validate its navigation input.
 - Publish both directions false to cancel and to rearm before another request.
   The controller must first observe a fresh neutral request. A held direction
-  cannot restart itself after the ten-second direction limit.
+  cannot restart itself after the ten-second direction limit. After directional
+  output, keep both fields false through the finite release drain before raising
+  a new request; requests during that drain are discarded, not queued.
 - Allow about 3.1 seconds of neutral preparation, plus scheduling/transport,
   before directional output. Keep the requested direction valid throughout
   that interval; a brief pulse does not activate the lamps. Validate navigation
