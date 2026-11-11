@@ -177,11 +177,6 @@ class CarInterfaceBase(ABC, CarInterfaceBaseIQ):
     return cls._get_params_iq(car_params, car_params_iq, candidate, fingerprint, car_fw, alpha_long, is_release_iq, docs)
 
   @staticmethod
-  def configure_post_fingerprint(CP: structs.CarParams, fingerprint: dict[int, dict[int, int]]) -> None:
-    """Optional capabilities requiring the identified VIN, assigned after get_params."""
-    pass
-
-  @staticmethod
   @abstractmethod
   def _get_params(ret: structs.CarParams, candidate, fingerprint: dict[int, dict[int, int]],
                   car_fw: list[structs.CarParams.CarFw], alpha_long: bool, is_release: bool, docs: bool) -> structs.CarParams:

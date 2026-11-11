@@ -125,9 +125,6 @@ static volatile bool tick_sample_pending = false;
 // RX DMA re-arm long enough for the host to clock into an unarmed peripheral
 // (checksum failures -> NACK retry storms -> multi-second CAN blackouts).
 static void tick_sample_poll(void) {
-  #ifdef STM32H7
-  fdcan_spas2_poll();
-  #endif
   if (tick_sample_pending) {
     tick_sample_pending = false;
     harness_tick();

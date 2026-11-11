@@ -22,42 +22,6 @@ void can_set_checksum(CANPacket_t *packet) {
 
 #include "iqdbc/safety/safety.h"
 
-// Test-only controls for the feature's stricter context, independent of the
-// legacy global safety_tick cadence. Production populates these from RX.
-void spas2_test_rx_context(bool valid) {
-  for (int i = 0; i < current_safety_config.rx_checks_len; i++) {
-    RxStatus *s = &current_safety_config.rx_checks[i].status;
-    s->msg_seen = valid;
-    s->valid_checksum = valid;
-    s->valid_quality_flag = valid;
-    s->wrong_counters = 0;
-    s->last_timestamp = timer_cnt;
-  }
-  hyundai_spas2_gear_seen = valid;
-  hyundai_spas2_gear_valid = valid;
-  hyundai_spas2_gear_drive = valid;
-  hyundai_spas2_gear_at = timer_cnt;
-}
-bool spas2_test_packet_valid(const CANPacket_t *msg) {
-  return hyundai_spas2_packet_valid(msg, timer_cnt);
-}
-bool spas2_test_enabled(void) { return hyundai_spas2_enabled(); }
-void spas2_test_invalidate(void) { hyundai_spas2_invalidate(); }
-void spas2_test_sender_conflict(void) { hyundai_spas2_sender_conflict(); }
-void spas2_test_reset_gear(void) {
-  hyundai_spas2_gear_seen = false;
-  hyundai_spas2_gear_valid = false;
-  hyundai_spas2_gear_drive = false;
-}
-void spas2_test_bad_rx(int kind) {
-  RxStatus *s = &current_safety_config.rx_checks[0].status;
-  if (kind == 0) { s->msg_seen = false; }
-  if (kind == 1) { s->valid_checksum = false; }
-  if (kind == 2) { s->valid_quality_flag = false; }
-  if (kind == 3) { s->wrong_counters = 1; }
-  if (kind == 4) { s->last_timestamp = timer_cnt - 100001U; }
-}
-
 void safety_tick_current_safety_config() {
   safety_tick(&current_safety_config);
 }

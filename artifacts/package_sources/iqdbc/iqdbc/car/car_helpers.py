@@ -171,7 +171,6 @@ def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multip
   CP.carFw = car_fw
   CP.fingerprintSource = source
   CP.fuzzyFingerprint = not exact_match
-  CarInterface.configure_post_fingerprint(CP, fingerprints)
   CP_IQ = CarInterface.get_params_iq(CP, candidate, fingerprints, car_fw, alpha_long_allowed, is_release_iq, docs=False)
 
   iqpilot_interfaces(CarInterface, CP, CP_IQ, init_params_list_iq, can_recv, can_send)

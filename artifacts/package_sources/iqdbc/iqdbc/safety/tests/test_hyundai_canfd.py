@@ -186,3 +186,120 @@ def test_canfd_hda2_diagnostic_payload_is_restricted(safety):
   safety.init_tests()
   assert safety.safety_tx_hook(packet(0x730, 1, 8, dict(enumerate(TESTER_PRESENT))))
   assert not safety.safety_tx_hook(packet(0x730, 1, 8, {0: 3, 1: 0x22}))
+
+
+# SPAS2 turn signals: BLINKER_CONTROL is the top three bits of byte 16
+SPAS2_NEUTRAL, SPAS2_LEFT, SPAS2_RIGHT = 0x00, 0x60, 0x80
+SPAS2_PARAMS = (
+  HyundaiSafetyFlags.CAMERA_SCC | HyundaiSafetyFlags.CANFD_SPAS2_BLINKERS,
+  # the Tucson it was tried on
+  HyundaiSafetyFlags.CAMERA_SCC | HyundaiSafetyFlags.LONG | HyundaiSafetyFlags.CANFD_ALT_BUTTONS | HyundaiSafetyFlags.CANFD_SPAS2_BLINKERS,
+)
+
+
+def spas2(blinker: int, bus: int = 0, length: int = 32, other: dict[int, int] | None = None):
+  return packet(0x16A, bus, length, {16: blinker, **(other or {})})
+
+
+@pytest.mark.parametrize("param", (
+  0,
+  HyundaiSafetyFlags.CAMERA_SCC,
+  HyundaiSafetyFlags.CAMERA_SCC | HyundaiSafetyFlags.LONG | HyundaiSafetyFlags.CANFD_ALT_BUTTONS,
+  HyundaiSafetyFlags.CANFD_SPAS2_BLINKERS,  # HDA1 with radar SCC
+  HyundaiSafetyFlags.CANFD_SPAS2_BLINKERS | HyundaiSafetyFlags.LONG,
+  HyundaiSafetyFlags.CANFD_SPAS2_BLINKERS | HyundaiSafetyFlags.CANFD_LKA_STEERING,  # HDA2
+  HyundaiSafetyFlags.CANFD_SPAS2_BLINKERS | HyundaiSafetyFlags.CANFD_LKA_STEERING | HyundaiSafetyFlags.CAMERA_SCC | HyundaiSafetyFlags.LONG,
+))
+def test_canfd_spas2_needs_opt_in_on_hda1_camera_scc(safety, param):
+  safety.set_safety_hooks(CarParams.SafetyModel.hyundaiCanfd, param)
+  safety.init_tests()
+  safety.set_controls_allowed(True)
+  for blinker in (SPAS2_NEUTRAL, SPAS2_LEFT, SPAS2_RIGHT):
+    assert not safety.safety_tx_hook(spas2(blinker))
+
+  # and a parking ECU sending it is nobody's business here
+  safety.safety_rx_hook(spas2(SPAS2_NEUTRAL))
+  assert not safety.get_relay_malfunction()
+
+
+@pytest.mark.parametrize("param", SPAS2_PARAMS)
+def test_canfd_spas2_direction_needs_controls_allowed(safety, param):
+  safety.set_safety_hooks(CarParams.SafetyModel.hyundaiCanfd, param)
+  safety.init_tests()
+
+  # neutral is always allowed, so a request can be released after disengaging
+  safety.set_controls_allowed(False)
+  assert safety.safety_tx_hook(spas2(SPAS2_NEUTRAL))
+  assert not safety.safety_tx_hook(spas2(SPAS2_LEFT))
+  assert not safety.safety_tx_hook(spas2(SPAS2_RIGHT))
+
+  safety.set_controls_allowed(True)
+  for blinker in (SPAS2_NEUTRAL, SPAS2_LEFT, SPAS2_RIGHT):
+    assert safety.safety_tx_hook(spas2(blinker))
+
+
+@pytest.mark.parametrize("param", SPAS2_PARAMS)
+def test_canfd_spas2_payload_is_limited_to_turn_signals(safety, param):
+  safety.set_safety_hooks(CarParams.SafetyModel.hyundaiCanfd, param)
+  safety.init_tests()
+  safety.set_controls_allowed(True)
+
+  # no hazards (0x20), no hazard button backlight (0x40), nothing in the low bits
+  for blinker in range(256):
+    assert safety.safety_tx_hook(spas2(blinker)) == (blinker in (SPAS2_NEUTRAL, SPAS2_LEFT, SPAS2_RIGHT))
+
+  # bytes 0-2 are the checksum and counter, everything else stays empty
+  assert safety.safety_tx_hook(spas2(SPAS2_RIGHT, other={0: 0xAB, 1: 0xCD, 2: 0xEF}))
+  for index in range(3, 32):
+    if index != 16:
+      assert not safety.safety_tx_hook(spas2(SPAS2_NEUTRAL, other={index: 1}))
+      assert not safety.safety_tx_hook(spas2(SPAS2_RIGHT, other={index: 0x80}))
+
+  # car-side bus and full length only
+  for bus, length in ((1, 32), (2, 32), (0, 24), (0, 48)):
+    assert not safety.safety_tx_hook(spas2(SPAS2_RIGHT, bus=bus, length=length))
+
+
+@pytest.mark.parametrize("param", SPAS2_PARAMS)
+def test_canfd_spas2_must_be_the_only_sender(safety, param):
+  safety.set_safety_hooks(CarParams.SafetyModel.hyundaiCanfd, param)
+  safety.init_tests()
+  safety.set_controls_allowed(True)
+
+  # nothing behind the relay may reach the car side on this address
+  assert safety.safety_fwd_hook(2, 0x16A) == -1
+
+  # the same address on another bus is not a conflict
+  safety.safety_rx_hook(spas2(SPAS2_NEUTRAL, bus=2))
+  assert not safety.get_relay_malfunction()
+  assert safety.safety_tx_hook(spas2(SPAS2_RIGHT))
+
+  # another sender on the car side is: stop everything
+  safety.safety_rx_hook(spas2(SPAS2_NEUTRAL, bus=0))
+  assert safety.get_relay_malfunction()
+  assert not safety.safety_tx_hook(spas2(SPAS2_NEUTRAL))
+  assert not safety.safety_tx_hook(spas2(SPAS2_RIGHT))
+
+
+@pytest.mark.parametrize("param", SPAS2_PARAMS)
+def test_canfd_spas2_leaves_the_other_rules_alone(safety, param):
+  messages = (
+    lambda: canfd_steer(0x12A, 16, 2),
+    lambda: canfd_steer(0x12A, 16, 500),
+    lambda: canfd_accel(100),
+    lambda: canfd_accel(1000),
+    lambda: packet(0xEA, 2, 24),
+    lambda: packet(0x2AF, 2, 8),
+    lambda: packet(0x165, 0, 24),  # SPAS1 stays blocked
+    lambda: packet(0x123, 0, 8),
+  )
+
+  def decisions(safety_param, controls_allowed):
+    safety.set_safety_hooks(CarParams.SafetyModel.hyundaiCanfd, safety_param)
+    safety.init_tests()
+    safety.set_controls_allowed(controls_allowed)
+    return [bool(safety.safety_tx_hook(message())) for message in messages] + \
+           [safety.safety_fwd_hook(bus, addr) for bus in (0, 2) for addr in (0x12A, 0x1A0, 0xEA, 0x175, 0x4B9)]
+
+  for controls_allowed in (False, True):
+    assert decisions(param, controls_allowed) == decisions(param & ~HyundaiSafetyFlags.CANFD_SPAS2_BLINKERS, controls_allowed)

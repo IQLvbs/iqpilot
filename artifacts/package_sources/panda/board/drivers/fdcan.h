@@ -4,8 +4,6 @@
 
 FDCAN_GlobalTypeDef *cans[PANDA_CAN_CNT] = {FDCAN1, FDCAN2, FDCAN3};
 
-#include "fdcan_spas2.h"
-
 static bool can_set_speed(uint8_t can_number) {
   bool ret = true;
   FDCAN_GlobalTypeDef *FDCANx = CANIF_FROM_CAN_NUM(can_number);
@@ -102,7 +100,7 @@ void process_can(uint8_t can_number) {
         if (can_check_checksum(&to_send)) {
           can_health[can_number].total_tx_cnt += 1U;
 
-          uint32_t TxFIFOSA = FDCAN_START_ADDRESS + fdcan_layout_tx_offset(can_number, fdcan_spas2_owner);
+          uint32_t TxFIFOSA = FDCAN_START_ADDRESS + (can_number * FDCAN_OFFSET) + (FDCAN_RX_FIFO_0_EL_CNT * FDCAN_RX_FIFO_0_EL_SIZE);
           // get the index of the next TX FIFO element (0 to FDCAN_TX_FIFO_EL_CNT - 1)
           uint32_t tx_index = (FDCANx->TXFQS >> FDCAN_TXFQS_TFQPI_Pos) & 0x1FU;
           // only send if we have received a packet
@@ -148,7 +146,6 @@ void process_can(uint8_t can_number) {
       }
     }
     EXIT_CRITICAL();
-    fdcan_spas2_poll();
   }
 }
 
@@ -173,7 +170,7 @@ void can_rx(uint8_t can_number) {
       can_health[can_number].total_rx_lost_cnt += 1U; // At least one message was lost
     }
 
-    uint32_t RxFIFO0SA = FDCAN_START_ADDRESS + fdcan_layout_rx_offset(can_number, fdcan_spas2_owner);
+    uint32_t RxFIFO0SA = FDCAN_START_ADDRESS + (can_number * FDCAN_OFFSET);
     CANPacket_t to_push;
     canfd_fifo *fifo;
 
@@ -238,8 +235,6 @@ void can_rx(uint8_t can_number) {
     FDCANx->RXF0A = rx_fifo_idx;
   }
 
-  fdcan_spas2_poll();
-
   // Error handling
   if ((ir_reg & (FDCAN_IR_PED | FDCAN_IR_PEA | FDCAN_IR_EP | FDCAN_IR_BO | FDCAN_IR_RF0L)) != 0U) {
     update_can_health_pkt(can_number, ir_reg);
@@ -267,13 +262,8 @@ bool can_init(uint8_t can_number) {
 
   if (can_number != 0xffU) {
     FDCAN_GlobalTypeDef *FDCANx = CANIF_FROM_CAN_NUM(can_number);
-    ret = can_set_speed(can_number);
-    ret = llcan_init(FDCANx) && ret;
-    #if !defined(PANDA_JUNGLE) && !defined(PANDA_BODY)
-    if (fdcan_layout_transition) {
-      fdcan_spas2_layout_configured = ret && fdcan_spas2_layout_configured;
-    }
-    #endif
+    ret &= can_set_speed(can_number);
+    ret &= llcan_init(FDCANx);
     // in case there are queued up messages
     process_can(can_number);
   }

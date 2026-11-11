@@ -2,7 +2,6 @@
 
 #include "iqdbc/safety/declarations.h"
 #include "iqdbc/safety/modes/hyundai_common.h"
-#include "iqdbc/safety/modes/hyundai_spas2.h"
 
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #pragma GCC diagnostic ignored "-Wunused-function"
@@ -140,16 +139,21 @@ const CanMsg HYUNDAI_CANFD_HDA1_CAMERA_SCC_LONG_TX_MSGS[] = {
   HYUNDAI_CANFD_HDA1_CAMERA_SCC_EXTRA_TX_MSGS
 };
 
-// The opt-in capability is confined to these HDA1 camera-SCC profiles.
+// Opt-in turn signal request (SPAS2) for HDA1 camera-SCC cars that have no parking ECU.
+// check_relay: we must be the only sender of this address on the car side.
+#define HYUNDAI_CANFD_SPAS2_BLINKERS_TX_MSGS \
+  {0x16A, 0, 32, .check_relay = true}, \
+
 const CanMsg HYUNDAI_CANFD_HDA1_CAMERA_SCC_SPAS2_TX_MSGS[] = {
   HYUNDAI_CANFD_HDA1_TX_MSGS_COMMON(false)
   HYUNDAI_CANFD_HDA1_CAMERA_SCC_EXTRA_TX_MSGS
-  {0x16A, 0, 32, .check_relay = false},
+  HYUNDAI_CANFD_SPAS2_BLINKERS_TX_MSGS
 };
+
 const CanMsg HYUNDAI_CANFD_HDA1_CAMERA_SCC_LONG_SPAS2_TX_MSGS[] = {
   HYUNDAI_CANFD_HDA1_TX_MSGS_COMMON(true)
   HYUNDAI_CANFD_HDA1_CAMERA_SCC_EXTRA_TX_MSGS
-  {0x16A, 0, 32, .check_relay = false},
+  HYUNDAI_CANFD_SPAS2_BLINKERS_TX_MSGS
 };
 
 
@@ -256,6 +260,7 @@ RxCheck hyundai_canfd_hda2_long_alt_buttons_rx_checks_scc2[] = {
 
 const int HYUNDAI_PARAM_CANFD_ALT_BUTTONS = 32;
 const int HYUNDAI_PARAM_CANFD_HDA2_ALT_STEERING = 128;
+const int HYUNDAI_PARAM_CANFD_SPAS2_BLINKERS = 1024;
 bool hyundai_canfd_alt_buttons = false;
 bool hyundai_canfd_hda2_alt_steering = false;
 
@@ -430,10 +435,6 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *to_push) {
 
 static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
 
-  if (GET_ADDR(to_send) == 0x16A) {
-    return hyundai_spas2_tx_hook(to_send);
-  }
-
   bool tx = true;
   int addr = GET_ADDR(to_send);
   bool violation = false;
@@ -490,6 +491,21 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
     }
   }
 
+  // SPAS2: BLINKER_CONTROL may only be neutral (0), left (3) or right (4), the rest of the payload
+  // stays empty, and a direction needs controls allowed. Neutral is always allowed so a request can be released.
+  if (addr == 0x16A) {
+    const uint8_t blinker = GET_BYTE(to_send, 16);
+    bool payload_ok = (blinker == 0x00U) || (blinker == 0x60U) || (blinker == 0x80U);
+    for (int i = 3; i < 32; i++) {
+      if ((i != 16) && (GET_BYTE(to_send, i) != 0U)) {
+        payload_ok = false;
+      }
+    }
+    if (!payload_ok || ((blinker != 0x00U) && !controls_allowed)) {
+      violation = true;
+    }
+  }
+
   if (violation) {
     tx = false;
   }
@@ -525,7 +541,6 @@ static safety_config hyundai_canfd_init(uint16_t param) {
   }
 
   hyundai_common_init(param);
-  hyundai_spas2_init(GET_FLAG(param, HYUNDAI_PARAM_CANFD_SPAS2_BLINKERS) && !hyundai_canfd_hda2 && hyundai_camera_scc);
 
   gen_crc_lookup_table_16(0x1021, hyundai_canfd_crc_lut);
   hyundai_canfd_alt_buttons = GET_FLAG(param, HYUNDAI_PARAM_CANFD_ALT_BUTTONS);
@@ -611,10 +626,15 @@ static safety_config hyundai_canfd_init(uint16_t param) {
     }
   }
 
-  if (hyundai_spas2_capability) {
-    ret.tx_msgs = hyundai_longitudinal ? HYUNDAI_CANFD_HDA1_CAMERA_SCC_LONG_SPAS2_TX_MSGS : HYUNDAI_CANFD_HDA1_CAMERA_SCC_SPAS2_TX_MSGS;
-    ret.tx_msgs_len = hyundai_longitudinal ? sizeof(HYUNDAI_CANFD_HDA1_CAMERA_SCC_LONG_SPAS2_TX_MSGS) / sizeof(CanMsg) : sizeof(HYUNDAI_CANFD_HDA1_CAMERA_SCC_SPAS2_TX_MSGS) / sizeof(CanMsg);
+  // opt-in SPAS2 turn signals, HDA1 camera-SCC only
+  if (GET_FLAG(param, HYUNDAI_PARAM_CANFD_SPAS2_BLINKERS) && !hyundai_canfd_hda2 && hyundai_camera_scc) {
+    if (hyundai_longitudinal) {
+      SET_TX_MSGS(HYUNDAI_CANFD_HDA1_CAMERA_SCC_LONG_SPAS2_TX_MSGS, ret);
+    } else {
+      SET_TX_MSGS(HYUNDAI_CANFD_HDA1_CAMERA_SCC_SPAS2_TX_MSGS, ret);
+    }
   }
+
   return ret;
 }
 

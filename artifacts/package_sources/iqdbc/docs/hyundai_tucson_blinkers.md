@@ -1,118 +1,82 @@
-# Tucson navigation blinkers
+# Tucson turn signals through SPAS2
 
-This development integration connects the existing `CarControl.leftBlinker` and
-`rightBlinker` requests to SPAS2 on the tested 2024 Tucson SE gas, HDA1 CAN-FD,
-camera SCC, ICU `91951CW133`. It is disabled by default and is not validated for
-driving.
+An opt-in output path that lets `CarControl.leftBlinker` / `rightBlinker` flash the real turn
+signals on a 4th-generation Tucson with HDA1, camera SCC and no parking ECU. It is off by
+default and has only been tried on one car, standing still.
 
-## Vehicle evidence
+## What was seen on the car
 
-| Request | BLINKER_CONTROL | Byte 16 | Physical evidence |
+2024 Tucson SE, gas, HDA1 CAN-FD, camera SCC, body unit (ICU) part `91951CW133`. The car does
+not send SPAS1 (`0x165`) or SPAS2 (`0x16A`) itself.
+
+| Request | BLINKER_CONTROL | Byte 16 | Seen |
 | --- | ---: | ---: | --- |
-| Right | 4 | `0x80` | Exterior lamps observed in Park and stationary Drive |
-| Left | 3 | `0x60` | Protocol encoding only; not physically tested |
-| Neutral | 0 | `0x00` | Transmitted; neutral-only release not isolated |
+| Right | 4 | `0x80` | Right lamps flashed, in Park and in Drive at a standstill |
+| Left | 3 | `0x60` | Not tried |
+| Neutral | 0 | `0x00` | Sent after each right request. Not shown to be what stops the lamps |
 
-The observed right request used CAN-FD `0x16A`, 32 bytes, logical bus 0 at 50 Hz,
-with the normal Hyundai CRC and rolling counter. The stationary Drive test used
-a held service brake. No SPAS1, diagnostic lamp command or parking ECU disable
-was needed. Ignition-off lamp release does not prove neutral-only release.
+The request was SPAS2 alone: `0x16A`, 32 bytes, car-side bus 0, 50 Hz, with the usual Hyundai
+CAN-FD checksum and counter. Each test sent the right request first and neutral for 3 s after
+it, with no neutral beforehand. No SPAS1, no diagnostic session and no ECU disable were
+involved. The frames came from a temporary test build of the panda firmware, not from this code.
 
-## Implementation contract
+The lamps were watched by eye. In Park, a one-second request was not seen the first time and
+was seen on an identical repeat. In Drive, a ten-second request was seen. In Park the lamps
+were confirmed off only after the car had been switched off.
 
-Use a separate Hyundai capability and normal safety parameter; leave the existing
-HDA2 `ENABLE_BLINKERS` path intact. That older capability also disables parking
-ECU `0x7B1` and must not be enabled as a shortcut.
+## How it works
 
-The host controller receives the original CarControl publisher timestamp and
-validity, checks actual CAN receive timestamps, limits direction duration, and sends
-a finite neutral sequence on cancellation. A held request cannot continuously
-restart itself after its duration limit. One CANPacker owns the packet counter.
-The filtered CarState lamp status does not establish independent driver intent.
-Each new directional request first sends a bounded neutral preamble lasting about
-3.1 seconds, plus scheduling and transport. It activates only if that same request remains fresh and all
-gates still hold. This latency requires actual navigation lead-time validation.
+**Opt-in.** `HyundaiSpas2Blinkers` has to be set, and the car has to match the layout it was
+tried on: `HYUNDAI_TUCSON_4TH_GEN`, HDA1, camera SCC, not hybrid or EV, the same button and
+gear messages, `BLINKERS` (`0x413`) on the car-side bus, and no SPAS1 or SPAS2 in the
+fingerprint. That sets `HyundaiFlags.CANFD_SPAS2_BLINKERS` and the matching safety param bit.
+It is separate from `ENABLE_BLINKERS`, which also sends SPAS1 and disables the parking ECU.
 
-Panda admission constrains address, bus, length, reserved bits, control,
-CRC, counter, rate and request lifetime without weakening normal steering, SCC,
-relay, heartbeat or SILENT protections. A separate feature buffer and final
-hardware-transmission check are used: TX-hook admission alone cannot expire
-a frame already queued in the CAN controller. Cleanup must affect only feature
-traffic.
+**Controller** (`car/hyundai/spas2.py`):
 
-The MCU lease measures time since packet admission. SPAS2 contains no original
-CarControl timestamp, so this does not prove end-to-end command age. A
-replace-latest buffer can also create gaps in the wire counter sequence.
+- Idle sends nothing. A request sends that direction at 50 Hz for as long as it is held, then
+  neutral for 3 s, then nothing again. This is the sequence used on the car.
+- Only while `CC.enabled`, and only while `BLINKERS` is arriving, so the driver's side is
+  always visible.
+- The driver comes first. A request does not start while a turn signal or the hazards are on.
+  It ends as soon as the other side shows activity, from the stalk bits or the lamps.
+- Activity on the requested side does not end it. `LEFT_STALK` / `RIGHT_STALK` stay set for a
+  whole one-touch blink after the lever is back in the middle, so they follow the blink and not
+  the lever. Our own request may set them as well, and it certainly lights the lamps.
+- A request that has ended must drop before it can start again. One that is still held after
+  the driver overrode it stays off.
 
-This version generates no MCU neutral packets. Dropping or aborting stale output
-does not establish that the receiver released a lamp request. Host loss, reset,
-SILENT, bus faults and ignition transitions may prevent any neutral transmission.
+**Panda** (`safety/modes/hyundai_canfd.h`): with the safety param bit set on HDA1 camera SCC,
+`0x16A` on bus 0 is added to the allowed messages. The payload may only be neutral, left or
+right with everything else empty. A direction needs `controls_allowed`; neutral is always
+allowed so a request can be released after disengaging. The message uses `check_relay`: if
+anything else sends `0x16A` on the car side, that is a relay malfunction. Nothing in the
+firmware's CAN driver changes.
 
-## Navigation integration
+## What navigation needs
 
-The private navigation producer is unchanged. Its next build needs to admit this
-Tucson and publish the existing `CarControl` fields; a vehicle allowlist change
-alone does not activate or qualify the lamp controller.
+The navigation turn-signal code is private and currently does not produce requests for this
+car. For this path to do anything it has to:
 
-- Use the separate `HyundaiFlags.CANFD_SPAS2_BLINKERS` capability for this path.
-  Do not set the existing HDA2 `ENABLE_BLINKERS` flag or disable a parking ECU.
-- Publish exactly one of `leftBlinker` or `rightBlinker` while requesting that
-  direction, with `enabled` and `latActive` true. Continuously refresh valid
-  `carControl` messages; the controller rejects source age above 100 ms. Card
-  supplies the original publisher timestamp. This establishes CarControl
-  freshness; the private producer must still validate its navigation input.
-- Publish both directions false to cancel and to rearm before another request.
-  The controller must first observe a fresh neutral request. A held direction
-  cannot restart itself after the ten-second direction limit. After directional
-  output, keep both fields false through the finite release drain before raising
-  a new request; requests during that drain are discarded, not queued.
-- Allow about 3.1 seconds of neutral preparation, plus scheduling/transport,
-  before directional output. Keep the requested direction valid throughout
-  that interval; a brief pulse does not activate the lamps. Validate navigation
-  lead time against the actual maneuver.
-- Review how the private producer interprets `CarState.leftBlinker` and
-  `rightBlinker`: these are lamp feedback, not independent proof of stalk input.
-  Its response to lamps activated by its own request still needs verification.
+- treat `HyundaiFlags.CANFD_SPAS2_BLINKERS` as a car that supports turn-signal requests;
+- hold exactly one of `leftBlinker` / `rightBlinker` for as long as the signal is wanted, and
+  drop it to stop;
+- drop and raise the request again after the driver overrode it;
+- allow for `CarState.leftBlinker` / `rightBlinker` being lamp feedback on this car: they turn
+  on because of the request, not only because of the driver.
 
-A combined stable-release build has been installed and boot-checked with the
-expected controller imports and Panda firmware signature. Lamp output remains
-disabled; no positive qualification record was installed. This startup check
-does not qualify navigation operation or add to the physical lamp evidence above.
+## Not checked on a car yet
 
-## Activation remains unqualified
+Nothing below has been tried. All of it should be, parked first, before this is used on the
+road.
 
-No positive qualification file is distributed. Activation requires a private,
-explicit opt-in bound to the vehicle VIN hash and the tested ICU part, supported
-by recorded physical checks. A platform match or a syntactically valid file is
-not evidence of those checks.
-
-Before activation, verify both directions, neutral-only release, receiver
-self-timeout, independent stalk decoding, driver and hazard priority, counter-gap
-acceptance, actual navigation triggering/cancellation, and operation while moving
-in a controlled setting. Also review the feature-specific CAN mailbox layout and
-its transitions on the actual board. Offline tests and a successful firmware
-build do not establish these vehicle properties.
-
-## Board behavior requiring bench validation
-
-The Cuatro H7 path reserves one dedicated TX mailbox while retaining the normal
-46 RX elements and one TX FIFO element per controller. When allocation changes,
-all three cores enter INIT and configuration-change enable before any shared RAM
-address changes; all ranges are programmed before any core is restarted. A
-partial configuration keeps the cores stopped. The feature stays inhibited until
-MCU restart after a harness mapping change. Other hardware does not emit feature
-packets.
-
-The final gate checks physical context and effective CAN-FD mode. It uses a local
-generation ticket in addition to the wrapping wire counter and cancels only the
-owned mailbox. A cancellation request cannot retract a frame already on the
-wire. Firmware polling latency, cancellation acknowledgement and recovery from
-layout/initialization failures still need actual-board measurements.
-
-The one-element normal TX FIFO also satisfies the dedicated-buffer/FIFO ordering
-workaround in ST ES0491 section 2.22.2:
-https://www.st.com/resource/en/errata_sheet/es0491-stm32h72xx73xx-device-errata-stmicroelectronics.pdf
-
-The configuration-change reset boundary follows Bosch M_CAN User Manual 3.3.1,
-section 3.1.1, printed page 58. This is design evidence, not a board test:
-https://www.bosch-semiconductors.com/media/ip_modules/pdf_2/m_can/mcan_users_manual_v331.pdf
+- Left.
+- How quickly the lamps start on the first request after start-up.
+- That the lamps stop on neutral, and how long that takes.
+- What the lamps do if the frames just stop, with no neutral (process restart, ignition off).
+- That the stalk and the hazards still work normally while neutral is being sent, and win
+  over a request.
+- What `0x413` reports while a request is active. The controller is written so that either
+  answer is safe, but it decides whether the stalk bits can ever tell the driver apart.
+- Any of it while moving, and any of it driven by the real navigation code.
+- Other Tucson years and trims. The layout check only knows they look the same on the bus.

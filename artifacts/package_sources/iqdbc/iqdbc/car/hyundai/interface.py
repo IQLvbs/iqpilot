@@ -11,7 +11,7 @@ from iqdbc.car.disable_ecu import disable_ecu
 from iqdbc.car.hyundai.carcontroller import CarController
 from iqdbc.car.hyundai.carstate import CarState
 from iqdbc.car.hyundai.radar_interface import RadarInterface
-from iqdbc.car.hyundai.spas2 import configure_spas2
+from iqdbc.car.hyundai.spas2 import spas2_blinkers_supported
 
 from iqpilot.common.params import Params
 
@@ -28,18 +28,6 @@ class CarInterface(CarInterfaceBase):
   CarState = CarState
   CarController = CarController
   RadarInterface = RadarInterface
-
-  @staticmethod
-  def configure_post_fingerprint(CP, fingerprint):
-    configure_spas2(CP, fingerprint)
-
-  def update(self, can_packets):
-    if self.CP.flags & HyundaiFlags.CANFD_SPAS2_BLINKERS:
-      # RX echoes (128+) and rejected transmissions (192+) are not stock senders.
-      for _, frames in can_packets:
-        if any(src == 0 and addr in (0x165, 0x16A) for addr, _, src in frames):
-          self.CS.spas2_native_sender_seen = True
-    return super().update(can_packets)
 
   @staticmethod
   def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, alpha_long, is_release, docs) -> structs.CarParams:
@@ -161,6 +149,11 @@ class CarInterface(CarInterfaceBase):
         ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_ALT_BUTTONS.value
       if ret.flags & HyundaiFlags.CANFD_CAMERA_SCC:
         ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CAMERA_SCC.value
+
+      # opt-in turn signals through SPAS2, see docs/hyundai_tucson_blinkers.md
+      if spas2_blinkers_supported(candidate, ret.flags, CAN.ECAN, fingerprint[CAN.ECAN]) and params.get_bool("HyundaiSpas2Blinkers"):
+        ret.flags |= HyundaiFlags.CANFD_SPAS2_BLINKERS.value
+        ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_SPAS2_BLINKERS.value
 
     else:
       # Shared configuration for non CAN-FD cars

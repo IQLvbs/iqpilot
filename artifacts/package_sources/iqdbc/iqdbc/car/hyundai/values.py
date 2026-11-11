@@ -164,7 +164,8 @@ class HyundaiFlags(IntFlag):
 
   ALT_LIMITS_2 = 2 ** 26
 
-  # Independently qualified SPAS2-only receiver; never enables the HDA2 parking ECU path.
+  # Opt-in turn signals through SPAS2 alone, for cars without a parking ECU. Separate from ENABLE_BLINKERS,
+  # which also sends SPAS1 and disables the parking ECU.
   CANFD_SPAS2_BLINKERS = 2 ** 27
 
   CC_ONLY_CAR = 2 ** 31
