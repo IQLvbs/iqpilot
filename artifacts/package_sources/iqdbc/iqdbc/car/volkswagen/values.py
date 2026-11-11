@@ -78,6 +78,7 @@ class CarControllerParams:
   )
 
   STEER_STEP = 2                           # HCA_01/HCA_1 message frequency 50Hz
+  TRAVEL_ASSIST_TEXT_FRAMES = int(1.5 / DT_CTRL)
   ACC_CONTROL_STEP = 2                     # ACC_06/ACC_07/ACC_System frequency 50Hz
   AEB_CONTROL_STEP = 2                     # ACC_10 frequency 50Hz
   AEB_HUD_STEP = 20                        # ACC_15 frequency 5Hz
@@ -181,6 +182,7 @@ class CarControllerParams:
         Button(structs.CarState.ButtonEvent.Type.accelCruise, "GRA_ACC_01", "GRA_Tip_Hoch", [1]),
         Button(structs.CarState.ButtonEvent.Type.decelCruise, "GRA_ACC_01", "GRA_Tip_Runter", [1]),
         Button(structs.CarState.ButtonEvent.Type.gapAdjustCruise, "GRA_ACC_01", "GRA_Verstellung_Zeitluecke", [1, 2, 3]),
+        Button(structs.CarState.ButtonEvent.Type.travelAssist, "GRA_ACC_01", "GRA_TravelAssist", [1]),
       ]
       self.BUTTONS = BASE_BUTTONS + [
         Button(structs.CarState.ButtonEvent.Type.cancel, "GRA_ACC_01", "GRA_Hauptschalter", [1]),
@@ -224,6 +226,7 @@ class CarControllerParams:
           Button(structs.CarState.ButtonEvent.Type.decelCruise, "LS_01", "LS_Tip_Runter", [1]),
           Button(structs.CarState.ButtonEvent.Type.cancel, "LS_01", "LS_Abbrechen", [1]),
           Button(structs.CarState.ButtonEvent.Type.gapAdjustCruise, "LS_01", "LS_Verstellung_Zeitluecke", [1, 2, 3]),
+          Button(structs.CarState.ButtonEvent.Type.lkas, "BCM_11", "BCM_LDW_Taste", [1]),
         ]
 
         # ACC_02.ACC_Texte_Primaeranz, primary ACC display text at the bottom of the cluster
@@ -543,6 +546,13 @@ class CAR(Platforms):
     chassis_codes={"E1"},
     wmis={WMI.VOLKSWAGEN_USA_SUV, WMI.VOLKSWAGEN_EUROPE_CAR},
     model_years={"R", "S"},
+    flags=VolkswagenFlags.MEB_GEN2,
+  )
+  VOLKSWAGEN_ID3_MK2_SAIC = VolkswagenMEBPlatformConfig(
+    [VWCarDocs("Volkswagen ID.3 (SAIC) 2024-25")],
+    VolkswagenCarSpecs(mass=1935, wheelbase=2.77),
+    chassis_codes={"E9"},
+    wmis={WMI.SAIC_VOLKSWAGEN},
     flags=VolkswagenFlags.MEB_GEN2,
   )
   VOLKSWAGEN_ID4_MK1 = VolkswagenMEBPlatformConfig(
@@ -901,10 +911,15 @@ def match_fw_to_car_fuzzy(live_fw_versions, vin, offline_fw_versions) -> set[str
   return {str(c) for c in candidates}
 
 
+VIN_ONLY_PLATFORMS = {CAR.VOLKSWAGEN_ID3_MK2_SAIC}
+
+
 def refine_fw_matches(matches, vin) -> set[str]:
   vin_obj = Vin(vin)
+  firmware_identified = {match for match in matches if match not in VIN_ONLY_PLATFORMS}
+  unrefined = firmware_identified or matches
   if len(vin_obj.wmi) != 3 or len(vin_obj.vds) < 5:
-    return matches
+    return unrefined
 
   chassis_code = vin_obj.vds[3:5]
   model_year_code = vin_obj.vis[0] if len(vin_obj.vis) > 0 else None
@@ -920,7 +935,7 @@ def refine_fw_matches(matches, vin) -> set[str]:
       continue
     candidates.add(platform)
 
-  return {str(candidate) for candidate in candidates} or matches
+  return {str(candidate) for candidate in candidates} or unrefined
 
 
 # These ECUs are required to match to gain a VIN match

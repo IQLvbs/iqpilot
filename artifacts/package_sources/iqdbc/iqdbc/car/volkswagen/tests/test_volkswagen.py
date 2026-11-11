@@ -1,16 +1,18 @@
+import math
 import random
 import re
 from types import SimpleNamespace
 
 import pytest
 
-from iqdbc.can import CANPacker
+from iqdbc.can import CANPacker, CANParser
 from iqdbc.car import Bus, DT_CTRL, structs
 from iqdbc.car.volkswagen.hca_session import EpsSessionClock
 from iqdbc.car.volkswagen.carstate import CarState
+from iqdbc.car.fw_versions import match_fw_to_car
 from iqdbc.car.structs import CarParams
 from iqdbc.car.volkswagen.interface import CarInterface
-from iqdbc.car.volkswagen.values import (CAR, FW_QUERY_CONFIG, MLB_ACC_COORDINATOR_MSGS, MLB_GEARBOX_MSGS, MLB_MSG_ACC_01,
+from iqdbc.car.volkswagen.values import (CAR, DBC, FW_QUERY_CONFIG, CarControllerParams, MLB_ACC_COORDINATOR_MSGS, MLB_GEARBOX_MSGS, MLB_MSG_ACC_01,
                                          MLB_MSG_ACC_02, MLB_MSG_ACC_10,
                                          MLB_MSG_GATEWAY_05, MLB_MSG_GETRIEBE_01, MLB_MSG_LH_EPS_01, MLB_MSG_LH_EPS_03,
                                          WMI, VolkswagenFlags, VolkswagenFlagsIQ, VolkswagenSafetyFlags)
@@ -699,3 +701,99 @@ def test_mlb_long_seeds_acc_01_from_the_stock_frame_when_it_is_sent():
   assert car.CC.acc_counters_seeded == {"ACC_01", "ACC_02"}
   assert car.CS.acc_stock_counters["ACC_01"] == car.can_parsers[Bus.cam].vl["ACC_01"]["COUNTER"]
   assert MLB_MSG_ACC_02 in subscribed[Bus.cam]
+
+
+def fw_for(platform, extra=()):
+  car_fw = []
+  for (ecu, addr, sub_addr), versions in FW_VERSIONS[platform].items():
+    car_fw.append(CarParams.CarFw(ecu=ecu, fwVersion=versions[0], brand="volkswagen", address=addr, subAddress=sub_addr or 0))
+  return car_fw + list(extra)
+
+
+def match_platforms(car_fw, vin):
+  exact, matches = match_fw_to_car(car_fw, vin, log=False)
+  assert exact
+  return {str(match) for match in matches}
+
+
+SAIC_CAMERA = CarParams.CarFw(ecu=Ecu.fwdCamera, fwVersion=b'\xf1\x871EA980654Q \xf1\x895570', brand="volkswagen", address=0x74f)
+
+
+@pytest.mark.parametrize("platform,vin", [
+  (CAR.VOLKSWAGEN_ID4_MK2, "1V2000E8000000000"),
+  (CAR.VOLKSWAGEN_ID4_MK2, "00000000000000000"),
+  (CAR.VOLKSWAGEN_ID3_MK2, "WVW000E1000000000"),
+  (CAR.VOLKSWAGEN_ID3_MK2, "00000000000000000"),
+])
+def test_saic_platform_never_steals_a_car_that_has_its_own_firmware(platform, vin):
+  assert match_platforms(fw_for(platform), vin) == {str(platform)}
+
+
+def test_saic_id3_is_selected_by_its_vin():
+  car_fw = [fw for fw in fw_for(CAR.VOLKSWAGEN_ID3_MK2_SAIC)] + [SAIC_CAMERA]
+  assert match_platforms(car_fw, "LSV000E9000000000") == {str(CAR.VOLKSWAGEN_ID3_MK2_SAIC)}
+
+
+def test_saic_id3_is_a_gateway_meb_gen2_platform():
+  fingerprint = {0: {0x25D: 8, 0x3DC: 8}, 1: {0x520: 8}, 2: {}}
+  cp = CarInterface.get_params(CAR.VOLKSWAGEN_ID3_MK2_SAIC, fingerprint, [], False, True, False)
+  assert cp.networkLocation == CarParams.NetworkLocation.gateway
+  assert cp.flags & VolkswagenFlags.MEB_GEN2
+  assert DBC[CAR.VOLKSWAGEN_ID3_MK2_SAIC][Bus.pt] == DBC[CAR.VOLKSWAGEN_ID3_MK2][Bus.pt]
+
+
+BCM_11_ADDRESS = 0x526
+BCM_11_IDLE = bytes.fromhex("10f8721000022000")
+BCM_11_LKAS_PRESSED = bytes.fromhex("10f8721020022000")
+
+
+def _q5_mk1_frames(packer, bcm_11=None, eps_torque=0):
+  frames = [(addr, dat, 0) for addr, dat, _ in _a4_mk4_frames(packer, eps_torque=eps_torque)]
+  if bcm_11 is not None:
+    frames.append((BCM_11_ADDRESS, bcm_11, 0))
+  return frames
+
+
+def _lkas_events(ret):
+  return [(event.type, event.pressed) for event in ret.buttonEvents if event.type == structs.CarState.ButtonEvent.Type.lkas]
+
+
+def test_mlb_lkas_button_is_bcm_11_ldw_taste():
+  buttons = {button.event_type: button for button in CarControllerParams(_q5_mk1_car().CP).BUTTONS}
+  lkas = buttons[structs.CarState.ButtonEvent.Type.lkas]
+  assert (lkas.can_addr, lkas.can_msg, lkas.values) == ("BCM_11", "BCM_LDW_Taste", [1])
+
+
+def test_mlb_logged_bcm_11_frames_decode_the_lkas_button():
+  parser = CANParser("vw_mlb", [("BCM_11", math.nan)], 0)
+  parser.update([1_000_000_000, [(BCM_11_ADDRESS, BCM_11_IDLE, 0)]])
+  assert parser.vl["BCM_11"]["BCM_LDW_Taste"] == 0
+  parser.update([2_000_000_000, [(BCM_11_ADDRESS, BCM_11_LKAS_PRESSED, 0)]])
+  assert parser.vl["BCM_11"]["BCM_LDW_Taste"] == 1
+
+
+def test_mlb_lkas_press_reaches_the_always_on_lateral_toggle():
+  q5 = _q5_mk1_car()
+  packer = CANPacker("vw_mlb")
+  idle = _run(q5, lambda: _q5_mk1_frames(packer, BCM_11_IDLE))
+  assert _lkas_events(idle) == []
+  pressed = _run(q5, lambda: _q5_mk1_frames(packer, BCM_11_LKAS_PRESSED), frames=1)
+  assert _lkas_events(pressed) == [(structs.CarState.ButtonEvent.Type.lkas, True)]
+  held = _run(q5, lambda: _q5_mk1_frames(packer, BCM_11_LKAS_PRESSED), frames=1)
+  assert _lkas_events(held) == []
+  released = _run(q5, lambda: _q5_mk1_frames(packer, BCM_11_IDLE), frames=1)
+  assert _lkas_events(released) == [(structs.CarState.ButtonEvent.Type.lkas, False)]
+
+
+def test_mlb_without_bcm_11_keeps_can_valid_and_reports_no_lkas_button():
+  q5 = _q5_mk1_car()
+  packer = CANPacker("vw_mlb")
+  ret = _run(q5, lambda: _q5_mk1_frames(packer), frames=300)
+  assert _lkas_events(ret) == []
+  invalid = {message["address"] for parser in q5.can_parsers.values() for message in parser.invalid_messages()}
+  assert hex(BCM_11_ADDRESS) not in invalid
+
+  a4 = _a4_mk4_car()
+  ret = _run(a4, lambda: _a4_mk4_frames(packer), frames=300)
+  assert _lkas_events(ret) == []
+  assert all(parser.can_valid for parser in a4.can_parsers.values())

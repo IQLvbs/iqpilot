@@ -32,6 +32,7 @@ class CarState(CarStateBase):
   MEB_TEMP_CRUISE_FAULT = 6
   MEB_TOLERANCE_MAX = 100
   DRIVER_TORQUE_TAU = 0.10
+  FUEL_PERCENT_MAX = 100
 
   def __init__(self, CP, CP_IQ):
     try:
@@ -54,6 +55,7 @@ class CarState(CarStateBase):
     self.eps_stock_values = False
     self.curvature = 0.
     self.klr_stock_values = {}
+    self.ta_stock_values = {}
     self.ea_hud_stock_values = {}
     self.ea_control_stock_values = {}
     self.acc_type = 0
@@ -126,13 +128,20 @@ class CarState(CarStateBase):
     ret_iq.epsSessionSec = self.eps_session.age_s
     ret_iq.epsSessionResets = self.eps_session.resets
 
+  @staticmethod
+  def cluster_fuel_fraction(cp) -> float | None:
+    if not cp.ts_nanos["Kombi_03"]["KBI_Tankfuellstand_Prozent"]:
+      return None
+    percent = cp.vl["Kombi_03"]["KBI_Tankfuellstand_Prozent"]
+    return percent / CarState.FUEL_PERCENT_MAX if percent <= CarState.FUEL_PERCENT_MAX else None
+
   def update_button_enable(self, buttonEvents: list[structs.CarState.ButtonEvent]):
     if not self.CP.pcmCruise:
       if self.cruise_fault_lateral_active and self.cruise_faulted:
         return False
       for b in buttonEvents:
         # Enable OP long on falling edge of enable buttons
-        if b.type in (ButtonType.setCruise, ButtonType.resumeCruise) and not b.pressed:
+        if b.type in (ButtonType.setCruise, ButtonType.resumeCruise, ButtonType.travelAssist) and not b.pressed:
           return True
     return False
 
@@ -300,7 +309,8 @@ class CarState(CarStateBase):
     ret.lateralAvailable = ret.cruiseState.available or ret.cruiseFaultLateralMode
     ret.blockPcmEnable = ret.cruiseFaultLateralMode
 
-    ret.fuelGauge = pt_cp.vl["Kombi_02"]["KBI_Inhalt_Tank"] / 55.0
+    cluster_fuel = self.cluster_fuel_fraction(pt_cp)
+    ret.fuelGauge = cluster_fuel if cluster_fuel is not None else pt_cp.vl["Kombi_02"]["KBI_Inhalt_Tank"] / 55.0
     ret.fuelTankLevelL = pt_cp.vl["Kombi_02"]["KBI_Inhalt_Tank"]  # raw liters for konn3kt
     self._update_odometer(ret, pt_cp.vl["Kombi_02"]["KBI_Kilometerstand"])
 
@@ -391,6 +401,7 @@ class CarState(CarStateBase):
 
     self.acc_type = ext_cp.vl["ACC_18"]["ACC_Typ"]
     self.travel_assist_available = bool(pt_cp.vl.get("TA_01", {}).get("Travel_Assist_Available", 0))
+    self.ta_stock_values = cam_cp.vl["TA_01"]
 
     ret.cruiseState.available = pt_cp.vl["Motor_51"]["TSK_Status"] in (2, 3, 4, 5)
     ret.cruiseState.enabled = pt_cp.vl["Motor_51"]["TSK_Status"] in (3, 4, 5)
@@ -469,6 +480,11 @@ class CarState(CarStateBase):
         ret.batteryDetails.temperature = main_cp.vl["DCDC_03"]["DC_Temperatur"]
         ret.batteryDetails.chargingMode = int(main_cp.vl["BMS_04"]["BMS_IstModus"])
         ret.fuelGauge = ret.batteryDetails.soc / 100.0
+
+    if self.CP.flags & VolkswagenFlags.MQB_EVO:
+      cluster_fuel = self.cluster_fuel_fraction(pt_cp)
+      if cluster_fuel is not None:
+        ret.fuelGauge = cluster_fuel
 
     self.update_meb_virtual_lkas(ret, pt_cp, hca_status)
 
@@ -864,9 +880,10 @@ class CarState(CarStateBase):
         ("Blinkmodi_01", math.nan),  # From J519 BCM (is inactive when no lights active, 50Hz when active)
         ("Kombi_02", math.nan),  # Auxiliary-bus cluster odometer
         ("LH_EPS_01", math.nan),  # ALC key slot, absent on MLB racks that never send 0x32A
+        ("BCM_11", math.nan),
       ]
     else:
-      pt_messages += [("Kombi_02", math.nan)]  # Auxiliary-bus cluster odometer
+      pt_messages += [("Kombi_02", math.nan), ("Kombi_03", math.nan)]
     if CP.flags & VolkswagenFlagsIQ.IQ_MLB_NO_HCA_EPS:
       pt_messages += [("LH_EPS_03", math.nan)]
     if CP.flags & VolkswagenFlags.STOCK_HCA_PRESENT:
@@ -911,10 +928,12 @@ class CarState(CarStateBase):
       ("TA_01", math.nan),
       ("Diagnose_01", math.nan),  # Bus 0 cluster odometer
     ]
+    if CP.flags & VolkswagenFlags.MQB_EVO:
+      pt_messages.append(("Kombi_03", math.nan))
     if CP.networkLocation == NetworkLocation.fwdCamera:
       pt_messages.append(("AWV_03", 1))
 
-    cam_messages = []
+    cam_messages = [("TA_01", math.nan)]
     if CP.networkLocation == NetworkLocation.gateway:
       cam_messages.append(("AWV_03", 1))
 

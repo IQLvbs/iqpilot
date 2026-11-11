@@ -4814,6 +4814,19 @@
       ],
       "req": "All"
     },
+    "TOYOTA_RAV4_TSS2_2023_SECOC|2023-2025": {
+      "label": "Toyota RAV4 Hybrid SecOC 2023-25",
+      "id": "TOYOTA_RAV4_TSS2_2023_SECOC",
+      "mk": "Toyota",
+      "grp": "toyota",
+      "mdl": "RAV4 Hybrid SecOC",
+      "yrs": [
+        "2023",
+        "2024",
+        "2025"
+      ],
+      "req": "All"
+    },
     "TOYOTA_RAV4_PRIME|2021-2023": {
       "label": "Toyota RAV4 Prime 2021-23",
       "id": "TOYOTA_RAV4_PRIME",
@@ -4824,6 +4837,19 @@
         "2021",
         "2022",
         "2023"
+      ],
+      "req": "All"
+    },
+    "TOYOTA_RAV4_TSS2_2023_SECOC|2023-2025#2": {
+      "label": "Toyota RAV4 SecOC 2023-25",
+      "id": "TOYOTA_RAV4_TSS2_2023_SECOC",
+      "mk": "Toyota",
+      "grp": "toyota",
+      "mdl": "RAV4 SecOC",
+      "yrs": [
+        "2023",
+        "2024",
+        "2025"
       ],
       "req": "All"
     },
@@ -5228,6 +5254,18 @@
       "mk": "Volkswagen",
       "grp": "volkswagen",
       "mdl": "ID.3",
+      "yrs": [
+        "2024",
+        "2025"
+      ],
+      "req": "Adaptive Cruise Control (ACC) & Lane Assist"
+    },
+    "VOLKSWAGEN_ID3_MK2_SAIC|2024-2025": {
+      "label": "Volkswagen ID.3 (SAIC) 2024-25",
+      "id": "VOLKSWAGEN_ID3_MK2_SAIC",
+      "mk": "Volkswagen",
+      "grp": "volkswagen",
+      "mdl": "ID.3 (SAIC)",
       "yrs": [
         "2024",
         "2025"

@@ -367,6 +367,14 @@ def _parse_size(s):
   return int(w), int(h)
 
 
+def checked_model_size(requested, input_shapes):
+  img = input_shapes['img']
+  onnx_size = (int(img[3]) * 2, int(img[2]) * 2)
+  if tuple(requested) != onnx_size:
+    raise SystemExit(f"--model-size {requested[0]}x{requested[1]} does not match the onnx img input {onnx_size[0]}x{onnx_size[1]}")
+  return onnx_size
+
+
 def read_file_chunked_to_shm(path):
   from iqpilot.common.file_chunker import stage_file_chunked
   from iqpilot.system.hardware.hw import Paths
@@ -388,13 +396,13 @@ if __name__ == "__main__":
   args = p.parse_args()
 
   model_path = read_file_chunked_to_shm(args.onnx)
-  model_w, model_h = args.model_size
 
   model_runner = OnnxRunner(model_path)
   out = {
     'metadata': supercombo_metadata(build_metadata_record(model_path)),
     'frame_skip': args.frame_skip,
   }
+  model_w, model_h = checked_model_size(args.model_size, out['metadata']['input_shapes'])
 
   run_policy_jit = TinyJit(make_run_policy(model_runner, out['metadata'], args.frame_skip), prune=True)
 

@@ -81,8 +81,8 @@ class TestVolkswagenMebSafetyBase(common.CarSafetyTest):
     }
     return self.packer.make_can_msg_safety("HCA_03", 0, values)
 
-  def _button_msg(self, cancel=0, resume=0, _set=0, bus=2):
-    values = {"GRA_Abbrechen": cancel, "GRA_Tip_Setzen": _set, "GRA_Tip_Wiederaufnahme": resume}
+  def _button_msg(self, cancel=0, resume=0, _set=0, travel_assist=0, bus=2):
+    values = {"GRA_Abbrechen": cancel, "GRA_Tip_Setzen": _set, "GRA_Tip_Wiederaufnahme": resume, "GRA_TravelAssist": travel_assist}
     return self.packer.make_can_msg_safety("GRA_ACC_01", bus, values)
 
   def test_curvature_measurements(self):
@@ -204,14 +204,15 @@ class TestVolkswagenMebLongSafety(TestVolkswagenMebSafetyBase):
   def test_cruise_engaged_prev(self):
     pass
 
-  def test_set_and_resume_buttons(self):
-    for button in ["set", "resume"]:
+  def test_enable_buttons(self):
+    for button in ["set", "resume", "travel_assist"]:
+      pressed = dict(_set=(button == "set"), resume=(button == "resume"), travel_assist=(button == "travel_assist"), bus=0)
       self.safety.set_controls_allowed(0)
       self._rx(self._tsk_status_msg(False, main_switch=False))
-      self._rx(self._button_msg(_set=(button == "set"), resume=(button == "resume"), bus=0))
-      self.assertFalse(self.safety.get_controls_allowed())
+      self._rx(self._button_msg(**pressed))
+      self.assertFalse(self.safety.get_controls_allowed(), button)
       self._rx(self._tsk_status_msg(False, main_switch=True))
-      self._rx(self._button_msg(_set=(button == "set"), resume=(button == "resume"), bus=0))
+      self._rx(self._button_msg(**pressed))
       self.assertFalse(self.safety.get_controls_allowed())
       self._rx(self._button_msg(bus=0))
       self.assertTrue(self.safety.get_controls_allowed())

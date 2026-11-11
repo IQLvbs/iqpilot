@@ -417,6 +417,11 @@ FW_VERSIONS = {
       b'\xf1\x871EA907567D \xf1\x890250',
     ],
   },
+  CAR.VOLKSWAGEN_ID3_MK2_SAIC: {
+    (Ecu.fwdRadar, 0x757, None): [
+      b'\xf1\x871EA907567D \xf1\x890250',
+    ],
+  },
   CAR.VOLKSWAGEN_ID4_MK1: {
     (Ecu.inverter, 0x17fc007c, None): [
       b'\xf1\x871EA907121BE\xf1\x896046\xf1\x82020\x00',

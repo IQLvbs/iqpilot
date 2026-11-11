@@ -38,6 +38,23 @@ def test_gap_of_reset_duration_closes_session():
   assert clock.age_s == pytest.approx(2.0, abs=0.02)
 
 
+def test_controller_reset_gap_as_echoed_by_eps_closes_session():
+  clock = EpsSessionClock(1.1)
+  run(clock, True, 251.0)
+  run(clock, False, 1.09)
+  assert clock.resets == 1
+  assert clock.age_s == 0.0
+
+
+def test_gap_well_under_reset_duration_does_not_close_session():
+  clock = EpsSessionClock(1.1)
+  run(clock, True, 100.0)
+  run(clock, False, 1.0)
+  run(clock, True, 1.0)
+  assert clock.resets == 0
+  assert clock.age_s == pytest.approx(102.0, abs=0.05)
+
+
 def test_idle_does_not_count_resets():
   clock = EpsSessionClock(1.1)
   run(clock, False, 30.0)

@@ -641,6 +641,10 @@ struct IQNavState @0xaae9afb364368cd9 {
   mapboxSpeedLimitValid @63 :Bool;
   turnSignalDirection @64 :NavDirection;
   autoLaneChangeDirection @65 :NavDirection;           # Lane change direction nav certifies as safe to start without a driver nudge
+  knownTurnId @66 :UInt16;                             # Catalogued turn the car is approaching, 0 when none
+  knownTurnStartDistance @67 :Float32;                 # Distance to the maneuver (m) from which the catalogued turn may be assisted
+  knownTurnCurvature @68 :Float32;                     # Signed curvature of the catalogued turn (1/m), right positive
+  knownTurnHeading @69 :Float32;                       # Heading change the assist carries (deg)
 
   enum CameraType {
     none @0;

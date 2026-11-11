@@ -26,6 +26,8 @@ COMMA_LFS_BATCH_URL = "https://gitlab.com/commaai/openpilot-lfs.git/info/lfs/obj
 
 DOWNLOAD_CHUNK = 4 * 1024 * 1024
 USB_SIGNAL_POLL_S = int(os.getenv("IQ_EGPU_SIGNAL_POLL_US", "500")) / 1e6
+USB_DRIVING_SIGNAL_TIMEOUT_MS = 3000
+_usb_signal_timeout_ms: int | None = None
 EGPU_POWER_LIMIT_W = 100
 # tinygrad's USB+AMD path holds an exclusive flock on <tmp>/am_usb:<bus>.lock for the life of the opener
 DOCK_LOCK_GLOB = "am_usb*.lock"
@@ -327,6 +329,11 @@ def patch_tinygrad_prune_views() -> None:
   jit.prune_linear = prune_linear
 
 
+def tighten_usb_signal_timeout() -> None:
+  global _usb_signal_timeout_ms
+  _usb_signal_timeout_ms = USB_DRIVING_SIGNAL_TIMEOUT_MS
+
+
 def patch_usb_signal_wait() -> None:
   import time
 
@@ -341,7 +348,7 @@ def patch_usb_signal_wait() -> None:
     if owner is None or not owner.is_usb():
       return _orig(self, value, timeout)
     # a dock's signal lives in the USB bridge, so each poll is a USB read, and tinygrad only sleeps after 200 ms
-    timeout_ms = timeout or getenv("HCQDEV_WAIT_TIMEOUT_MS", 30000)
+    timeout_ms = timeout or _usb_signal_timeout_ms or getenv("HCQDEV_WAIT_TIMEOUT_MS", 30000)
     seen = self.value
     progress = time.perf_counter()
     while seen < value:

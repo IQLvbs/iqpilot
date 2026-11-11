@@ -47,6 +47,7 @@
   "iqpilot.selfdrive.iqmodeld.models.runners.tinygrad.combined_split_runner",
   "iqpilot.selfdrive.iqmodeld.models.runners.tinygrad.fused_runner",
   "iqpilot.selfdrive.iqmodeld.models.runners.tinygrad.model_types",
+  "iqpilot.selfdrive.iqmodeld.models.runners.tinygrad.stateful_runner",
   "iqpilot.selfdrive.iqmodeld.models.runners.tinygrad.supercombo_runner",
   "iqpilot.selfdrive.iqmodeld.models.runners.tinygrad.supercombo_runtime",
   "iqpilot.selfdrive.iqmodeld.models.runners.tinygrad.tinygrad_runner",

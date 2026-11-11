@@ -38,6 +38,9 @@ from iqpilot.selfdrive.controls.iq_controls_layer import IQControlsLayer
 NavTurnSignalController = import_verified_module(
   "iqpilot_navd_private", "iqpilot_private.navd.nav_turn_signals"
 ).NavTurnSignalController
+KnownTurnAssist = import_verified_module(
+  "iqpilot_navd_private", "iqpilot_private.navd.known_turns"
+).KnownTurnAssist
 
 State = log.SelfdriveState.OpenpilotState
 REPLAY = "REPLAY" in os.environ
@@ -104,6 +107,7 @@ class Controls(IQControlsLayer):
     self._update_params()
 
     self.nav_turn_signal_controller = NavTurnSignalController(self.CP)
+    self.known_turn_assist = KnownTurnAssist()
 
     self.pose_calibrator = PoseCalibrator()
     self.calibrated_pose: Pose | None = None
@@ -267,6 +271,12 @@ class Controls(IQControlsLayer):
     new_desired_curvature, self.lateral_action_selection = select_lateral_curvature(
       model_v2, CC.latActive, self.curvature, maneuver_curvature,
       self.curvature_lookahead_enabled, self.LaC.supports_legacy_curvature_lookahead,
+    )
+    nav_assist_live = self.sm.alive['iqNavState'] and self.sm.valid['iqNavState']
+    new_desired_curvature = self.known_turn_assist.update(
+      self.sm['iqNavState'] if nav_assist_live else None,
+      (self.sm.frame - self.sm.recv_frame['iqNavState']) * DT_CTRL,
+      CS.vEgo, self.curvature, new_desired_curvature, CS.steeringPressed, CC.latActive, DT_CTRL,
     )
 
     self.smooth_steer_inactive_frames = 0 if CC.latActive else self.smooth_steer_inactive_frames + 1

@@ -42,7 +42,7 @@ SCENARIO_FRAMES = 360
 def load_controls_module(monkeypatch):
   module_name = "iqpilot.system.proprietary_runtime._verified_import"
   stub = ModuleType(module_name)
-  stub.import_verified_module = lambda *args: SimpleNamespace(NavTurnSignalController=object)
+  stub.import_verified_module = lambda *args: SimpleNamespace(NavTurnSignalController=object, KnownTurnAssist=object)
   spec = importlib.util.spec_from_file_location("lateral_controlsd_under_test", Path(__file__).parents[1] / "controlsd.py")
   module = importlib.util.module_from_spec(spec)
   with monkeypatch.context() as context:
@@ -56,6 +56,8 @@ class ScenarioMessages(dict):
     super().__init__()
     self.valid = defaultdict(bool)
     self.alive = defaultdict(bool)
+    self.frame = 0
+    self.recv_frame = defaultdict(int)
 
   def all_checks(self, services):
     return all(self.valid[service] and self.alive[service] for service in services)
@@ -113,6 +115,7 @@ def build_controls(module, case, lookahead=False, slew=False, smooth=False, nnff
   controls.navigation_enabled = False
   controls.nav_exit_lane_change = False
   controls.nav_turn_signal_controller = SimpleNamespace(update=lambda *args: (False, False))
+  controls.known_turn_assist = SimpleNamespace(update=lambda *args: args[4])
   controls.LoC = SimpleNamespace(long_control_state="off", reset=lambda: None, update=lambda *args, **kwargs: 0.125)
   controls.enable_long_comfort_mode = False
   controls.longitudinal_comfort = module.LongitudinalComfort(controls.CP_IQ.longitudinalActuation)

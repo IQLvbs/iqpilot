@@ -287,6 +287,14 @@ class CAR(Platforms):
     TOYOTA_RAV4_TSS2.specs,
     flags=ToyotaFlags.RADAR_ACC | ToyotaFlags.ANGLE_CONTROL,
   )
+  TOYOTA_RAV4_TSS2_2023_SECOC = ToyotaSecOCPlatformConfig(
+    [
+      ToyotaSecOcCarDocs("Toyota RAV4 SecOC 2023-25", min_enable_speed=MIN_ACC_SPEED),
+      ToyotaSecOcCarDocs("Toyota RAV4 Hybrid SecOC 2023-25", min_enable_speed=MIN_ACC_SPEED),
+    ],
+    TOYOTA_RAV4_TSS2.specs,
+    flags=ToyotaFlags.RADAR_ACC | ToyotaFlags.ANGLE_CONTROL,
+  )
   TOYOTA_RAV4_PRIME = ToyotaSecOCPlatformConfig(
     [ToyotaSecOcCarDocs("Toyota RAV4 Prime 2021-23", min_enable_speed=MIN_ACC_SPEED)],
     CarSpecs(mass=4372. * CV.LB_TO_KG, wheelbase=2.68, steerRatio=16.88, tireStiffnessFactor=0.5533),

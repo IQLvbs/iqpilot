@@ -60,3 +60,12 @@ def test_opcode_rewrite_equals_oob_load(tmp_path):
   np.testing.assert_array_equal(got["w"].numpy(), b["w"].numpy())
   np.testing.assert_array_equal(got["s"].numpy(), b["s"].numpy())
   assert got["raw"] == b["raw"] and got["meta"] == {"k": "v"}
+
+
+def test_truncated_buffer_is_rejected(tmp_path):
+  path = tmp_path / "b.oob"
+  with open(path, "wb") as f:
+    dump_oob(_bundle(), f)
+  path.write_bytes(path.read_bytes()[:-16])
+  with pytest.raises(ValueError, match="truncated"):
+    load_bundle(str(path))

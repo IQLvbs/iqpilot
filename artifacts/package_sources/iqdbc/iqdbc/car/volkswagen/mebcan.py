@@ -20,6 +20,8 @@ ACC_HMS_NO_REQUEST   = 0
 ACC_HMS_RAMP_FRAMES  = 5
 ACC_HMS_RELEASE_SPEED = 5 * CV.KPH_TO_MS
 
+TA_REQUEST_ENABLE = 4
+
 ACC_HUD_ERROR    = 6
 ACC_HUD_OVERRIDE = 4
 ACC_HUD_ACTIVE   = 3
@@ -206,7 +208,8 @@ def acc_hold_type(main_switch_on, acc_faulted, long_active, starting, stopping, 
 
 
 def create_acc_accel_control(packer, bus, CP, acc_type, acc_enabled, upper_jerk, lower_jerk, upper_control_limit, lower_control_limit,
-                             accel, acc_control, acc_hold_type, stopping, starting, esp_hold, speed, override, travel_assist_available):
+                             accel, acc_control, acc_hold_type, stopping, starting, esp_hold, speed, override, travel_assist_available,
+                             ta_stock_values=None):
   # active longitudinal control disables one pedal driving (regen mode) while using overriding mechnism
   # error mitigation when stopping or stopped: (newer gen cars can be very sensitive)
   # - send 0 m stopping distance for cars in kind of parameterized stopping mode (stopping accel -0.2 seen for those cars)
@@ -266,6 +269,9 @@ def create_acc_accel_control(packer, bus, CP, acc_type, acc_enabled, upper_jerk,
        "Travel_Assist_Request":   0,
        "Travel_Assist_Available": 1,
     }
+    if ta_stock_values is not None:
+      values_ta["Travel_Assist_Press_Ack"] = ta_stock_values["Travel_Assist_Press_Ack"]
+      values_ta["Travel_Assist_Request"] = TA_REQUEST_ENABLE if ta_stock_values["Travel_Assist_Request"] == TA_REQUEST_ENABLE else 0
 
     commands.append(packer.make_can_msg("TA_01", bus, values_ta))
 

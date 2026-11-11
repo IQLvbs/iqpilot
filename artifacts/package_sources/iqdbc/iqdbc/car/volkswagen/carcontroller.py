@@ -133,6 +133,8 @@ class CarController(CarControllerBase):
     self.long_stop_hold = LongStopHold(dt=(DT_CTRL * self.CCP.ACC_CONTROL_STEP)) if self.CP.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO) else None
     self.gra_acc_counter_last = None
     self.gra_cancel_ticks = 0
+    self.enabled_last = False
+    self.engage_frame = 0
     self.motor3_frame_last = None
     self.motor3_was_stopping = False
     self.motor3_resuming = False
@@ -397,6 +399,9 @@ class CarController(CarControllerBase):
           self.packer_pt.counters[addr] = (CS.acc_stock_counters[name] + 1) % 16
           self.acc_counters_seeded.add(name)
 
+    if CC.enabled and not self.enabled_last:
+      self.engage_frame = self.frame
+
     if self.frame % self.CCP.ACC_CONTROL_STEP == 0 and self.CP.openpilotLongitudinalControl and not CS.out.radarDisableFailed:
       stopping = actuators.longControlState == LongCtrlState.stopping
       if self.CP.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO):
@@ -420,6 +425,7 @@ class CarController(CarControllerBase):
           jerk_up, jerk_down, band_oben, band_unten,
           accel, acc_control, acc_hold_type, stopping, starting, esp_hold,
           CS.out.vEgoRaw * CV.MS_TO_KPH, long_override, CS.travel_assist_available,
+          CS.ta_stock_values if CC.enabled and self.frame - self.engage_frame < self.CCP.TRAVEL_ASSIST_TEXT_FRAMES else None,
         ))
         self.accel_last = accel
       else:
@@ -610,6 +616,7 @@ class CarController(CarControllerBase):
     new_actuators.speed = float(getattr(actuators, "speed", 0.0))
 
     self.lead_distance_bars_last = hud_control.leadDistanceBars
+    self.enabled_last = CC.enabled
     self.gra_acc_counter_last = CS.gra_stock_values["COUNTER"]
     self.motor3_frame_last = CS.motor3_frame
     self.frame += 1

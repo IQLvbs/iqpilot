@@ -20,6 +20,8 @@ STATEFUL_MODEL_FORMAT = 5
 STATEFUL_IMAGE_INPUT = "new_img"
 STATEFUL_OUTPUT = "outputs"
 STATEFUL_BASE_FEEDS = ("desire", "traffic_convention", "action_t")
+STATEFUL_FEED_DEFAULTS = {"fidx": 3.0}
+MODEL_FIDX_REFRESH_FRAMES = 20
 OOB_MAGIC = b"IQEGPUOOB1"
 QUEUE_NAMES = ("img_q", "big_img_q", "feat_q", "desire_q")
 PACKED_ORDER = ("desire", "traffic_convention", "action_t", "prev_feat")
@@ -361,6 +363,22 @@ def make_run_stateful(model_runner, input_spec: dict, pairs: dict[str, str], dev
   return run_stateful
 
 
+class ModelFidxFeed:
+  def __init__(self, params):
+    self._params = params
+    self._frames = 0
+    self._value = self._read()
+
+  def _read(self) -> np.ndarray:
+    return np.array([self._params.get("ModelFidx", return_default=True)], dtype=np.float32)
+
+  def next(self) -> np.ndarray:
+    self._frames += 1
+    if self._frames % MODEL_FIDX_REFRESH_FRAMES == 0:
+      self._value = self._read()
+    return self._value
+
+
 class _StatefulState:
   def _init_state(self, input_spec: dict, pairs: dict[str, str], device: str) -> None:
     self.pairs = pairs
@@ -392,7 +410,8 @@ class _StatefulState:
     views["action_t"][:] = np.asarray(action_t, dtype=np.float32).reshape(views["action_t"].shape)
     for name in self._extra_names:
       value = extras.get(name) if extras else None
-      views[name][:] = 0 if value is None else np.asarray(value, dtype=np.float32).reshape(views[name].shape)
+      default = STATEFUL_FEED_DEFAULTS.get(name, 0)
+      views[name][:] = default if value is None else np.asarray(value, dtype=np.float32).reshape(views[name].shape)
 
   def _step(self, jit, **kw) -> np.ndarray:
     out, = jit(**kw, **_state_kwargs(self._cur, self._nxt))
@@ -512,8 +531,10 @@ def load_oob(f):
 
   def buffers():
     while (h := f.read(8)):
-      pb = pickle.PickleBuffer(bytearray(struct.unpack("<q", h)[0]))
-      f.readinto(pb)
+      size = struct.unpack("<q", h)[0]
+      pb = pickle.PickleBuffer(bytearray(size))
+      if f.readinto(pb) != size:
+        raise ValueError(f"truncated out-of-band bundle: buffer of {size} bytes is incomplete")
       yield pb
 
   return pickle.load(io.BytesIO(opcodes), buffers=buffers())

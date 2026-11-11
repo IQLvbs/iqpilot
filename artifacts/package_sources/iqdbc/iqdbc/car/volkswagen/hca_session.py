@@ -1,10 +1,13 @@
 # Copyright © IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved, licensed under https://iqlvbs.com/terms
 from iqdbc.car import DT_CTRL
 
+# The EPS echoes a 1.10 s HCA-off gap as 1.09 s (route 00000055 t=1840), so the full gap would never register
+ECHO_SKEW_FRAMES = 2
+
 
 class EpsSessionClock:
   def __init__(self, reset_gap_s: float):
-    self.reset_gap_frames = round(reset_gap_s / DT_CTRL)
+    self.reset_gap_frames = round(reset_gap_s / DT_CTRL) - ECHO_SKEW_FRAMES
     self.age_frames = 0
     self.gap_frames = 0
     self.resets = 0

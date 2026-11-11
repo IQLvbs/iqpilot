@@ -18,6 +18,8 @@
 #define MSG_MEB_DISTANCE_01  0x24FU   // TX by OP (camera harness): empty radar object list for disabled radar
 #define MSG_UDS_FUNCTIONAL   0x700U   // TX by OP (camera harness): TesterPresent keepalive for radar programming session
 
+static bool volkswagen_meb_travel_assist_button_prev = false;
+
 static uint32_t volkswagen_meb_compute_crc(const CANPacket_t *msg) {
   const int len = GET_LEN(msg);
 
@@ -141,6 +143,7 @@ static safety_config volkswagen_meb_init(uint16_t param) {
   };
 
   volkswagen_common_init();
+  volkswagen_meb_travel_assist_button_prev = false;
 
   volkswagen_alt_crc_variant_1 = GET_FLAG(param, FLAG_VOLKSWAGEN_ALT_CRC_VARIANT_1);
   volkswagen_no_gas_offset = GET_FLAG(param, FLAG_VOLKSWAGEN_NO_GAS_OFFSET);
@@ -219,11 +222,14 @@ static void volkswagen_meb_rx_hook(const CANPacket_t *msg) {
     if (volkswagen_longitudinal) {
       const bool set_button = GET_BIT(msg, 16U);
       const bool resume_button = GET_BIT(msg, 19U);
-      if ((volkswagen_set_button_prev && !set_button) || (volkswagen_resume_button_prev && !resume_button)) {
+      const bool travel_assist_button = GET_BIT(msg, 30U);
+      if ((volkswagen_set_button_prev && !set_button) || (volkswagen_resume_button_prev && !resume_button) ||
+          (volkswagen_meb_travel_assist_button_prev && !travel_assist_button)) {
         controls_allowed = acc_main_on;
       }
       volkswagen_set_button_prev = set_button;
       volkswagen_resume_button_prev = resume_button;
+      volkswagen_meb_travel_assist_button_prev = travel_assist_button;
     }
 
     if (GET_BIT(msg, 13U)) {

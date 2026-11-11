@@ -43,7 +43,7 @@ from iqpilot.selfdrive.iqmodeld.egpu_sched import MODEL_CORE, CpuBudgetGuard, en
 from iqpilot.selfdrive.iqmodeld.egpu_helpers import (
   die_with_parent, download_onnx, download_precompiled, drop_frozen_model_oob, egpu_model_oob_pkl_path, egpu_oob_pkl_path, egpu_pkl_path,
   egpu_policy_pkl_path, egpu_present_consented, egpu_selected, free_dock_lock, local_onnx,
-  patch_tinygrad_fetch_fw, patch_usb_signal_wait, quarantine_artifact, resolve_backend, usbgpu_present,
+  patch_tinygrad_fetch_fw, patch_usb_signal_wait, quarantine_artifact, resolve_backend, tighten_usb_signal_timeout, usbgpu_present,
 )
 from iqpilot.selfdrive.iqmodeld.egpu_model import resolve_egpu_model
 from iqpilot.selfdrive.iqmodeld.aux_inputs import AuxModelInputs
@@ -54,7 +54,7 @@ from iqpilot.selfdrive.iqmodeld.messaging import DrivePacketMemory, populate_dri
 from iqpilot.selfdrive.iqmodeld.metadata import Meta20hz
 from iqpilot.selfdrive.iqmodeld.model_channel import BIG_CHANNEL, ModelChannel
 from iqpilot.selfdrive.iqmodeld.egpu_policy import (
-  MODEL_FORMAT, POLICY_FORMAT, STATEFUL_MODEL_FORMAT, STATEFUL_POLICY_FORMAT, ModelRunner, PolicyRunner, StatefulModelRunner,
+  MODEL_FORMAT, POLICY_FORMAT, STATEFUL_MODEL_FORMAT, STATEFUL_POLICY_FORMAT, ModelFidxFeed, ModelRunner, PolicyRunner, StatefulModelRunner,
   StatefulPolicyRunner, load_bundle,
 )
 from iqpilot.selfdrive.iqmodeld.model_warp import FrameWarp
@@ -453,8 +453,10 @@ def main(demo: bool = False) -> None:
   cloudlog.warning(f"iqegpumodeld model: {meta['key']} ({meta['model_name']})")
   cloudlog.warning(f"iqegpumodeld model up (warmup {warm_s * 1e3:.0f}ms, {'warp on dock' if warp is None else 'warp on device'})")
 
+  tighten_usb_signal_timeout()
   pipeline = EgpuPipeline(meta, infer_fn)
   aux_inputs = AuxModelInputs(input_spec)
+  fidx_feed = ModelFidxFeed(params) if "fidx" in input_spec else None
   warmup_frames = int(meta.get("warmup_frames") or STATEFUL_WARMUP_FRAMES)
   telemetry_pm = messaging.PubMaster(["egpuDockState"])
   telemetry = EgpuDockTelemetry(telemetry_pm, big=True)
@@ -543,6 +545,8 @@ def main(demo: bool = False) -> None:
 
     aux_inputs.poll()
     aux_extras = aux_inputs.extras()
+    if fidx_feed is not None:
+      aux_extras = {**aux_extras, "fidx": fidx_feed.next()}
 
     started_at = time.perf_counter()
     t_warp = started_at

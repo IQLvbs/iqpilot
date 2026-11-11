@@ -26,6 +26,7 @@ route_exempt_cars = [
   GM.CHEVROLET_MALIBU,
   HYUNDAI.GENESIS_G90,
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
+  VOLKSWAGEN.VOLKSWAGEN_ID3_MK2_SAIC,  # pending an SAIC ID.3 gateway route
   SUBARU.SUBARU_FORESTER_HYBRID,
   # Honda/Acura test routes below expired, replace when CI bucket sync is fixed
   HONDA.ACURA_TLX_2G,

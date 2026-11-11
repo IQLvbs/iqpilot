@@ -835,6 +835,23 @@ BO_ 1720 Kombi_03: 8 Gateway_D4C7
  SG_ KBI_BCmE_aktiv : 16|1@1+ (1.0,0.0) [0.0|1] ""  Vector__XXX
  SG_ KBI_Sparhinweis_quittiert : 17|1@1+ (1.0,0.0) [0.0|1] ""  Vector__XXX
 
+BO_ 778 LDW_Status_MLB: 8 XXX
+ SG_ LDW_Lernmodus_rechts : 0|2@1+ (1,0) [0|3] "" XXX
+ SG_ LDW_Lernmodus_links : 2|2@1+ (1,0) [0|3] "" XXX
+ SG_ LDW_Textbits : 12|4@1+ (1,0) [0|15] "" XXX
+ SG_ LDW_Gong : 16|2@1+ (1,0) [0|3] "" XXX
+ SG_ LDW_Kameratyp : 18|1@1+ (1,0) [0|1] "" XXX
+ SG_ LDW_Lampe_gelb : 19|1@1+ (1,0) [0|1] "" XXX
+ SG_ LDW_Lampe_gruen : 20|1@1+ (1,0) [0|1] "" XXX
+ SG_ LDW_SW_Warnung_links : 21|1@1+ (1,0) [0|1] "" XXX
+ SG_ LDW_SW_Warnung_rechts : 22|1@1+ (1,0) [0|1] "" XXX
+ SG_ LDW_Bit23 : 23|1@1+ (1,0) [0|1] "" XXX
+ SG_ LDW_Spur_Status : 24|8@1+ (1,0) [0|255] "" XXX
+ SG_ LDW_System_OK : 63|1@1+ (1,0) [0|1] "" XXX
+
+BO_ 1318 BCM_11: 8 XXX
+ SG_ BCM_LDW_Taste : 37|1@1+ (1,0) [0|1] "" XXX
+
 BO_ 517 KS_Airbag: 8 Airbag_D4
  SG_ KS_Airbag_Data : 0|64@1+ (1.0,0.0) [0.0|18446744073709551615] ""  Gateway_D4C7
 

@@ -342,6 +342,7 @@ struct CarState {
       lfaButton @12;
       paddleLeft @13;
       paddleRight @14;
+      travelAssist @15;
     }
   }
 

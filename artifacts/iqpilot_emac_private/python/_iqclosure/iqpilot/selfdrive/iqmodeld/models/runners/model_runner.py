@@ -233,9 +233,14 @@ def _is_fused_bundle(bundle) -> bool:
   return _single_artifact_prefix(bundle, "driving_fused_")
 
 
+def _is_stateful_bundle(bundle) -> bool:
+  return _single_artifact_prefix(bundle, "driving_stateful_")
+
+
 def _is_supercombo_bundle(bundle) -> bool:
   models = _qcom_models(bundle)
-  return len(models) == 1 and models[0].type.raw == ModelType.supercombo and not _is_fused_bundle(bundle)
+  return (len(models) == 1 and models[0].type.raw == ModelType.supercombo
+          and not _is_fused_bundle(bundle) and not _is_stateful_bundle(bundle))
 
 
 def _is_split_bundle(bundle) -> bool:
@@ -272,6 +277,9 @@ def get_model_runner() -> "ModelRunner":
   if private_runner is not None:
     return private_runner
 
+  if _is_stateful_bundle(bundle):
+    from iqpilot.selfdrive.iqmodeld.models.runners.tinygrad.stateful_runner import TinygradStatefulRunner
+    return TinygradStatefulRunner()
   if _is_supercombo_bundle(bundle):
     from iqpilot.selfdrive.iqmodeld.models.runners.tinygrad.supercombo_runner import TinygradSupercomboRunner
     return TinygradSupercomboRunner()

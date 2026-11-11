@@ -9,7 +9,7 @@ import pytest
 os.environ["DEV"] = "CPU"
 
 from iqpilot.selfdrive.iqmodeld.egpu_policy import (
-  StatefulPolicyRunner, is_stateful_spec, make_run_stateful, state_pairs, stateful_packed_layout,
+  MODEL_FIDX_REFRESH_FRAMES, ModelFidxFeed, StatefulPolicyRunner, _StatefulState, is_stateful_spec, make_run_stateful, state_pairs, stateful_packed_layout,
 )
 
 H, W = 8, 16
@@ -177,3 +177,33 @@ def test_warp_on_dock_artifact_reads_every_frame_feed():
     action_t = np.array([0.1 * i, -0.05 * i], dtype=np.float32)
     out = runner.run(frame, frame, eye, eye, np.zeros(8, dtype=np.float32), traffic, action_t)
     np.testing.assert_allclose(out[32:36], np.concatenate([traffic, action_t]), rtol=1e-6, atol=1e-7, err_msg=f"frame {i}")
+
+
+class _FidxParams:
+  def __init__(self, value):
+    self.value = value
+
+  def get(self, key, return_default=False):
+    assert key == "ModelFidx" and return_default
+    return self.value
+
+
+def test_fidx_feed_rereads_the_param_once_per_refresh_window():
+  params = _FidxParams(3)
+  feed = ModelFidxFeed(params)
+  params.value = 5
+  assert feed.next().tolist() == [3.0]
+  values = [feed.next()[0] for _ in range(MODEL_FIDX_REFRESH_FRAMES - 1)]
+  assert values[-2] == 3.0 and values[-1] == 5.0
+
+
+def test_fidx_defaults_to_three_when_no_value_is_fed():
+  state = _StatefulState()
+  state._prev_desire = np.zeros(8, dtype=np.float32)
+  state._extra_names = ("fidx", "navigation")
+  views = {"desire": np.zeros(8, dtype=np.float32), "traffic_convention": np.zeros(2, dtype=np.float32), "action_t": np.zeros(2, dtype=np.float32),
+           "fidx": np.zeros((1, 1), dtype=np.float32), "navigation": np.ones(47, dtype=np.float32)}
+  state._fill(views, np.zeros(8), [1, 0], [0.2, 0.3])
+  assert views["fidx"].tolist() == [[3.0]] and not views["navigation"].any()
+  state._fill(views, np.zeros(8), [1, 0], [0.2, 0.3], {"fidx": np.array([6.0])})
+  assert views["fidx"].tolist() == [[6.0]]

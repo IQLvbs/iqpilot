@@ -23,7 +23,7 @@ class TestToyotaInterfaces:
 
   def test_lta_platforms(self):
     # At this time, only RAV4 2023 is expected to use LTA/angle control
-    assert ANGLE_CONTROL_CAR == {CAR.TOYOTA_RAV4_TSS2_2023}
+    assert ANGLE_CONTROL_CAR == {CAR.TOYOTA_RAV4_TSS2_2023, CAR.TOYOTA_RAV4_TSS2_2023_SECOC}
 
   def test_tss2_dbc(self):
     # We make some assumptions about TSS2 platforms,
