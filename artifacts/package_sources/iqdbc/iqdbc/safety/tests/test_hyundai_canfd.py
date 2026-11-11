@@ -222,20 +222,37 @@ def test_canfd_spas2_needs_opt_in_on_hda1_camera_scc(safety, param):
   assert not safety.get_relay_malfunction()
 
 
+@pytest.fixture
+def aol(safety):
+  """Always-on lateral, as the panda tracks it. Left switched off again for the other tests."""
+  def set_lateral_allowed(allowed: bool):
+    safety.set_aol_params(True, False, False)
+    safety.set_controls_allowed_lat(allowed)
+  yield set_lateral_allowed
+  safety.set_controls_allowed_lat(False)
+  safety.set_aol_params(False, False, False)
+
+
 @pytest.mark.parametrize("param", SPAS2_PARAMS)
-def test_canfd_spas2_direction_needs_controls_allowed(safety, param):
+def test_canfd_spas2_direction_needs_the_steering_permission(safety, aol, param):
   safety.set_safety_hooks(CarParams.SafetyModel.hyundaiCanfd, param)
   safety.init_tests()
 
-  # neutral is always allowed, so a request can be released after disengaging
+  # nothing engaged: neutral only, so a request can still be released
   safety.set_controls_allowed(False)
+  aol(False)
+  assert not safety.get_lat_active()
   assert safety.safety_tx_hook(spas2(SPAS2_NEUTRAL))
   assert not safety.safety_tx_hook(spas2(SPAS2_LEFT))
   assert not safety.safety_tx_hook(spas2(SPAS2_RIGHT))
 
-  safety.set_controls_allowed(True)
-  for blinker in (SPAS2_NEUTRAL, SPAS2_LEFT, SPAS2_RIGHT):
-    assert safety.safety_tx_hook(spas2(blinker))
+  # cruise engaged, or cruise off with always-on lateral: the two cases where steering is allowed
+  for controls_allowed, lateral_allowed in ((True, False), (False, True), (True, True)):
+    safety.set_controls_allowed(controls_allowed)
+    aol(lateral_allowed)
+    assert safety.get_lat_active()
+    for blinker in (SPAS2_NEUTRAL, SPAS2_LEFT, SPAS2_RIGHT):
+      assert safety.safety_tx_hook(spas2(blinker))
 
 
 @pytest.mark.parametrize("param", SPAS2_PARAMS)

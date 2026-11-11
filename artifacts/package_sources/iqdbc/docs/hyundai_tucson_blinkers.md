@@ -36,34 +36,49 @@ It is separate from `ENABLE_BLINKERS`, which also sends SPAS1 and disables the p
 
 - Idle sends nothing. A request sends that direction at 50 Hz for as long as it is held, then
   neutral for 3 s, then nothing again. This is the sequence used on the car.
-- Only while `CC.enabled`, and only while `BLINKERS` is arriving, so the driver's side is
-  always visible.
+- Only while engaged, which means the same as it does for steering: `CC.enabled`, or always-on
+  lateral active. It does not use `CC.latActive`. Braking for a turn drops cruise and leaves
+  lateral on, and at a standstill `CC.latActive` is false on this platform; the signal has to
+  survive both. On the test car, cruise was off after every brake press and lateral was still
+  on after every one.
+- If engagement is lost and comes back while the request is still held, the signal comes back
+  too.
+- Only while `BLINKERS` is arriving (5 Hz on the test car), so the driver's side is always
+  visible.
 - The driver comes first. A request does not start while a turn signal or the hazards are on.
-  It ends as soon as the other side shows activity, from the stalk bits or the lamps.
-- Activity on the requested side does not end it. `LEFT_STALK` / `RIGHT_STALK` stay set for a
-  whole one-touch blink after the lever is back in the middle, so they follow the blink and not
-  the lever. Our own request may set them as well, and it certainly lights the lamps.
-- A request that has ended must drop before it can start again. One that is still held after
-  the driver overrode it stays off.
+  It ends as soon as the other side shows activity, from the stalk bits or the lamps, and then
+  stays off until the request drops.
+- Activity on the requested side does not end it. `LEFT_STALK` / `RIGHT_STALK` turn on with the
+  first flash and stay set for a whole one-touch blink after the lever is back in the middle,
+  so they follow the blink and not the lever. Our own request may set them as well, and it
+  certainly lights the lamps.
+- The other side only starts after the 3 s of neutral, so the car always sees neutral between
+  left and right.
 
 **Panda** (`safety/modes/hyundai_canfd.h`): with the safety param bit set on HDA1 camera SCC,
 `0x16A` on bus 0 is added to the allowed messages. The payload may only be neutral, left or
-right with everything else empty. A direction needs `controls_allowed`; neutral is always
-allowed so a request can be released after disengaging. The message uses `check_relay`: if
-anything else sends `0x16A` on the car side, that is a relay malfunction. Nothing in the
-firmware's CAN driver changes.
+right with everything else empty. A direction needs `is_lat_active()`, the permission steering
+uses: `controls_allowed`, or always-on lateral. Neutral is always allowed so a request can be
+released after disengaging. The message uses `check_relay`: if anything else sends `0x16A` on
+the car side, that is a relay malfunction. Nothing in the firmware's CAN driver changes.
 
 ## What navigation needs
 
 The navigation turn-signal code is private and currently does not produce requests for this
 car. For this path to do anything it has to:
 
-- treat `HyundaiFlags.CANFD_SPAS2_BLINKERS` as a car that supports turn-signal requests;
-- hold exactly one of `leftBlinker` / `rightBlinker` for as long as the signal is wanted, and
-  drop it to stop;
-- drop and raise the request again after the driver overrode it;
-- allow for `CarState.leftBlinker` / `rightBlinker` being lamp feedback on this car: they turn
-  on because of the request, not only because of the driver.
+- **Admit the car.** `CP.flags & HyundaiFlags.CANFD_SPAS2_BLINKERS` (bit 27) is set only when
+  this path is opted in and the layout matches. A car without it ignores the request.
+- **Hold the request.** Exactly one of `leftBlinker` / `rightBlinker` for as long as the signal
+  is wanted, and both false to stop. The lamps follow the level, not an edge.
+- **Not depend on `CC.latActive` at a stop.** Hyundai does not set `steerAtStandstill`, so
+  `CC.latActive` goes false whenever the car is stopped, unlike Tesla. A request tied to it
+  drops at every red light.
+- **Expect lamp feedback.** `CarState.leftBlinker` / `rightBlinker` come from the lamps on this
+  car. They turn on because of the request, flash with it, and stay true for 0.5 s after the
+  last flash. They cannot tell the driver from the request on the same side.
+- **Drop and raise again after an override.** If the driver signals the other way or turns the
+  hazards on, the request ends and stays off until it has been dropped.
 
 ## Not checked on a car yet
 

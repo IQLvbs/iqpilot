@@ -494,7 +494,7 @@ class CarController(CarControllerBase):
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
 
       # blinkers on HDA1 camera-SCC cars without a parking ECU: SPAS2 alone, no SPAS1 and no ECU disable
-      blinker_control = self.spas2_blinkers.update(CC, CS)
+      blinker_control = self.spas2_blinkers.update(CC, CC_IQ, CS)
       if blinker_control is not None:
         can_sends.append(hyundaicanfd.create_spas2_message(self.packer, self.CAN, blinker_control == LEFT, blinker_control == RIGHT))
 

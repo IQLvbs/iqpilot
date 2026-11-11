@@ -27,25 +27,30 @@ def spas2_blinkers_supported(candidate, flags: int, ecan: int, fingerprint: dict
 
 
 class Spas2Blinkers:
-  """Follows CC.leftBlinker / CC.rightBlinker while engaged.
+  """Follows CC.leftBlinker / CC.rightBlinker while cruise or always-on lateral is engaged.
 
   Sends nothing when idle. A request sends that direction until it ends, then neutral for
   RELEASE_FRAMES, then nothing again.
+
+  Engaged means the same as it does for steering: cruise, or always-on lateral. Braking for a
+  turn drops cruise and usually leaves lateral on, and the signal has to survive that. It also
+  has to survive a stop, where CC.latActive goes false on this platform. If engagement is lost
+  and comes back while the request is still held, the signal comes back with it.
 
   The driver comes first. A request does not start while a turn signal or the hazards are
   already on, and it ends as soon as the other side shows activity. Activity on the requested
   side does not end it: the BLINKERS stalk bits stay set for a whole one-touch blink after the
   lever is released, so they follow the blink and not the lever, and our own request may set
-  them too. A request that has ended must be dropped before it can start again, so one that is
-  still held after the driver overrode it does not come back.
+  them too. After the driver has overridden a request it stays off until the request drops.
   """
 
   def __init__(self, CP):
     self.enabled = bool(CP.flags & HyundaiFlags.CANFD_SPAS2_BLINKERS)
     self.frame = 0
     self.active = NEUTRAL
+    self.last_active = NEUTRAL
     self.release_frames = 0
-    self.armed = False
+    self.overridden = False
     self.blinkers_stamp = 0
     self.blinkers_age = BLINKERS_TIMEOUT
 
@@ -64,7 +69,7 @@ class Spas2Blinkers:
     right = bool(CS.blinkers["RIGHT_STALK"]) or CS.out.rightBlinker
     return left, right, self.blinkers_age < BLINKERS_TIMEOUT
 
-  def update(self, CC, CS) -> int | None:
+  def update(self, CC, CC_IQ, CS) -> int | None:
     """The BLINKER_CONTROL value to send on this control frame, or None to send nothing."""
     if not self.enabled:
       return None
@@ -72,19 +77,24 @@ class Spas2Blinkers:
 
     left, right, known = self.car_blinkers(CS)
     request = LEFT if CC.leftBlinker and not CC.rightBlinker else RIGHT if CC.rightBlinker and not CC.leftBlinker else NEUTRAL
-    allowed = CC.enabled and known
+    aol = CC_IQ.aol
+    engaged = CC.enabled or (aol.available and aol.enabled and aol.active)
+    allowed = engaged and known
+
+    if not CC.leftBlinker and not CC.rightBlinker:
+      self.overridden = False
 
     if self.active != NEUTRAL:
       other_side = right if self.active == LEFT else left
+      if other_side:
+        self.overridden = True
       if request != self.active or not allowed or other_side:
         self.active = NEUTRAL
         self.release_frames = RELEASE_FRAMES
-    elif request != NEUTRAL and self.armed and allowed and not left and not right:
-      self.active = request
-      self.armed = False
-
-    if not CC.leftBlinker and not CC.rightBlinker:
-      self.armed = True
+    elif request != NEUTRAL and allowed and not self.overridden and not left and not right:
+      # the other side waits for the release to finish, so the car always sees neutral in between
+      if request == self.last_active or self.release_frames == 0:
+        self.active = self.last_active = request
 
     if self.active != NEUTRAL:
       control = self.active

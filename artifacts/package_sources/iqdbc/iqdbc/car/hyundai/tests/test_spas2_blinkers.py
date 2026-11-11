@@ -19,6 +19,24 @@ TUCSON_SAFETY_PARAM = 44
 RELEASE_MESSAGES = RELEASE_FRAMES // SEND_EVERY
 LAMP_HOLD_FRAMES = 50  # CarState keeps a blinker on this long after its lamp was last lit
 
+# How the car can be engaged. Braking for a turn goes from CRUISE to LATERAL_ONLY.
+CRUISE = dict(enabled=True, aol="enabled")
+CRUISE_WITHOUT_AOL = dict(enabled=True, aol=None)
+LATERAL_ONLY = dict(enabled=False, aol="enabled")
+LATERAL_OVERRIDING = dict(enabled=False, aol="overriding")
+LATERAL_PAUSED = dict(enabled=False, aol="paused")
+LATERAL_TOGGLED_OFF = dict(enabled=False, aol="toggled-off")
+OFF = dict(enabled=False, aol=None)
+
+
+def aol_state(state: str | None):
+  if state is None:
+    return structs.AlwaysOnLateral()
+  if state == "toggled-off":
+    # the always-on lateral setting is off, so whatever else it reports means nothing
+    return structs.AlwaysOnLateral(state="enabled", available=False, enabled=True, active=True)
+  return structs.AlwaysOnLateral(state=state, available=True, enabled=True, active=state != "paused")
+
 
 def tucson_params(opt_in: bool, ecan: dict[int, int] = TUCSON_ECAN, cam: dict[int, int] | None = None, candidate=CAR.HYUNDAI_TUCSON_4TH_GEN):
   fingerprint = gen_empty_fingerprint()
@@ -50,7 +68,7 @@ class Car:
         assert self.step() == []
       assert self.CI.CS.blinkers is not None
 
-  def step(self, left=False, right=False, enabled=True, stalk=(False, False), lamps=(False, False), blinkers=True):
+  def step(self, left=False, right=False, enabled=True, aol="enabled", stalk=(False, False), lamps=(False, False), blinkers=True):
     """Returns the BLINKER_CONTROL values sent on this frame: [] or one value."""
     self.now += 10_000_000
     frames = []
@@ -63,7 +81,9 @@ class Car:
     self.CI.update([(self.now, frames)])
 
     self.CC.leftBlinker, self.CC.rightBlinker, self.CC.enabled = left, right, enabled
-    _, can_sends = self.CI.apply(self.CC.as_reader(), structs.IQCarControl(), self.now)
+    CC_IQ = structs.IQCarControl()
+    CC_IQ.aol = aol_state(aol)
+    _, can_sends = self.CI.apply(self.CC.as_reader(), CC_IQ, self.now)
     spas = [message for message in can_sends if message[0] in (0x165, 0x16A)]
     assert all(address == 0x16A and bus == 0 and len(data) == 32 for address, data, bus in spas)
     self.sent += spas
@@ -131,6 +151,39 @@ def test_wire_format_rate_and_counter(car):
     check_spas2(message, counter, RIGHT if counter < 10 else NEUTRAL)
 
 
+@pytest.mark.parametrize("engaged", (CRUISE, CRUISE_WITHOUT_AOL, LATERAL_ONLY, LATERAL_OVERRIDING),
+                         ids=("cruise", "cruise-no-aol", "lateral-only", "overriding"))
+def test_starts_when_engaged(car, engaged):
+  assert car.run(10, right=True, **engaged) == [RIGHT] * 5
+
+
+@pytest.mark.parametrize("not_engaged", (OFF, LATERAL_PAUSED, LATERAL_TOGGLED_OFF), ids=("off", "paused", "toggled-off"))
+def test_does_not_start_when_not_engaged(car, not_engaged):
+  assert car.run(200, right=True, **not_engaged) == []
+
+
+def test_holds_through_braking_for_a_turn_and_the_stop(car):
+  # cruise and lateral, then the driver brakes: cruise drops, lateral stays, all the way to a stop and away again
+  assert car.run(100, right=True, **CRUISE) == [RIGHT] * 50
+  assert car.run(1000, right=True, **LATERAL_ONLY) == [RIGHT] * 500
+  assert car.run(100, right=True, **CRUISE) == [RIGHT] * 50
+  assert len(car.sent) == 600
+
+
+@pytest.mark.parametrize("lost", (OFF, LATERAL_PAUSED), ids=("off", "paused"))
+def test_releases_when_engagement_is_lost_and_resumes_when_it_returns(car, lost):
+  assert car.run(10, right=True, **CRUISE) == [RIGHT] * 5
+  assert car.run(RELEASE_FRAMES, right=True, **lost) == [NEUTRAL] * RELEASE_MESSAGES
+  assert car.run(200, right=True, **lost) == []
+
+  # still asked for when lateral comes back: carry on
+  assert car.run(10, right=True, **LATERAL_ONLY) == [RIGHT] * 5
+
+  # and it can come back in the middle of the release
+  assert car.run(20, right=True, **lost) == [NEUTRAL] * 10
+  assert car.run(10, right=True, **LATERAL_ONLY) == [RIGHT] * 5
+
+
 def test_own_blink_feedback_does_not_cancel(car):
   assert car.run(10, right=True) == [RIGHT] * 5
   # the car now reports the requested side as active: stalk bit set and the lamp flashing
@@ -151,8 +204,10 @@ def test_driver_on_the_other_side_wins_and_a_held_request_stays_off(car, driver)
   assert car.run(10, right=True) == [RIGHT] * 5
   assert car.run(RELEASE_FRAMES, right=True, **driver) == [NEUTRAL] * RELEASE_MESSAGES
 
-  # still held after the driver is done: stays off
+  # still held after the driver is done, through a disengage and back: stays off
   assert car.run(500, right=True) == []
+  assert car.run(50, right=True, **OFF) == []
+  assert car.run(200, right=True) == []
 
   # dropped and asked again: a new request
   assert car.run(2) == []
@@ -177,30 +232,19 @@ def test_does_not_start_while_the_driver_is_signalling(car, driver):
   assert car.run(20, right=True) == [RIGHT] * 10
 
 
-def test_only_while_engaged(car):
-  assert car.run(200, right=True, enabled=False) == []
-  assert car.run(10, right=True) == [RIGHT] * 5
-
-  # disengaging releases it, and it does not come back by itself
-  assert car.run(RELEASE_FRAMES, right=True, enabled=False) == [NEUTRAL] * RELEASE_MESSAGES
-  assert car.run(200, right=True, enabled=False) == []
-  assert car.run(200, right=True) == []
-
-
 def test_needs_to_see_the_blinkers_message(car):
   assert car.run(10, right=True) == [RIGHT] * 5
 
   # BLINKERS stops arriving: keep going until it counts as unknown, then release
   controls = car.run(BLINKERS_TIMEOUT + RELEASE_FRAMES, right=True, blinkers=False)
-  assert controls == [RIGHT] * ((BLINKERS_TIMEOUT - 1) // SEND_EVERY) + [NEUTRAL] * (len(controls) - (BLINKERS_TIMEOUT - 1) // SEND_EVERY)
+  still_right = (BLINKERS_TIMEOUT - 1) // SEND_EVERY
+  assert controls == [RIGHT] * still_right + [NEUTRAL] * (len(controls) - still_right)
   assert abs(controls.count(NEUTRAL) - RELEASE_MESSAGES) <= 1
 
-  # no new request while it is unknown
-  assert car.run(2, blinkers=False) == []
+  # nothing while it is unknown
   assert car.run(200, right=True, blinkers=False) == []
 
-  # back again
-  assert car.run(2) == []
+  # back again, and the request is still there
   assert car.run(10, right=True) == [RIGHT] * 5
 
 
@@ -215,16 +259,14 @@ def test_one_direction_at_a_time(car):
   # both together is not a request
   assert car.run(200, left=True, right=True) == []
 
-  assert car.run(2) == []
   assert car.run(10, right=True) == [RIGHT] * 5
-  # straight to the other side: release, and no start until the request has dropped
-  assert car.run(100, left=True) == [NEUTRAL] * 50
-  assert car.run(2) == [NEUTRAL]
-  controls = car.run(20, left=True)
-  assert controls == [LEFT] * 10
+  # straight to the other side: the car gets the whole neutral release first
+  assert car.run(RELEASE_FRAMES, left=True) == [NEUTRAL] * RELEASE_MESSAGES
+  assert car.run(20, left=True) == [LEFT] * 10
 
-  # both together while active ends it too
-  assert set(car.run(20, left=True, right=True)) == {NEUTRAL}
+  # both together while active ends it
+  assert car.run(RELEASE_FRAMES, left=True, right=True) == [NEUTRAL] * RELEASE_MESSAGES
+  assert car.run(100, left=True, right=True) == []
 
 
 @pytest.mark.parametrize("asked", (dict(left=True), dict(right=True)))
@@ -238,13 +280,24 @@ def test_frames_pass_the_panda_safety(car, asked):
   def allowed(messages):
     return [bool(safety.safety_tx_hook(libsafety_py.make_CANPacket(address, bus, data))) for address, data, bus in messages]
 
-  # engaged: the request and its release
   car.run(50, **asked)
   car.run(RELEASE_FRAMES)
-  safety.set_controls_allowed(True)
   assert len(car.sent) == 25 + RELEASE_MESSAGES
-  assert all(allowed(car.sent))
 
-  # disengaged mid-request: the direction frames are refused, the release is not
-  safety.set_controls_allowed(False)
-  assert allowed(car.sent) == [False] * 25 + [True] * RELEASE_MESSAGES
+  try:
+    # cruise engaged: the request and its release
+    safety.set_controls_allowed(True)
+    assert all(allowed(car.sent))
+
+    # cruise off, always-on lateral still allowed: the same
+    safety.set_controls_allowed(False)
+    safety.set_aol_params(True, False, False)
+    safety.set_controls_allowed_lat(True)
+    assert all(allowed(car.sent))
+
+    # nothing engaged: the direction frames are refused, the release is not
+    safety.set_controls_allowed_lat(False)
+    assert allowed(car.sent) == [False] * 25 + [True] * RELEASE_MESSAGES
+  finally:
+    safety.set_controls_allowed_lat(False)
+    safety.set_aol_params(False, False, False)

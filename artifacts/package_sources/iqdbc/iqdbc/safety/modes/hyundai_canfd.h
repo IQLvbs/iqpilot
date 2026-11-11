@@ -491,8 +491,9 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
     }
   }
 
-  // SPAS2: BLINKER_CONTROL may only be neutral (0), left (3) or right (4), the rest of the payload
-  // stays empty, and a direction needs controls allowed. Neutral is always allowed so a request can be released.
+  // SPAS2: BLINKER_CONTROL may only be neutral (0), left (3) or right (4) and the rest of the payload stays empty.
+  // A direction needs the same permission as steering: cruise engaged, or always-on lateral.
+  // Neutral is always allowed so a request can be released.
   if (addr == 0x16A) {
     const uint8_t blinker = GET_BYTE(to_send, 16);
     bool payload_ok = (blinker == 0x00U) || (blinker == 0x60U) || (blinker == 0x80U);
@@ -501,7 +502,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
         payload_ok = false;
       }
     }
-    if (!payload_ok || ((blinker != 0x00U) && !controls_allowed)) {
+    if (!payload_ok || ((blinker != 0x00U) && !is_lat_active())) {
       violation = true;
     }
   }
