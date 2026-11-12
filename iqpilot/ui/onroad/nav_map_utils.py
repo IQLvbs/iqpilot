@@ -1,5 +1,7 @@
 import math
 
+from iqpilot.ui.onroad import map_datum
+
 EARTH_RADIUS_M = 6378137.0
 TILE_SIZE = 256.0
 NAV_DRIVE_ZOOM_BOOST = 1.0
@@ -61,6 +63,7 @@ def closest_polyline_segment(points, x, y):
   return best_index, best_fraction
 
 def _mercator_normalized(latitude: float, longitude: float) -> tuple[float, float]:
+  latitude, longitude = map_datum.shift(latitude, longitude)
   x = (longitude + 180.0) / 360.0
   siny = min(max(math.sin(math.radians(latitude)), -0.9999), 0.9999)
   y = 0.5 - math.log((1.0 + siny) / (1.0 - siny)) / (4.0 * math.pi)

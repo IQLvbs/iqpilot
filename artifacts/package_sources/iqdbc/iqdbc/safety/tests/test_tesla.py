@@ -551,5 +551,83 @@ class TestTeslaHW4Gen2VehicleBusSafety(TestTeslaVehicleBusSafety):
   HW4_GEN2 = True
 
 
+class TestTeslaDriveInverterBuses(unittest.TestCase):
+  TX_MSGS = None
+  STEP_US = 20_000
+
+  def setUp(self):
+    self.fixture = TestTeslaHW4Gen2StockSafety("setUp")
+    self.fixture.setUp()
+    self.safety = self.fixture.safety
+    self.packer = self.fixture.packer
+    self.safety.set_timer(0)
+
+  def _copies(self, name, values, buses):
+    addr, dat, _ = self.packer.make_can_msg(name, 0, values)
+    return [libsafety_py.make_CANPacket(addr, bus, dat) for bus in buses]
+
+  def _step(self, step, speed_buses, state_buses, speed=0.0):
+    fixture = self.fixture
+    self.safety.set_timer(step * self.STEP_US)
+    msgs = [
+      fixture._long_control_msg(0, bus=2),
+      fixture._angle_cmd_msg(0, False, increment_timer=False, bus=2),
+      fixture._speed_msg_2(speed),
+      fixture._angle_meas_msg(0),
+      fixture._user_gas_msg(0),
+      fixture._user_brake_msg(False),
+      *self._copies("DI_speed", {"DI_vehicleSpeed": speed * 3.6}, speed_buses),
+    ]
+    if step % 5 == 0:
+      msgs += self._copies("DI_state", {"DI_cruiseState": 0}, state_buses)
+    for msg in msgs:
+      self._rx(msg)
+
+  def _rx(self, msg):
+    return self.safety.safety_rx_hook(msg)
+
+  def _run(self, steps, speed_buses, state_buses, first_step=0, speed=0.0):
+    for step in range(first_step, first_step + steps):
+      self._step(step, speed_buses, state_buses, speed)
+    self.safety.safety_tick_current_safety_config()
+    return first_step + steps
+
+  def test_valid_with_the_drive_inverter_on_any_listed_bus(self):
+    for speed_bus in (0, 1, 2):
+      for state_bus in (0, 1):
+        with self.subTest(speed_bus=speed_bus, state_bus=state_bus):
+          self.setUp()
+          self._run(30, [speed_bus], [state_bus])
+          self.assertTrue(self.safety.safety_config_valid())
+
+  def test_speed_comes_from_the_bus_that_carries_it(self):
+    self._run(30, [2], [1], speed=10.0)
+    self.assertAlmostEqual(self.safety.get_vehicle_speed_max(), 10.0, places=1)
+
+  def test_follows_the_drive_inverter_when_the_harness_relay_splits_the_buses(self):
+    step = self._run(10, [0, 2], [0, 2])
+    self.assertTrue(self.safety.safety_config_valid())
+
+    step = self._run(120, [2], [1], first_step=step, speed=10.0)
+    self.assertTrue(self.safety.safety_config_valid())
+    self.assertAlmostEqual(self.safety.get_vehicle_speed_max(), 10.0, places=1)
+
+  def test_follows_the_drive_inverter_back_to_the_party_bus(self):
+    step = self._run(10, [2], [1])
+    step = self._run(120, [0], [0], first_step=step)
+    self.assertTrue(self.safety.safety_config_valid())
+
+  def test_stays_invalid_when_no_listed_bus_carries_the_drive_inverter(self):
+    self._run(30, [], [])
+    self.assertFalse(self.safety.safety_config_valid())
+
+  def test_standard_tesla_ignores_the_drive_inverter_off_the_party_bus(self):
+    self.safety.set_safety_hooks(CarParams.SafetyModel.tesla, 0)
+    self.safety.init_tests()
+    self._run(30, [2], [1], speed=10.0)
+    self.assertFalse(self.safety.safety_config_valid())
+    self.assertAlmostEqual(self.safety.get_vehicle_speed_max(), 0.0, places=1)
+
+
 if __name__ == "__main__":
   unittest.main()

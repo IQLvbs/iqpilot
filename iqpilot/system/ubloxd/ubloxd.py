@@ -93,6 +93,10 @@ class EphemerisCaches:
   glonass_string_superframes: defaultdict[int, dict[int, int]]
 
 
+# validDate | validTime | fullyResolved; before these are set the receiver reports a default date such as 2013-09-01
+NAV_PVT_TIME_VALID = 0x07
+
+
 class UbloxMsgParser:
   gpsPi = 3.1415926535898
 
@@ -132,6 +136,8 @@ class UbloxMsgParser:
     payload = frame[6:-2]
     if msg_type == 0x0107:
       body = Ubx.NavPvt.from_bytes(payload)
+      if (body.valid & NAV_PVT_TIME_VALID) != NAV_PVT_TIME_VALID:
+        return None
       return self._gen_nav_pvt(body)
     if msg_type == 0x0213:
       # Manually parse RXM-SFRBX to avoid EOF on some frames

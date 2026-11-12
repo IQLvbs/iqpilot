@@ -91,6 +91,7 @@ class Bus(StrEnum):
   main = auto()
   party = auto()
   ap_party = auto()
+  party_vehicle = auto()
   ap_pt = auto()
 
 

@@ -4,6 +4,7 @@ from iqdbc.car import Bus, create_button_events, structs
 from iqdbc.car.common.conversions import Conversions as CV
 from iqdbc.car.interfaces import CarStateBase
 from iqdbc.car.tesla import TESLA_BLINKERS
+from iqdbc.car.tesla.message_source import MessageSource
 from iqdbc.car.tesla.values import (DBC, CANBUS, CAR, GEAR_MAP, LEGACY_CARS, LEGACY_HW3_CARS, STEER_THRESHOLD, TeslaFlags,
                                     get_legacy_canbus)
 
@@ -42,6 +43,8 @@ class CarState(CarStateBase, IQCarState):
     self.das_control = None
     self.das_body_controls_dat = b""
     self.cruise_override = False
+    self.seatbelt_unlatched = True
+    self.sources: dict[str, MessageSource] | None = None
 
     if self.legacy:
       self.can_defines = {
@@ -59,6 +62,16 @@ class CarState(CarStateBase, IQCarState):
         self._odometer_store = iq_lvbs_alc.create_vehicle_odometer_store(CP, Params())
       except Exception:
         self._odometer_store = None
+
+  def build_sources(self, can_parsers) -> dict[str, MessageSource]:
+    cp_party = can_parsers[Bus.party]
+    cp_ap_party = can_parsers[Bus.ap_party]
+    cp_party_vehicle = [can_parsers[Bus.party_vehicle]] if Bus.party_vehicle in can_parsers else []
+    return {
+      "DI_speed": MessageSource("DI_speed", [cp_party, cp_ap_party, *cp_party_vehicle]),
+      "DI_state": MessageSource("DI_state", [cp_party, *cp_party_vehicle]),
+      "DAS_settings": MessageSource("DAS_settings", [cp_party, cp_ap_party, *cp_party_vehicle]),
+    }
 
   def update_summon_state(self, summon_state: str, cruise_enabled: bool):
     summon_now = summon_state in ("ACTIVE", "COMPLETE", "SELFPARK_STARTED")
@@ -155,16 +168,25 @@ class CarState(CarStateBase, IQCarState):
     scale_speed = 1.01
     length = 0.11
 
+    if self.CP.flags & TeslaFlags.HW4_GEN2:
+      if self.sources is None:
+        self.sources = self.build_sources(can_parsers)
+      di_speed = self.sources["DI_speed"].vl()
+      di_state = self.sources["DI_state"].vl()
+    else:
+      di_speed = cp_party.vl["DI_speed"]
+      di_state = cp_party.vl["DI_state"]
+
   # Vehicle speed
-    ret.vEgoRaw = cp_party.vl["DI_speed"]["DI_vehicleSpeed"] * CV.KPH_TO_MS
+    ret.vEgoRaw = di_speed["DI_vehicleSpeed"] * CV.KPH_TO_MS
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
 
     # Displayed speed
-    ui_speed_units = self.can_define.dv["DI_speed"]["DI_uiSpeedUnits"].get(int(cp_party.vl["DI_speed"]["DI_uiSpeedUnits"]), None)
+    ui_speed_units = self.can_define.dv["DI_speed"]["DI_uiSpeedUnits"].get(int(di_speed["DI_uiSpeedUnits"]), None)
     if ui_speed_units == "DI_SPEED_KPH":
-      ret.vEgoCluster = cp_party.vl["DI_speed"]["DI_uiSpeed"] * CV.KPH_TO_MS
+      ret.vEgoCluster = di_speed["DI_uiSpeed"] * CV.KPH_TO_MS
     elif ui_speed_units == "DI_SPEED_MPH":
-      ret.vEgoCluster = cp_party.vl["DI_speed"]["DI_uiSpeed"] * CV.MPH_TO_MS
+      ret.vEgoCluster = di_speed["DI_uiSpeed"] * CV.MPH_TO_MS
 
     # Gas pedal
     ret.gasPressed = cp_party.vl["DI_systemStatus"]["DI_accelPedalPos"] > 0
@@ -194,10 +216,10 @@ class CarState(CarStateBase, IQCarState):
                                                          eac_error_code == "EAC_ERROR_HIGH_ANGLE_RATE_SAFETY")
 
     # Cruise state
-    cruise_state = self.can_define.dv["DI_state"]["DI_cruiseState"].get(int(cp_party.vl["DI_state"]["DI_cruiseState"]), None)
-    speed_units = self.can_define.dv["DI_state"]["DI_speedUnits"].get(int(cp_party.vl["DI_state"]["DI_speedUnits"]), None)
+    cruise_state = self.can_define.dv["DI_state"]["DI_cruiseState"].get(int(di_state["DI_cruiseState"]), None)
+    speed_units = self.can_define.dv["DI_state"]["DI_speedUnits"].get(int(di_state["DI_speedUnits"]), None)
 
-    summon_state = self.can_define.dv["DI_state"]["DI_autoparkState"].get(int(cp_party.vl["DI_state"]["DI_autoparkState"]), None)
+    summon_state = self.can_define.dv["DI_state"]["DI_autoparkState"].get(int(di_state["DI_autoparkState"]), None)
     cruise_enabled = cruise_state in ("ENABLED", "STANDSTILL", "OVERRIDE", "PRE_FAULT", "PRE_CANCEL")
     self.cruise_override = cruise_state in ("OVERRIDE")
     self.update_summon_state(summon_state, cruise_enabled)
@@ -205,9 +227,9 @@ class CarState(CarStateBase, IQCarState):
     # Match panda safety cruise engaged logic
     ret.cruiseState.enabled = cruise_enabled and not self.summon
     if speed_units == "KPH":
-      ret.cruiseState.speedCluster = cp_party.vl["DI_state"]["DI_digitalSpeed"] * CV.KPH_TO_MS
+      ret.cruiseState.speedCluster = di_state["DI_digitalSpeed"] * CV.KPH_TO_MS
     elif speed_units == "MPH":
-      ret.cruiseState.speedCluster = cp_party.vl["DI_state"]["DI_digitalSpeed"] * CV.MPH_TO_MS
+      ret.cruiseState.speedCluster = di_state["DI_digitalSpeed"] * CV.MPH_TO_MS
     ret.cruiseState.speed = max(ret.cruiseState.speedCluster / scale_speed, 1e-3)
     ret.cruiseState.available = cruise_state == "STANDBY" or ret.cruiseState.enabled
     ret.cruiseState.standstill = False  # This needs to be false, since we can resume from stop without sending anything special
@@ -231,7 +253,9 @@ class CarState(CarStateBase, IQCarState):
         cp_vehicle = can_parsers[Bus.adas]
         ret.leftBlinker = cp_vehicle.vl["VCFRONT_lighting"]["VCFRONT_indicatorLeftRequest"] != 0
         ret.rightBlinker = cp_vehicle.vl["VCFRONT_lighting"]["VCFRONT_indicatorRightRequest"] != 0
-        ret.seatbeltUnlatched = cp_vehicle.vl["SeatBeltStatus"]["driverBuckleStatus"] != 1
+        if cp_vehicle.vl["VCFRONT_vehicleStatus"]["VCFRONT_vehicleStatusIndex"] == 0:
+          self.seatbelt_unlatched = cp_vehicle.vl["VCFRONT_vehicleStatus"]["VCFRONT_driverBuckleStatus"] != 1
+        ret.seatbeltUnlatched = self.seatbelt_unlatched
     else:
       # Doors
       ret.doorOpen = cp_party.vl["UI_warning"]["anyDoorOpen"] == 1
@@ -267,7 +291,7 @@ class CarState(CarStateBase, IQCarState):
     # until that message arrives, so each branch may only touch what its own hardware sends
     if self.CP.flags & TeslaFlags.HW4_GEN2:
       ret.invalidLkasSetting = stock_autosteer_invalid(self.CP, self.CP_IQ, 0,
-                                                       int(cp_party.vl["DAS_settings"]["DAS_autosteerEnabled"]))
+                                                       int(self.sources["DAS_settings"].vl()["DAS_autosteerEnabled"]))
     else:
       ret.invalidLkasSetting = stock_autosteer_invalid(self.CP, self.CP_IQ,
                                                        int(cp_ap_party.vl["DAS_status"]["DAS_autopilotState"]))
@@ -307,6 +331,8 @@ class CarState(CarStateBase, IQCarState):
     }
     if CP.flags & TeslaFlags.HW4_GEN2_VEHICLE_BUS and Bus.adas not in parsers:
       parsers[Bus.adas] = CANParser(DBC[CP.carFingerprint][Bus.adas], [], CANBUS.vehicle)
+    if CP.flags & TeslaFlags.HW4_GEN2_VEHICLE_BUS:
+      parsers[Bus.party_vehicle] = CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.vehicle)
     # Stock DAS_bodyControls from the AP bus (bus 2) for the nav blinker.
     if TESLA_BLINKERS and CP_IQ.flags & TeslaFlagsIQ.HAS_VEHICLE_BUS and Bus.adas in DBC[CP.carFingerprint]:
       parsers[Bus.cam] = CANParser(DBC[CP.carFingerprint][Bus.adas], [("DAS_bodyControls", 2)], CANBUS.autopilot_party)

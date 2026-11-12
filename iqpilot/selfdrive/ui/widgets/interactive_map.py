@@ -8,7 +8,8 @@ import raylib_nb as rl
 
 from iqpilot.common.params import Params
 from iqpilot.selfdrive.ui.lib.nav_helpers import active_navigation_route, current_or_last_gps_position
-from iqpilot.ui.onroad.nav_map_panel import MapboxTileProvider, OsmOfflineProvider
+from iqpilot.ui.onroad import map_datum
+from iqpilot.ui.onroad.nav_map_panel import OnlineTileProvider, OsmOfflineProvider
 from iqpilot.ui.onroad.nav_map_utils import TILE_SIZE
 from iqpilot.system.ui.lib.application import gui_app, FontWeight, MouseEvent, MousePos
 from iqpilot.system.ui.lib.multilang import tr
@@ -38,6 +39,10 @@ def _norm(lat: float, lon: float) -> tuple[float, float]:
   return x, y
 
 
+def _norm_display(lat: float, lon: float) -> tuple[float, float]:
+  return _norm(*map_datum.shift(lat, lon))
+
+
 def _denorm(x: float, y: float) -> tuple[float, float]:
   lon = x * 360.0 - 180.0
   lat = math.degrees(math.atan(math.sinh(math.pi * (1.0 - 2.0 * y))))
@@ -48,7 +53,7 @@ class InteractiveNavMap(Widget):
   def __init__(self, interactive: bool = True, on_destination=None):
     super().__init__()
     self._params = Params()
-    self._tiles = MapboxTileProvider()
+    self._tiles = OnlineTileProvider()
     self._offline = OsmOfflineProvider()
     self._interactive = interactive
     self._on_destination = on_destination
@@ -173,13 +178,15 @@ class InteractiveNavMap(Widget):
       if self._online_enabled:
         self._tiles.update(self._lat, self._lon, self._zoom, rect.width, rect.height)
       # Offroad maps use downloaded tiles regardless of the onroad overlay switch.
-      if not self._online_enabled or not self._tiles.viewport_complete():
+      if not self._online_enabled:
+        map_datum.reset()
+      if not map_datum.active() and (not self._online_enabled or not self._tiles.viewport_complete()):
         self._offline.update(self._lat, self._lon, self._zoom, rect.width, rect.height)
       self._tiles_time = now
 
     rl.draw_rectangle_rec(rect, MAP_BG)
     rl.begin_scissor_mode(int(rect.x), int(rect.y), int(rect.width), int(rect.height))
-    drew_map = self._offline.draw(rect, self._lat, self._lon, self._zoom)
+    drew_map = False if map_datum.active() else self._offline.draw(rect, self._lat, self._lon, self._zoom)
     if self._online_enabled:
       drew_map = self._tiles.draw(rect, self._lat, self._lon, self._zoom) or drew_map
     if not drew_map:
@@ -205,7 +212,7 @@ class InteractiveNavMap(Widget):
       rl.draw_line(cx, cy - 20, cx, cy + 20, rl.WHITE)
     if drew_map:
       font = gui_app.font(FontWeight.MEDIUM)
-      rl.draw_text_ex(font, "© OpenStreetMap contributors", rl.Vector2(rect.x + 12, rect.y + rect.height - 30), 22, 0, rl.LIGHTGRAY)
+      rl.draw_text_ex(font, "© 高德地图" if map_datum.active() else "© OpenStreetMap contributors", rl.Vector2(rect.x + 12, rect.y + rect.height - 30), 22, 0, rl.LIGHTGRAY)
 
   @staticmethod
   def _download_note() -> str:
@@ -231,8 +238,8 @@ class InteractiveNavMap(Widget):
 
   def _project(self, rect: rl.Rectangle, lat: float, lon: float) -> tuple[float, float]:
     ws = self._world_size()
-    cx, cy = _norm(self._lat, self._lon)
-    px, py = _norm(lat, lon)
+    cx, cy = _norm_display(self._lat, self._lon)
+    px, py = _norm_display(lat, lon)
     return (rect.x + rect.width / 2 + (px - cx) * ws,
             rect.y + rect.height / 2 + (py - cy) * ws)
 

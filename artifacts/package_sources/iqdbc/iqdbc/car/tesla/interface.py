@@ -112,8 +112,9 @@ class CarInterface(CarInterfaceBase):
       stock_cp.dashcamOnly = False
 
     # Vehicle-bus messages can be slow enough to miss the initial capture window.
-    # Accept either the established 0x3DF marker or the absolute odometer frame.
-    vehicle_bus_seen = any(address in fingerprint[CANBUS.vehicle] for address in (0x3DF, 0x3B6))
+    # HW4 gen2 never sends UI_status2, so its odometer frame cannot stand in for the 0x3DF marker the safety checks wait for.
+    markers = (0x3DF,) if stock_cp.flags & TeslaFlags.HW4_GEN2 else (0x3DF, 0x3B6)
+    vehicle_bus_seen = any(address in fingerprint[CANBUS.vehicle] for address in markers)
     if vehicle_bus_seen:
       ret.flags |= TeslaFlagsIQ.HAS_VEHICLE_BUS.value
       ret.iqSafetyFlags |= TeslaSafetyFlagsIQ.HAS_VEHICLE_BUS

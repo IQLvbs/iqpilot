@@ -96,6 +96,9 @@ class TTYPigeon:
   def set_baud(self, baud: int) -> None:
     self.tty.baudrate = baud
 
+  def drain(self) -> None:
+    self.tty.reset_input_buffer()
+
   def wait_for_ack(self, ack: bytes = UBLOX_ACK, nack: bytes = UBLOX_NACK, timeout: float = 0.5) -> bool:
     dat = b''
     st = time.monotonic()
@@ -140,14 +143,21 @@ def save_almanac(pigeon: TTYPigeon) -> None:
   except TimeoutError:
     pass
 
+POWER_ON_WAIT_S = 2.5
+BAUD_SWITCH_WAIT_S = 0.3
+
+
 def init_baudrate(pigeon: TTYPigeon):
   # ublox default setting on startup is 9600 baudrate
   pigeon.set_baud(9600)
 
   # $PUBX,41,1,0007,0003,460800,0*15\r\n
+  pigeon.drain()
   pigeon.send(b"\x24\x50\x55\x42\x58\x2C\x34\x31\x2C\x31\x2C\x30\x30\x30\x37\x2C\x30\x30\x30\x33\x2C\x34\x36\x30\x38\x30\x30\x2C\x30\x2A\x31\x35\x0D\x0A")
-  time.sleep(0.1)
+  time.sleep(BAUD_SWITCH_WAIT_S)
   pigeon.set_baud(460800)
+  time.sleep(BAUD_SWITCH_WAIT_S)
+  pigeon.drain()
 
 
 def init_pigeon(pigeon: TTYPigeon) -> bool:
@@ -263,7 +273,7 @@ def init(pigeon: TTYPigeon) -> None:
   set_power(False)
   time.sleep(0.1)
   set_power(True)
-  time.sleep(0.5)
+  time.sleep(POWER_ON_WAIT_S)
 
   init_baudrate(pigeon)
   init_pigeon(pigeon)

@@ -492,6 +492,7 @@ class TestTeslaOdometerStoreMissing:
   def test_update_passes_through_odometer_when_store_is_unavailable(self):
     fingerprint = hw4_gen2_fingerprint(vehicle_bus=True)
     fingerprint[CANBUS.vehicle][0x3B6] = 8
+    fingerprint[CANBUS.vehicle][0x3DF] = 8
     car_state, parsers = self._car_state(fingerprint)
     assert bool(car_state.CP_IQ.flags & TeslaFlagsIQ.HAS_VEHICLE_BUS)
     car_state._odometer_store = None
@@ -617,7 +618,7 @@ class TestTeslaCarStateSignalRouting:
     car_state, parsers = self._car_state(hw4_gen2_fingerprint(vehicle_bus=True))
     ret, _ = self._update(car_state, parsers, self._vehicle(
       VCFRONT_lighting={"VCFRONT_indicatorLeftRequest": 2, "VCFRONT_indicatorRightRequest": 0},
-      SeatBeltStatus={"driverBuckleStatus": 0},
+      VCFRONT_vehicleStatus={"VCFRONT_vehicleStatusIndex": 0, "VCFRONT_driverBuckleStatus": 0},
     ))
     assert ret.leftBlinker
     assert not ret.rightBlinker
@@ -625,10 +626,16 @@ class TestTeslaCarStateSignalRouting:
 
     ret, _ = self._update(car_state, parsers, self._vehicle(
       VCFRONT_lighting={"VCFRONT_indicatorLeftRequest": 0, "VCFRONT_indicatorRightRequest": 1},
-      SeatBeltStatus={"driverBuckleStatus": 1},
+      VCFRONT_vehicleStatus={"VCFRONT_vehicleStatusIndex": 0, "VCFRONT_driverBuckleStatus": 1},
     ))
     assert not ret.leftBlinker
     assert ret.rightBlinker
+    assert not ret.seatbeltUnlatched
+
+    ret, _ = self._update(car_state, parsers, self._vehicle(
+      VCFRONT_lighting={"VCFRONT_indicatorLeftRequest": 0, "VCFRONT_indicatorRightRequest": 1},
+      VCFRONT_vehicleStatus={"VCFRONT_vehicleStatusIndex": 1, "VCFRONT_driverBuckleStatus": 0},
+    ))
     assert not ret.seatbeltUnlatched
 
   def test_gen2_without_the_vehicle_bus_reports_no_blinkers(self):
@@ -686,13 +693,14 @@ class TestTeslaCarStateSignalRouting:
     (gen_empty_fingerprint(), TeslaFlagsIQ.HAS_VEHICLE_BUS,
      {Bus.party: PARTY_MSGS | {0x311}, Bus.ap_party: AP_PARTY_MSGS | {0x39b},
       Bus.adas: {0x132, 0x292, 0x33a, 0x3b6, 0x3df}}),
-    # HW4 gen2: VehicleStatus and DAS_settings on the party bus, DAS_statusGen2 in place of DAS_status
+    # HW4 gen2: VehicleStatus on the party bus, DAS_statusGen2 in place of DAS_status, and the drive inverter
+    # messages watched on every bus the harness may route them to (only the live one is held to a deadline)
     (hw4_gen2_fingerprint(), 0,
-     {Bus.party: PARTY_MSGS | {0x1e5, 0x293}, Bus.ap_party: AP_PARTY_MSGS | {0x399}}),
-    # HW4 gen2 taps the VEHICLE bus for blinkers and the buckle switch alone
+     {Bus.party: PARTY_MSGS | {0x1e5, 0x293}, Bus.ap_party: AP_PARTY_MSGS | {0x399, 0x257, 0x293}}),
+    # HW4 gen2 taps the VEHICLE bus for blinkers and the buckle switch, and the drive inverter messages may arrive there
     (hw4_gen2_fingerprint(vehicle_bus=True), 0,
-     {Bus.party: PARTY_MSGS | {0x1e5, 0x293}, Bus.ap_party: AP_PARTY_MSGS | {0x399},
-      Bus.adas: {0x3f5, 0x40a}}),
+     {Bus.party: PARTY_MSGS | {0x1e5, 0x293}, Bus.ap_party: AP_PARTY_MSGS | {0x399, 0x257, 0x293},
+      Bus.adas: {0x3f5, 0x3a1}, Bus.party_vehicle: {0x257, 0x286, 0x293}}),
   ])
   def test_only_reads_messages_the_hardware_sends(self, fingerprint, iq_flags, expected):
     CP = CarInterface.get_params(CAR.TESLA_MODEL_Y, fingerprint, [], False, False, False)

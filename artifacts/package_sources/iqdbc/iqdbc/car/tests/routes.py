@@ -28,6 +28,7 @@ route_exempt_cars = [
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
   VOLKSWAGEN.VOLKSWAGEN_ID3_MK2_SAIC,  # pending an SAIC ID.3 gateway route
   SUBARU.SUBARU_FORESTER_HYBRID,
+  TOYOTA.TOYOTA_RAV4_TSS2_2023_SECOC,  # forcible, selected by hand: no firmware entries, so no route fingerprints to it
   # Honda/Acura test routes below expired, replace when CI bucket sync is fixed
   HONDA.ACURA_TLX_2G,
   HONDA.HONDA_NBOX_2G,

@@ -18,6 +18,7 @@ from iqpilot.common.basedir import BASEDIR
 from iqpilot.common.iq_perf import PerfSample, PerfTraceEmitter
 from iqpilot.common.params import Params, UnknownKeyName
 from iqpilot.selfdrive.ui.lib.nav_helpers import current_or_last_gps_position, resolve_mapbox_token
+from iqpilot.ui.onroad import map_datum
 from iqpilot.ui.onroad.offline_tiles import (
   find_offline_mbtiles_path,
   find_offline_xyz_root,
@@ -235,6 +236,8 @@ class TileRetryGate:
 
 
 class RasterTileProvider:
+  _max_tile_zoom = 22
+
   def _stash_pending(self, tile_key: tuple[int, int, int], image, generation: int) -> None:
     """Store a decoded tile Image for upload, unloading any Image it displaces.
 
@@ -254,7 +257,7 @@ class RasterTileProvider:
     if self._rotated:
       # Cover the rotated viewport without clipping its corners.
       width = height = math.hypot(width, height)
-    z = max(0, min(22, int(round(zoom))))
+    z = max(0, min(self._max_tile_zoom, int(round(zoom))))
     scale = 2.0 ** (zoom - z)
     center_x, center_y = mercator_world_px_at_zoom(latitude, longitude, z, tile_size=TILE_SIZE)
     world_half_width = (width * 0.5) / max(scale, 1e-6)
@@ -640,6 +643,89 @@ class MapboxTileProvider(RasterTileProvider):
     self._viewport_complete = False
 
 
+AMAP_TILE_URL = "https://wprd0{server}.is.autonavi.com/appmaptile"
+AMAP_MAX_TILE_ZOOM = 18
+
+
+def build_amap_tile_url(z: int, x: int, y: int) -> tuple[str, dict[str, str | int]]:
+  server = (x + y) % 4 + 1
+  return AMAP_TILE_URL.format(server=server), {"x": x, "y": y, "z": z, "lang": "zh_cn", "size": 1, "scl": 2, "style": 7}
+
+
+class AmapTileProvider(MapboxTileProvider):
+  _perf_provider = "amap"
+  _max_tile_zoom = AMAP_MAX_TILE_ZOOM
+
+  def set_day_mode(self, day: bool) -> None:
+    self._day_mode = day
+
+  def _token(self) -> str:
+    return "amap"
+
+  def _cache_path(self, tile_key: tuple[int, int, int], style: str | None = None) -> Path:
+    z, x, y = tile_key
+    return self._cache_root / "amap" / str(z) / str(x) / f"{y}@2x.png"
+
+  def _fetch_worker(self, tile_key: tuple[int, int, int], token: str, generation: int) -> None:
+    z, x, y = tile_key
+    try:
+      with self._lock:
+        if generation != self._generation:
+          return
+      url, params = build_amap_tile_url(z, x, y)
+      response = self._session.get(url, params=params, timeout=3.0)
+      response.raise_for_status()
+      if not self._cache_disabled:
+        cache_path = self._cache_path(tile_key)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_bytes(response.content)
+      self._stash_pending(tile_key, _decode_tile_image(response.content), generation)
+      self._retry.loaded(tile_key)
+      self._set_status("ready", generation)
+    except (requests.RequestException, ValueError):
+      if not self._queue_cached_tile(tile_key, inline=True, generation=generation):
+        self._retry.failed(tile_key)
+        self._set_status("error", generation)
+    finally:
+      self._inflight.discard(tile_key)
+
+
+class OnlineTileProvider:
+  def __init__(self, cache_limit: int = CACHE_LIMIT):
+    self._mapbox = MapboxTileProvider(cache_limit=cache_limit)
+    self._amap = AmapTileProvider(cache_limit=cache_limit)
+    self._active = self._mapbox
+
+  def _select(self, latitude: float, longitude: float) -> None:
+    wanted = self._amap if map_datum.update(latitude, longitude) else self._mapbox
+    if wanted is not self._active:
+      self._active.release()
+      self._active = wanted
+
+  def update(self, latitude: float, longitude: float, zoom: float, width: float, height: float) -> None:
+    self._select(latitude, longitude)
+    self._active.update(latitude, longitude, zoom, width, height)
+
+  def draw(self, rect, latitude: float, longitude: float, zoom: float) -> bool:
+    self._select(latitude, longitude)
+    return self._active.draw(rect, latitude, longitude, zoom)
+
+  def set_day_mode(self, day: bool) -> None:
+    self._mapbox.set_day_mode(day)
+    self._amap.set_day_mode(day)
+
+  def set_rotated(self, rotated: bool) -> None:
+    self._mapbox.set_rotated(rotated)
+    self._amap.set_rotated(rotated)
+
+  def release(self) -> None:
+    self._mapbox.release()
+    self._amap.release()
+
+  def __getattr__(self, name: str):
+    return getattr(self._active, name)
+
+
 class OsmOfflineProvider(RasterTileProvider):
   _perf_provider = "offline"
 
@@ -961,7 +1047,7 @@ class NavMapPanel(Widget):
     self._route_camera: tuple[float, float, float, float, float] | None = None
     self._map_viewport_width: float = PANEL_WIDTH - 24
     self._map_viewport_height: float = MAP_HEIGHT
-    self._mapbox = MapboxTileProvider(cache_limit=PANEL_CACHE_LIMIT)
+    self._mapbox = OnlineTileProvider(cache_limit=PANEL_CACHE_LIMIT)
     self._offline = OsmOfflineProvider(cache_limit=PANEL_CACHE_LIMIT)
     self._offline_idle_since = 0.0
     # OnlineOSMaps and OfflineOSMaps independently control their respective tile sources.
@@ -1324,8 +1410,10 @@ class NavMapPanel(Widget):
         self._mapbox.release()
         self._mapbox_mode_released = True
 
+      if not self._online_maps_enabled:
+        map_datum.reset()
       mapbox_status = self._mapbox.status()
-      if self._offline_maps_enabled:
+      if self._offline_usable():
         offline_engaged = not self._online_maps_enabled or (
           mapbox_status in {"disabled", "token_missing", "error"} or not self._mapbox.has_content()
         )
@@ -1411,6 +1499,9 @@ class NavMapPanel(Widget):
     right = rotate(16.0, 19.0)
     rl.draw_triangle(nose, left, right, rl.Color(255, 255, 255, 245))
 
+  def _offline_usable(self) -> bool:
+    return self._offline_maps_enabled and not map_datum.active()
+
   def _draw_map_surface(self, map_rect: rl.Rectangle, draw_fade: bool = True) -> None:
     rl.begin_scissor_mode(int(map_rect.x), int(map_rect.y), int(map_rect.width), int(map_rect.height))
     self._draw_fallback_background(map_rect)
@@ -1422,12 +1513,12 @@ class NavMapPanel(Widget):
       rl.rl_rotatef(-self.display_bearing, 0.0, 0.0, 1.0)
       rl.rl_translatef(-(map_rect.x + map_rect.width * 0.5), -(map_rect.y + map_rect.height * 0.5), 0.0)
     if self._online_maps_enabled:
-      if self._offline_maps_enabled and self._offline.has_content():
+      if self._offline_usable() and self._offline.has_content():
         # Offline underlay fills any tiles mapbox is missing; it only holds content while
         # mapbox is degraded (released ~60s after recovery), so this is a no-op when healthy.
         self._offline.draw(map_rect, self.display_center_latitude, self.display_center_longitude, self.display_zoom)
       self._mapbox.draw(map_rect, self.display_center_latitude, self.display_center_longitude, self.display_zoom)
-    elif self._offline_maps_enabled:
+    elif self._offline_usable():
       self._offline.draw(map_rect, self.display_center_latitude, self.display_center_longitude, self.display_zoom)
     if rotated:
       rl.rl_pop_matrix()

@@ -2,15 +2,28 @@
 
 #include "iqdbc/safety/declarations.h"
 
-#define TESLA_COMMON_RX_CHECKS \
+#define TESLA_BASE_RX_CHECKS \
   {.msg = {{0x2b9, 2, 8, 25U, .max_counter = 7U, .ignore_quality_flag = true}, { 0 }, { 0 }}},    /* DAS_control */                                  \
   {.msg = {{0x488, 2, 4, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},   /* DAS_steeringControl */                          \
-  {.msg = {{0x257, 0, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},   /* DI_speed (speed in kph) */                      \
   {.msg = {{0x155, 0, 8, 50U, .max_counter = 15U}, { 0 }, { 0 }}},                                /* ESP_B (2nd speed in kph) */                     \
   {.msg = {{0x370, 0, 8, 100U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* EPAS3S_sysStatus (steering angle) */            \
   {.msg = {{0x118, 0, 8, 100U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* DI_systemStatus (gas pedal) */                  \
   {.msg = {{0x145, 0, 8, 50U, .max_counter = 15U}, { 0 }, { 0 }}},                                /* ESP_status (brakes) */                          \
+
+#define TESLA_COMMON_RX_CHECKS \
+  TESLA_BASE_RX_CHECKS \
+  {.msg = {{0x257, 0, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},   /* DI_speed (speed in kph) */                      \
   {.msg = {{0x286, 0, 8, 10U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},   /* DI_state (acc state) */                         \
+
+/* the drive inverter messages reach the panda on the party bus, the autopilot party bus or the vehicle bus depending on where the harness cuts the car */
+#define TESLA_HW4_GEN2_RX_CHECKS \
+  TESLA_BASE_RX_CHECKS \
+  {.msg = {{0x257, 0, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true, .allow_relatch = true},                                           \
+           {0x257, 2, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true, .allow_relatch = true},                                           \
+           {0x257, 1, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true, .allow_relatch = true}}},  /* DI_speed (speed in kph) */          \
+  {.msg = {{0x286, 0, 8, 10U, .max_counter = 15U, .ignore_quality_flag = true, .allow_relatch = true},                                           \
+           {0x286, 1, 8, 10U, .max_counter = 15U, .ignore_quality_flag = true, .allow_relatch = true},                                           \
+           { 0 }}},                                                                                       /* DI_state (acc state) */             \
 
 /* not sent on HW4 gen2 */
 #define TESLA_UI_WARNING_RX_CHECK \
@@ -123,6 +136,42 @@ static int tesla_get_steer_ctrl_type(const uint8_t byte2) {
 
 static void tesla_rx_hook(const CANPacket_t *msg) {
 
+  // Vehicle speed (DI_speed)
+  if (msg->addr == 0x257U) {
+    // Vehicle speed: ((val * 0.08) - 40) / MS_TO_KPH
+    float speed = ((((msg->data[2] << 4) | (msg->data[1] >> 4)) * 0.08) - 40.) * KPH_TO_MS;
+    UPDATE_VEHICLE_SPEED(speed);
+  }
+
+  // Cruise and Autopark/Summon state
+  if (msg->addr == 0x286U) {
+    // Autopark state
+    int autopark_state = (msg->data[3] >> 1) & 0x0FU;  // DI_autoparkState (used by Summon, not actually used by autopark)
+    bool tesla_summon_now = (autopark_state == 3) ||  // ACTIVE
+                            (autopark_state == 4) ||  // COMPLETE
+                            (autopark_state == 9);    // SELFPARK_STARTED
+
+    // Only consider rising edges while controls are not allowed
+    if (tesla_summon_now && !tesla_summon_prev && !cruise_engaged_prev) {
+      tesla_summon = true;
+    }
+    if (!tesla_summon_now) {
+      tesla_summon = false;
+    }
+    tesla_summon_prev = tesla_summon_now;
+
+    // Cruise state
+    int cruise_state = (msg->data[1] >> 4) & 0x07U;
+    bool cruise_engaged = (cruise_state == 2) ||  // ENABLED
+                          (cruise_state == 3) ||  // STANDSTILL
+                          (cruise_state == 4) ||  // OVERRIDE
+                          (cruise_state == 6) ||  // PRE_FAULT
+                          (cruise_state == 7);    // PRE_CANCEL
+    cruise_engaged = cruise_engaged && !tesla_summon;
+
+    pcm_cruise_check(cruise_engaged);
+  }
+
   if (msg->bus == 0U) {
     // Steering angle: (0.1 * val) - 819.2 in deg.
     if (msg->addr == 0x370U) {
@@ -136,13 +185,6 @@ static void tesla_rx_hook(const CANPacket_t *msg) {
 
       // Disengage on normal user override, or if high angle rate fault from user overriding extremely quickly
       steering_disengage = (hands_on_level >= 3) || ((eac_status == 0) && (eac_error_code == 9));
-    }
-
-    // Vehicle speed (DI_speed)
-    if (msg->addr == 0x257U) {
-      // Vehicle speed: ((val * 0.08) - 40) / MS_TO_KPH
-      float speed = ((((msg->data[2] << 4) | (msg->data[1] >> 4)) * 0.08) - 40.) * KPH_TO_MS;
-      UPDATE_VEHICLE_SPEED(speed);
     }
 
     // 2nd vehicle speed (ESP_B)
@@ -160,35 +202,6 @@ static void tesla_rx_hook(const CANPacket_t *msg) {
     // Brake pressed
     if (msg->addr == 0x145U) {
       brake_pressed = ((msg->data[3] >> 5) & 0x03U) == 2U;
-    }
-
-    // Cruise and Autopark/Summon state
-    if (msg->addr == 0x286U) {
-      // Autopark state
-      int autopark_state = (msg->data[3] >> 1) & 0x0FU;  // DI_autoparkState (used by Summon, not actually used by autopark)
-      bool tesla_summon_now = (autopark_state == 3) ||  // ACTIVE
-                              (autopark_state == 4) ||  // COMPLETE
-                              (autopark_state == 9);    // SELFPARK_STARTED
-
-      // Only consider rising edges while controls are not allowed
-      if (tesla_summon_now && !tesla_summon_prev && !cruise_engaged_prev) {
-        tesla_summon = true;
-      }
-      if (!tesla_summon_now) {
-        tesla_summon = false;
-      }
-      tesla_summon_prev = tesla_summon_now;
-
-      // Cruise state
-      int cruise_state = (msg->data[1] >> 4) & 0x07U;
-      bool cruise_engaged = (cruise_state == 2) ||  // ENABLED
-                            (cruise_state == 3) ||  // STANDSTILL
-                            (cruise_state == 4) ||  // OVERRIDE
-                            (cruise_state == 6) ||  // PRE_FAULT
-                            (cruise_state == 7);    // PRE_CANCEL
-      cruise_engaged = cruise_engaged && !tesla_summon;
-
-      pcm_cruise_check(cruise_engaged);
     }
 
     if (msg->addr == 0x155U) {
@@ -430,11 +443,11 @@ static safety_config tesla_init(uint16_t param) {
   };
 
   static RxCheck tesla_hw4_gen2_rx_checks[] = {
-    TESLA_COMMON_RX_CHECKS
+    TESLA_HW4_GEN2_RX_CHECKS
   };
 
   static RxCheck tesla_hw4_gen2_vehicle_bus_rx_checks[] = {
-    TESLA_COMMON_RX_CHECKS
+    TESLA_HW4_GEN2_RX_CHECKS
     TESLA_VEHICLE_BUS_ADDR_CHECK
   };
 

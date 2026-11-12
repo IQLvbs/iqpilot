@@ -114,6 +114,12 @@ static bool is_msg_valid(RxCheck addr_list[], int index) {
   return valid;
 }
 
+static bool rx_check_lagging(const RxCheck *check) {
+  const uint32_t timestep = 1e6 / check->msg[check->status.index].frequency;
+  const uint32_t elapsed_time = safety_get_ts_elapsed(microsecond_timer_get(), check->status.last_timestamp);
+  return elapsed_time > SAFETY_MAX(timestep * 10U, 1e6);
+}
+
 static int get_addr_check_index(const CANPacket_t *msg, RxCheck addr_list[], const int len) {
   int addr = msg->addr;
   int length = GET_LEN(msg);
@@ -121,10 +127,15 @@ static int get_addr_check_index(const CANPacket_t *msg, RxCheck addr_list[], con
   int index = -1;
   for (int i = 0; i < len; i++) {
     // if multiple msgs are allowed, determine which one is present on the bus
-    if (!addr_list[i].status.msg_seen) {
+    const bool relatch = addr_list[i].status.msg_seen && addr_list[i].msg[addr_list[i].status.index].allow_relatch &&
+                         rx_check_lagging(&addr_list[i]);
+    if (!addr_list[i].status.msg_seen || relatch) {
       for (uint8_t j = 0U; (j < MAX_ADDR_CHECK_MSGS) && (addr_list[i].msg[j].addr != 0); j++) {
         if ((addr == addr_list[i].msg[j].addr) && (msg->bus == addr_list[i].msg[j].bus) &&
               (length == addr_list[i].msg[j].len)) {
+          if (relatch && (j != (uint8_t)addr_list[i].status.index)) {
+            addr_list[i].status = (RxStatus){0};
+          }
           addr_list[i].status.index = j;
           addr_list[i].status.msg_seen = true;
           break;
