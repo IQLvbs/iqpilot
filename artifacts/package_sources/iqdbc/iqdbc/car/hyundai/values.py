@@ -86,6 +86,7 @@ class HyundaiSafetyFlags(IntFlag):
   CANFD_LKA_STEERING_ALT = 128
   FCEV_GAS = 256
   ALT_LIMITS_2 = 512
+  CANFD_SPAS2_BLINKERS = 1024
 
 
 class HyundaiSafetyFlagsIQ:
@@ -162,6 +163,10 @@ class HyundaiFlags(IntFlag):
   FCEV = 2 ** 25
 
   ALT_LIMITS_2 = 2 ** 26
+
+  # Opt-in turn signals through SPAS2 alone, for cars without a parking ECU. Separate from ENABLE_BLINKERS,
+  # which also sends SPAS1 and disables the parking ECU.
+  CANFD_SPAS2_BLINKERS = 2 ** 27
 
   CC_ONLY_CAR = 2 ** 31
 

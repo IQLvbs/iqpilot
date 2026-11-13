@@ -8,6 +8,7 @@ from iqdbc.car.hyundai import hyundaicanfd, hyundaican
 from iqdbc.car.hyundai.carstate import CarState
 from iqdbc.car.hyundai.hyundaicanfd import CanBus
 from iqdbc.car.hyundai.stopping import CanfdStopping
+from iqdbc.car.hyundai.spas2 import LEFT, RIGHT, Spas2Blinkers
 from iqdbc.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CAR, CAN_GEARS, HyundaiExtFlags
 from iqdbc.car.interfaces import CarControllerBase
 from iqdbc.car.vehicle_model import VehicleModel
@@ -140,6 +141,7 @@ class CarController(CarControllerBase):
     self.CAN = CanBus(CP)
     self.params = CarControllerParams(CP)
     self.packer = CANPacker(dbc_names[Bus.pt])
+    self.spas2_blinkers = Spas2Blinkers(CP)
     self.angle_limit_counter = 0
 
     self.accel_last = 0
@@ -490,6 +492,11 @@ class CarController(CarControllerBase):
       # blinkers
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
+
+      # blinkers on HDA1 camera-SCC cars without a parking ECU: SPAS2 alone, no SPAS1 and no ECU disable
+      blinker_control = self.spas2_blinkers.update(CC, CC_IQ, CS)
+      if blinker_control is not None:
+        can_sends.append(hyundaicanfd.create_spas2_message(self.packer, self.CAN, blinker_control == LEFT, blinker_control == RIGHT))
 
       if self.camera_scc_params in [2, 3]:
         self.canfd_toggle_adas(CC, CS)

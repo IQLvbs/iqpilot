@@ -139,6 +139,23 @@ const CanMsg HYUNDAI_CANFD_HDA1_CAMERA_SCC_LONG_TX_MSGS[] = {
   HYUNDAI_CANFD_HDA1_CAMERA_SCC_EXTRA_TX_MSGS
 };
 
+// Opt-in turn signal request (SPAS2) for HDA1 camera-SCC cars that have no parking ECU.
+// check_relay: we must be the only sender of this address on the car side.
+#define HYUNDAI_CANFD_SPAS2_BLINKERS_TX_MSGS \
+  {0x16A, 0, 32, .check_relay = true}, \
+
+const CanMsg HYUNDAI_CANFD_HDA1_CAMERA_SCC_SPAS2_TX_MSGS[] = {
+  HYUNDAI_CANFD_HDA1_TX_MSGS_COMMON(false)
+  HYUNDAI_CANFD_HDA1_CAMERA_SCC_EXTRA_TX_MSGS
+  HYUNDAI_CANFD_SPAS2_BLINKERS_TX_MSGS
+};
+
+const CanMsg HYUNDAI_CANFD_HDA1_CAMERA_SCC_LONG_SPAS2_TX_MSGS[] = {
+  HYUNDAI_CANFD_HDA1_TX_MSGS_COMMON(true)
+  HYUNDAI_CANFD_HDA1_CAMERA_SCC_EXTRA_TX_MSGS
+  HYUNDAI_CANFD_SPAS2_BLINKERS_TX_MSGS
+};
+
 
 // *** Addresses checked in rx hook ***
 // EV, ICE, HYBRID: ACCELERATOR (0x35), ACCELERATOR_BRAKE_ALT (0x100), ACCELERATOR_ALT (0x105)
@@ -243,6 +260,7 @@ RxCheck hyundai_canfd_hda2_long_alt_buttons_rx_checks_scc2[] = {
 
 const int HYUNDAI_PARAM_CANFD_ALT_BUTTONS = 32;
 const int HYUNDAI_PARAM_CANFD_HDA2_ALT_STEERING = 128;
+const int HYUNDAI_PARAM_CANFD_SPAS2_BLINKERS = 1024;
 bool hyundai_canfd_alt_buttons = false;
 bool hyundai_canfd_hda2_alt_steering = false;
 
@@ -473,6 +491,22 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
     }
   }
 
+  // SPAS2: BLINKER_CONTROL may only be neutral (0), left (3) or right (4) and the rest of the payload stays empty.
+  // A direction needs the same permission as steering: cruise engaged, or always-on lateral.
+  // Neutral is always allowed so a request can be released.
+  if (addr == 0x16A) {
+    const uint8_t blinker = GET_BYTE(to_send, 16);
+    bool payload_ok = (blinker == 0x00U) || (blinker == 0x60U) || (blinker == 0x80U);
+    for (int i = 3; i < 32; i++) {
+      if ((i != 16) && (GET_BYTE(to_send, i) != 0U)) {
+        payload_ok = false;
+      }
+    }
+    if (!payload_ok || ((blinker != 0x00U) && !is_lat_active())) {
+      violation = true;
+    }
+  }
+
   if (violation) {
     tx = false;
   }
@@ -590,6 +624,15 @@ static safety_config hyundai_canfd_init(uint16_t param) {
 
       ret = hyundai_canfd_alt_buttons ? BUILD_SAFETY_CFG(hyundai_canfd_alt_buttons_rx_checks, HYUNDAI_CANFD_HDA1_CAMERA_SCC_TX_MSGS) : \
                                         BUILD_SAFETY_CFG(hyundai_canfd_rx_checks, HYUNDAI_CANFD_HDA1_CAMERA_SCC_TX_MSGS);
+    }
+  }
+
+  // opt-in SPAS2 turn signals, HDA1 camera-SCC only
+  if (GET_FLAG(param, HYUNDAI_PARAM_CANFD_SPAS2_BLINKERS) && !hyundai_canfd_hda2 && hyundai_camera_scc) {
+    if (hyundai_longitudinal) {
+      SET_TX_MSGS(HYUNDAI_CANFD_HDA1_CAMERA_SCC_LONG_SPAS2_TX_MSGS, ret);
+    } else {
+      SET_TX_MSGS(HYUNDAI_CANFD_HDA1_CAMERA_SCC_SPAS2_TX_MSGS, ret);
     }
   }
 
