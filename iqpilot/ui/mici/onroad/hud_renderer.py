@@ -1,0 +1,27 @@
+"""
+Copyright © IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved, licensed under https://iqlvbs.com/terms
+"""
+import raylib_nb as rl
+
+from iqpilot.selfdrive.ui.mici.onroad.hud_renderer import HudRenderer
+from iqpilot.ui.onroad.hud_overlays import IQBlindSpotOverlay
+from iqpilot.ui.mici.onroad.emac_source import EmacSourceIndicator
+from iqpilot.ui.mici.onroad.speed_limit_sign import MiciSpeedLimitSign
+
+class IQMiciHudRenderer(HudRenderer):
+  def __init__(self):
+    super().__init__()
+    self._overlays = [IQBlindSpotOverlay(), EmacSourceIndicator()]
+    self._speed_limit_sign = MiciSpeedLimitSign()
+
+  def _update_state(self) -> None:
+    super()._update_state()
+    for overlay in self._overlays:
+      overlay.update()
+    self._speed_limit_sign.update()
+
+  def _render(self, rect: rl.Rectangle) -> None:
+    super()._render(rect)
+    for overlay in self._overlays:
+      overlay.render(rect)
+    self._speed_limit_sign.render(rect)
