@@ -363,7 +363,10 @@ class VCruiseHelper(VCruiseHelperIQ):
       self.v_cruise_cluster_kph = self.v_cruise_kph
       return
 
-    if self.v_cruise_initialized:
+    # SET starts a new target at the current speed/mode setting. RESUME
+    # retains the existing target. Keep Volkswagen standby presets intact.
+    set_pressed = any(b.type in (ButtonType.decelCruise, ButtonType.setCruise) for b in CS.buttonEvents)
+    if self.v_cruise_initialized and (self.volkswagen_standby_set_speed or not set_pressed):
       return
 
     initial_experimental_mode = experimental_mode and not iq_dynamic_mode
@@ -373,10 +376,7 @@ class VCruiseHelper(VCruiseHelperIQ):
     if initial_experimental_mode:
       initial = self.get_iq_mode_initial_set_speed_kph(CS.vEgo * CV.MS_TO_KPH, initial)
 
-    if any(b.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for b in CS.buttonEvents) and self.v_cruise_initialized:
-      self.v_cruise_kph = self.v_cruise_kph_last
-    else:
-      initial_speed = np.clip(CS.vEgo * CV.MS_TO_KPH, initial, V_CRUISE_MAX)
-      self.v_cruise_kph = round(float(initial_speed), 1) if self.volkswagen_standby_set_speed else int(round(initial_speed))
+    initial_speed = np.clip(CS.vEgo * CV.MS_TO_KPH, initial, V_CRUISE_MAX)
+    self.v_cruise_kph = round(float(initial_speed), 1) if self.volkswagen_standby_set_speed else int(round(initial_speed))
 
     self.v_cruise_cluster_kph = self.v_cruise_kph
