@@ -1,0 +1,59 @@
+*.py[cod]
+
+# C extensions
+*.so
+
+# Packages
+*.egg
+*.egg-info
+dist
+build
+eggs
+parts
+bin
+var
+sdist
+develop-eggs
+.installed.cfg
+
+# Installer logs
+pip-log.txt
+
+# Unit test / coverage reports
+.coverage
+.tox
+nosetests.xml
+
+# Translations
+*.mo
+
+# Mr Developer
+.mr.developer.cfg
+.project
+.pydevproject
+
+# IntelliJ
+.idea/
+
+# Cpp files
+capnp/*.cpp
+
+capnp/version.py
+MANIFEST
+docs/_build
+
+capnp/lib/capnp.cpp
+capnp/lib/capnp.h
+capnp/lib/capnp_api.h
+example
+*.iml
+
+# capnp files
+*.capnp
+
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Source for the trimmed bootstrap schema.
+!vendor/capnproto/src/**/*.capnp

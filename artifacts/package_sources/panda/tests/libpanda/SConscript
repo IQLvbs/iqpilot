@@ -1,0 +1,45 @@
+import iqdbc
+import platform
+
+CC = 'gcc'
+system = platform.system()
+mac_ver = platform.mac_ver()
+
+# gcc installed by homebrew has version suffix (e.g. gcc-12) in order to be
+# distinguishable from system one - which acts as a symlink to clang
+# clang works on macOS 15 and greater but has issues on earlier macOS versions.
+# see: https://github.com/commaai/openpilot/issues/35093
+if system == 'Darwin' and mac_ver[0] and mac_ver[0] < '15':
+  CC += '-13'
+
+env = Environment(
+  CC=CC,
+  CFLAGS=[
+    '-nostdlib',
+    '-fno-builtin',
+    '-std=gnu11',
+    '-Wfatal-errors',
+    '-Wno-pointer-to-int-cast',
+  ],
+  CPPPATH=[".", "../../", "../../board/", iqdbc.INCLUDE_PATH],
+)
+if system == "Darwin":
+  env.PrependENVPath('PATH', '/opt/homebrew/bin')
+
+# short colored build output, if the top-level pretty tool is present (main-repo build)
+_pretty = Dir('#tools/scons/site_tools').File('pretty.py')
+if not _pretty.exists():
+  _pretty = Dir('#site_scons/site_tools').File('pretty.py')
+if _pretty.exists():
+  env.Tool('pretty', toolpath=[_pretty.dir.abspath])
+
+if GetOption('ubsan'):
+  flags = [
+    "-fsanitize=undefined",
+    "-fno-sanitize-recover=undefined",
+  ]
+  env['CFLAGS'] += flags
+  env['LINKFLAGS'] += flags
+
+panda = env.SharedObject("panda.os", "panda.c")
+libpanda = env.SharedLibrary("libpanda.so", [panda])

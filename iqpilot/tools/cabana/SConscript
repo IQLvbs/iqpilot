@@ -1,0 +1,93 @@
+import os
+import sys
+
+import imgui
+import iqdbc
+import libusb
+from iqpilot.common.basedir import BASEDIR
+
+Import('env', 'arch', 'common', 'messaging', 'visionipc', 'cereal', 'replay_lib', 'ffmpeg_libs')
+
+opendbc_path = '-DOPENDBC_FILE_PATH=\'"%s"\'' % iqdbc.DBC_PATH
+
+
+cabana_env = env.Clone()
+cabana_env['CPPPATH'] += [imgui.INCLUDE_DIR, libusb.INCLUDE_DIR]
+cabana_env['LIBPATH'] += [p for p in [imgui.MESA_DIR, libusb.LIB_DIR] if os.path.isdir(p)]
+cabana_env['CXXFLAGS'] += [
+  opendbc_path,
+  "-DGLFW_INCLUDE_NONE",
+  '-DCABANA_PYTHON=\'"%s"\'' % sys.executable,
+  '-DCABANA_ROOT=\'"%s"\'' % os.path.realpath(BASEDIR),
+  '-DCABANA_FONTS_DIR=\'"%s"\'' % os.path.join(os.path.realpath(BASEDIR), "iqpilot", "selfdrive", "assets", "fonts"),
+  '-DBOOTSTRAP_ICONS_TTF=\'"%s"\'' % os.path.join(os.path.realpath(BASEDIR), "iqpilot", "tools", "jotpluggler", "assets", "bootstrap-icons.ttf"),
+]
+
+
+core_srcs = [
+  'streams/pandastream.cc',
+  'streams/devicestream.cc',
+  'streams/livestream.cc',
+  'streams/abstractstream.cc',
+  'streams/replaystream.cc',
+  'dbc/dbc.cc',
+  'dbc/dbcfile.cc',
+  'dbc/dbcmanager.cc',
+  'utils/export.cc',
+  'utils/util.cc',
+  'utils/strings.cc',
+  'commands.cc',
+  'settings.cc',
+  'routes.cc',
+  'panda.cc',
+]
+if arch != "Darwin":
+  core_srcs += ['streams/socketcanstream.cc']
+
+core_objects = [cabana_env.Object('ui/obj/' + src.replace('/', '_')[:-3], src) for src in core_srcs]
+ui_objects = core_objects.copy()
+ui_objects += cabana_env.Glob('ui/*.cc')
+ui_objects += cabana_env.Glob('ui/widgets/*.cc')
+ui_objects += cabana_env.Glob('ui/dialogs/*.cc')
+ui_objects += cabana_env.Glob('ui/chart/*.cc')
+ui_objects += cabana_env.Glob('ui/tools/*.cc')
+
+cabana_libs = [
+  replay_lib,
+  common,
+  messaging,
+  visionipc,
+  cereal,
+  File(f"{imgui.LIB_DIR}/libimgui.a"),
+  File(f"{imgui.LIB_DIR}/libglfw3.a"),
+] + ffmpeg_libs + ['bz2', 'zstd', 'curl', 'ssl', 'crypto', 'm', 'pthread', 'usb-1.0']
+
+if arch == "Darwin":
+  cabana_env['FRAMEWORKS'] = ['OpenGL', 'OpenCL', 'Cocoa', 'IOKit', 'CoreFoundation', 'CoreVideo', 'CoreMedia', 'Security', 'VideoToolbox']
+else:
+  cabana_libs += ['GL', 'OpenCL', 'dl']
+
+cabana = cabana_env.Program('_cabana', ui_objects, LIBS=cabana_libs)
+
+if GetOption('extras'):
+  test_env = env.Clone()
+  test_env['CXXFLAGS'] += [opendbc_path]
+  test_objects = [
+    test_env.Object('tests/dbc_core_tests', 'tests/test_cabana.cc'),
+    test_env.Object('tests/dbc_core_model', 'dbc/dbc.cc'),
+    test_env.Object('tests/dbc_core_file', 'dbc/dbcfile.cc'),
+    test_env.Object('tests/dbc_core_manager', 'dbc/dbcmanager.cc'),
+    test_env.Object('tests/dbc_core_strings', 'utils/strings.cc'),
+    test_env.Object('tests/dbc_core_util', 'utils/util.cc'),
+    test_env.Object('tests/dbc_core_routes', 'routes.cc'),
+  ]
+  test_env.Program('tests/test_dbc_core', test_objects, LIBS=[replay_lib, common, 'curl', 'ssl', 'crypto'])
+
+output_json_file = 'iqpilot/tools/cabana/dbc/car_fingerprint_to_dbc.json'
+generate_dbc = cabana_env.Command(
+  '#' + output_json_file,
+  ['dbc/generate_dbc_json.py'],
+  cabana_env.PrettyAction('"%s" iqpilot/tools/cabana/dbc/generate_dbc_json.py --out %s' % (sys.executable, output_json_file), 'GEN', logfile='${TARGET}.log'),
+)
+cabana_env.Depends(generate_dbc, ['#iqpilot/common', '#iqpilot/cereal', os.path.dirname(iqdbc.__file__)])
+cabana_env.Depends(cabana, generate_dbc)

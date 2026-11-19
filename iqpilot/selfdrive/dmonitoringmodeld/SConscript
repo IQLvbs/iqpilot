@@ -1,0 +1,100 @@
+import os
+import glob
+
+Import('env', 'envCython', 'arch', 'cereal', 'messaging', 'common', 'visionipc', 'tinygrad_dir')
+lenv = env.Clone()
+lenvCython = envCython.Clone()
+
+libs = [cereal, messaging, visionipc, common, 'capnp', 'kj', 'pthread']
+frameworks = []
+
+common_src = [
+  "models/commonmodel.cc",
+  "transforms/transform.cc",
+]
+
+# OpenCL is a framework on Mac
+if arch == "Darwin":
+  frameworks += ['OpenCL']
+else:
+  libs += ['OpenCL']
+
+# Set path definitions
+for pathdef, fn in {'TRANSFORM': 'transforms/transform.cl'}.items():
+  for xenv in (lenv, lenvCython):
+    xenv['CXXFLAGS'].append(f'-D{pathdef}_PATH=\\"{File(fn).abspath}\\"')
+
+# Compile cython
+cython_libs = envCython["LIBS"] + libs
+commonmodel_lib = lenv.Library('commonmodel', common_src)
+lenvCython.Program('models/commonmodel_pyx.so', 'models/commonmodel_pyx.pyx', LIBS=[commonmodel_lib, *cython_libs], FRAMEWORKS=frameworks)
+tinygrad_files = sorted(x for x in glob.glob(tinygrad_dir + "/**", recursive=True) if 'pycache' not in x)
+
+def tg_compile(flags, model_name):
+  fn = File(f"models/{model_name}").abspath
+  cmd = lenv.Command(
+    fn + "_tinygrad.pkl",
+    [fn + ".onnx"] + tinygrad_files,
+    lenv.PrettyAction(
+      f'${{PYWARN}} {flags} python3 {Dir("#iqpilot/selfdrive/iqmodeld/tools").abspath}/compile_model.py {fn}.onnx {fn}_tinygrad.pkl',
+      'MODEL', logfile='${TARGET}.log')
+  )
+  # committed pkls must survive a failed rebuild (Precious: no pre-build
+  # delete) and scons -c (NoClean); a failed compile must not brick modeld
+  lenv.Precious(cmd)
+  lenv.NoClean(cmd)
+  return cmd
+
+def host_tinygrad_flags(*, float16=False):
+  if arch == "larch64":
+    base = "DEV=QCOM IMAGE=2 FLOAT16=1 NOLOCALS=1 JIT_BATCH_SIZE=0 OPENPILOT_HACKS=1"
+    return base
+  if arch == "Darwin":
+    base = f'DEV=CPU HOME={os.path.expanduser("~")} IMAGE=0'
+  elif arch == "x86_64":
+    base = "DEV=CPU:LLVM IMAGE=0"
+  else:
+    base = "DEV=CPU:LLVM IMAGE=0"
+  return f"{base} FLOAT16=1" if float16 else base
+
+# Compile small models
+for model_name in ['dmonitoring_model']:
+  # The optimization flags are mandatory on QCOM: without FLOAT16/NOLOCALS/JIT_BATCH_SIZE/OPENPILOT_HACKS these
+  # models compile to unoptimized QCOM kernels and run ~20x slower (dmonitoring_model: ~300ms -> ~14ms),
+  # which starves the driving model on the shared Adreno. IMAGE=2 (not upstream's IMAGE=1) because the
+  # pinned tinygrad (fd992d66) hits an IMAGE=1 codegen bug on this Adreno; IMAGE=2 is correct and fast here.
+  flags = host_tinygrad_flags()
+
+  # Shipped prebuilt pkls: on device, a fresh install has no .sconsign, so scons would recompile these
+  # from onnx (5-10 min) even though up-to-date pkls are committed. The check file pins the exact
+  # inputs (onnx + tinygrad revision + flags + metadata script) and output hashes; if it matches, skip
+  # declaring the targets entirely. Any mismatch falls back to a normal on-device compile.
+  if arch == "larch64":
+    from iqpilot.selfdrive.dmonitoringmodeld.prebuilt_models import packaged_prebuilt_matches, verify_prebuilt, outputs_match
+    if packaged_prebuilt_matches(model_name):
+      print(lenv.PrettyNote('SKIP', f"{model_name} — packaged prebuilt pkl"))
+      continue
+    if verify_prebuilt(model_name, flags):
+      print(lenv.PrettyNote('SKIP', f"{model_name} — prebuilt pkl"))
+      continue
+    # Input digest mismatch but the committed artifacts are intact: this is a
+    # device with a mismatched tinygrad package. Recompiling here would DELETE the
+    # known-good pkl and then fail, bricking
+    # modeld. Keep the shipped artifacts and say so.
+    if outputs_match(model_name):
+      print(lenv.PrettyNote('WARN', f"{model_name} — input digest mismatch, keeping committed pkl"))
+      continue
+  elif not os.environ.get("COMPILE_MODELS"):
+    # The committed pkls ARE the device (QCOM) artifacts. A host build would
+    # overwrite them with host-flavor pkls (and `scons -c` deletes them), which
+    # then show up as staged changes and brick devices if committed. Host pkls
+    # only on explicit request: COMPILE_MODELS=1 scons ...
+    print(lenv.PrettyNote('SKIP', f"{model_name} — QCOM pkl kept (COMPILE_MODELS=1 to build host)"))
+    continue
+
+  fn = File(f"models/{model_name}").abspath
+  script_files = [File(Dir("#iqpilot/selfdrive/dmonitoringmodeld").File("get_model_metadata.py").abspath)]
+  metadata_cmd = f'${{PYWARN}} python3 {Dir("#iqpilot/selfdrive/dmonitoringmodeld").abspath}/get_model_metadata.py {fn}.onnx'
+  lenv.Command(fn + "_metadata.pkl", [fn + ".onnx"] + tinygrad_files + script_files,
+               lenv.PrettyAction(metadata_cmd, 'META', logfile='${TARGET}.log'))
+  tg_compile(flags, model_name)

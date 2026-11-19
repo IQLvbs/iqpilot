@@ -1,0 +1,6 @@
+moc_*
+*.moc
+
+replay
+tests/test_replay
+tests/test_api

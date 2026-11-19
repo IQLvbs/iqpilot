@@ -1,0 +1,12 @@
+import os
+
+env = Environment(ENV=os.environ)
+Export('env')
+
+AddOption('--minimal',
+          action='store_false',
+          dest='extras',
+          default=True,
+          help='the minimum build. no tests, tools, etc.')
+
+SConscript(['SConscript'])

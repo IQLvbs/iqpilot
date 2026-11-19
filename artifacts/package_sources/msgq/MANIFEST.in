@@ -1,0 +1,5 @@
+include SConstruct SConscript
+graft msgq
+graft site_scons
+graft third_party
+global-exclude __pycache__ *.pyc *.o *.os *.d

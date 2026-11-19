@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools", "wheel", "cython>=3.0", "cmake>=3.18"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pycapnp"
+requires-python = ">=3.12"
+dynamic = [
+    "authors",
+    "classifiers",
+    "description",
+    "keywords",
+    "license",
+    "readme",
+    "version",
+]
+dependencies = []
+
+[dependency-groups]
+dev = ["cython>=3.0", "setuptools", "wheel", "build", {include-group = "test"}, {include-group = "lint"}]
+test = ["pytest", "numpy>=2"]
+lint = ["ruff==0.16.8"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+exclude = ["build", "vendor"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+ignore = [
+    "E203", "E211", "E225", "E226", "E227", "E231", "E251",
+    "E261", "E262", "E265", "E402",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"capnp/__init__.py" = ["F401", "F403", "F405"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.format]
+quote-style = "double"
