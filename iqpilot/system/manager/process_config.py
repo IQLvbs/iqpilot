@@ -1,5 +1,6 @@
 import os
 import platform
+import time
 from pathlib import Path
 
 from iqpilot.cereal import car, custom
@@ -122,10 +123,20 @@ def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:
 def wireguard_installed(started: bool, params: Params, CP: car.CarParams) -> bool:
   return wireguard.installed()
 
+SENTRY_STARTUP_GRACE_S = 30.0
+_sentry_onroad_since: float | None = None
+
 def sentry_enabled(started: bool, params: Params, CP: car.CarParams) -> bool:
+  global _sentry_onroad_since
+  if not started:
+    _sentry_onroad_since = None
+  elif _sentry_onroad_since is None:
+    _sentry_onroad_since = time.monotonic()
   if not params.get_bool("IQSentry"):
     return False
-  return not started or params.get_bool("IQSentryRecording") or params.get_bool("IQSentryKeepStartups")
+  if not started or params.get_bool("IQSentryRecording"):
+    return True
+  return params.get_bool("IQSentryKeepStartups") and time.monotonic() - _sentry_onroad_since < SENTRY_STARTUP_GRACE_S
 
 def sentry_recording(started: bool, params: Params, CP: car.CarParams) -> bool:
   return params.get_bool("IQSentryRecording")
@@ -279,7 +290,8 @@ procs += [
   BundleProcess("iqvd", "iqpilot_iqvd_private", "iqpilot_private.iqvd.iqvd", iqvd_onroad, restart_if_crash=True),
 
   # mapd
-  NativeProcess("mapd", "iqpilot/third_party/mapd_pfeiferj", ["./mapd"], mapd_onroad, restart_if_crash=True),
+  NativeProcess("mapd", "iqpilot/third_party/mapd_pfeiferj", ["./mapd"], mapd_onroad, restart_if_crash=True,
+                env={"GOMEMLIMIT": "150MiB"}),
   PythonProcess("mapd_manager", "iqpilot.iq_maps.orchestrator", and_(only_offroad, not_low_power)),
 
   # locationd

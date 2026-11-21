@@ -6,6 +6,7 @@ from iqpilot.cereal import car, custom
 from iqpilot.common.params import Params
 from iqpilot.system.hardware import HARDWARE, PC, TICI
 from iqpilot.system.hardware.hw import Paths
+from iqpilot.system.hardware.usb import HostLinkWatch
 from iqpilot.system.manager.process import PythonProcess, NativeProcess, BundleProcess
 from iqpilot.system.wireguard import tunnel as wireguard
 
@@ -151,8 +152,12 @@ def _egpu_present(params) -> bool:
   return usbgpu_present()
 
 
+_mac_link = HostLinkWatch()
+
 def emac_enabled(started, params, CP: car.CarParams) -> bool:
-  return resolve_backend(params.get_bool("IQEmacEnabled"), egpu_selected(params), _egpu_present(params)) == "emac"
+  if resolve_backend(params.get_bool("IQEmacEnabled"), egpu_selected(params), _egpu_present(params)) != "emac":
+    return False
+  return _mac_link.present()
 
 def egpu_enabled(started, params, CP: car.CarParams) -> bool:
   return (resolve_backend(params.get_bool("IQEmacEnabled"), egpu_selected(params), _egpu_present(params)) == "egpu"

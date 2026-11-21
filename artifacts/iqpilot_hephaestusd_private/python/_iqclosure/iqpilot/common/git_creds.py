@@ -229,7 +229,7 @@ def _validated_preview_origin(username: str, token: str) -> str | None:
   except subprocess.TimeoutExpired:
     raise RuntimeError("Preview access check timed out. Check the device's connection and try again.") from None
   if result.returncode != 0:
-    raise ValueError("Unable to read IQ.Pilot-Preview with this token. Check the token, repository access, and connection.")
+    raise ValueError("This token does not have Preview access. Check the token, its access, and the connection.")
   return _PREVIEW_ORIGIN
 
 
@@ -261,7 +261,7 @@ def set_credentials(username: str, token: str) -> None:
         _params_remove(PARAM)
       else:
         _params_put(PARAM, previous_blob)
-      raise RuntimeError("Could not switch to IQ.Pilot-Preview. Existing credentials were restored.") from None
+      raise RuntimeError("Could not switch to Preview. Existing credentials were restored.") from None
   try:
     install_credential_helper(DEFAULT_REPO_DIR)
   except Exception:

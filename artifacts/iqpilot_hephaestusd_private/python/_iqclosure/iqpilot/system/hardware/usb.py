@@ -2,6 +2,7 @@
 Copyright © IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved, licensed under https://iqlvbs.com/terms
 """
 import subprocess
+import time
 from pathlib import Path
 EGPU_DOCK_USB_IDS = ((0xADD1, 0x0001), (0x3801, 0x0001))
 EGPU_DOCK_ROM_USB_IDS = ((0x174C, 0x2464), (0x174C, 0x2463))
@@ -77,6 +78,35 @@ def link_controller(udc_root: Path = UDC_PATH) -> str:
   except Exception:
     return ""
   return f"{udc.split('.')[0]}{CONTROLLER_SUFFIX}" if udc else ""
+
+
+def host_link_configured(udc_root: Path = UDC_PATH) -> bool | None:
+  try:
+    states = [read(p / "state") for p in sorted(udc_root.iterdir())]
+  except Exception:
+    return None
+  states = [s for s in states if s]
+  if not states:
+    return None
+  return "configured" in states
+
+
+class HostLinkWatch:
+  def __init__(self, grace_s: float = 60.0, udc_root: Path = UDC_PATH, clock=time.monotonic):
+    self.grace_s = grace_s
+    self.udc_root = udc_root
+    self.clock = clock
+    self.last_configured: float | None = None
+
+  def present(self) -> bool:
+    configured = host_link_configured(self.udc_root)
+    if configured is None:
+      return True
+    now = self.clock()
+    if configured:
+      self.last_configured = now
+      return True
+    return self.last_configured is not None and now - self.last_configured < self.grace_s
 
 
 def usb3_lane(orientation: int | None = None) -> str:

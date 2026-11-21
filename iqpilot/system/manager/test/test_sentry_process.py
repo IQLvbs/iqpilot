@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from iqpilot.selfdrive.selfdrived.selfdrived import NON_BLOCKING_PROCESSES
+from iqpilot.system.manager import process_config
 from iqpilot.system.manager.process_config import managed_processes, sentry_enabled, sentry_recording
 
 
@@ -25,6 +26,25 @@ def test_sentry_runs_onroad_only_to_finish_an_event_or_keep_startups(recording, 
   assert sentry_enabled(True, p, None) == (recording or keep)
   assert sentry_recording(True, p, None) == recording
   assert sentry_recording(False, p, None) == recording
+
+
+@pytest.mark.parametrize("recording,keep", list(itertools.product([False, True], repeat=2)))
+def test_keep_startups_only_holds_sentry_through_the_ignition_grace(monkeypatch, recording, keep):
+  clock = [1000.0]
+  monkeypatch.setattr(process_config.time, "monotonic", lambda: clock[0])
+  p = params(IQSentry=True, IQSentryRecording=recording, IQSentryKeepStartups=keep)
+  assert sentry_enabled(False, p, None)
+  assert sentry_enabled(True, p, None) == (recording or keep)
+  clock[0] += process_config.SENTRY_STARTUP_GRACE_S - 1
+  assert sentry_enabled(True, p, None) == (recording or keep)
+  clock[0] += 2
+  assert sentry_enabled(True, p, None) == recording
+  assert sentry_enabled(False, p, None)
+  assert sentry_enabled(True, p, None) == (recording or keep)
+
+
+def test_mapd_heap_is_capped_without_replacing_its_environment():
+  assert managed_processes["mapd"].env == {"GOMEMLIMIT": "150MiB"}
 
 
 def test_sentry_never_raises_an_onroad_alert():

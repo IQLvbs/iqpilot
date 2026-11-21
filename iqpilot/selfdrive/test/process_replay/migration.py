@@ -139,7 +139,7 @@ def migrate_drivingModelData(msgs):
     lane_probs = msg.modelV2.laneLineProbs
     if len(lane_lines) > 2 and len(lane_probs) > 2 and len(lane_lines[1].y) and len(lane_lines[2].y):
       fill_lane_line_meta(dmd.drivingModelData.laneLineMeta, msg.modelV2.laneLines, msg.modelV2.laneLineProbs)
-    if all(len(a) for a in [msg.modelV2.position.x, msg.modelV2.position.y, msg.modelV2.position.z]):
+    if all(len(a) == len(ModelConstants.T_IDXS) for a in [msg.modelV2.position.x, msg.modelV2.position.y, msg.modelV2.position.z]):
       fill_xyz_poly(dmd.drivingModelData.path, ModelConstants.POLY_PATH_DEGREE, msg.modelV2.position.x, msg.modelV2.position.y, msg.modelV2.position.z)
     add_ops.append( dmd.as_reader())
   return [], add_ops, []

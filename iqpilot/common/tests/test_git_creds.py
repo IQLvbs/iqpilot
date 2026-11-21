@@ -99,7 +99,7 @@ def test_rejected_token_preserves_origin_and_credentials(device_repo, preview_ac
   set_origin(device_repo, origin)
   preview_access.returncode = 128
 
-  with pytest.raises(ValueError, match="Unable to read IQ.Pilot-Preview"):
+  with pytest.raises(ValueError, match="does not have Preview access"):
     git_creds.set_credentials("tester", "invalid-token")
 
   assert get_origin(device_repo) == origin
@@ -333,10 +333,10 @@ def test_recovery_fetch_returns_its_branch_when_another_request_is_queued(device
     git_creds._params_put("UpdaterTargetBranch", b"zenith")
 
   monkeypatch.setattr(git_creds, "_replace_target", queue_next_request)
-  assert git_creds.fetch_remote(str(device_repo), "feature/preview-only", updater_access.configure_auth) == "alpha"
+  assert git_creds.fetch_remote(str(device_repo), "feature/preview-only", updater_access.configure_auth) == "release"
   assert git_creds._params_get("UpdaterTargetBranch") == b"zenith"
   assert subprocess.check_output(["git", "-C", str(device_repo), "rev-parse", "FETCH_HEAD"]) == subprocess.check_output(
-    ["git", "-C", str(updater_access.public_repo), "rev-parse", "alpha"])
+    ["git", "-C", str(updater_access.public_repo), "rev-parse", "release"])
 
 
 @pytest.mark.parametrize("branch", ["release", "feature/shared"])
@@ -365,21 +365,21 @@ def test_fetch_retries_public_and_populates_origin_tracking_refs(device_repo, up
 
 
 @pytest.mark.parametrize("branch", ["feature/preview-only", "feature/sh", "release-extra"])
-def test_missing_public_branch_uses_alpha(device_repo, updater_access, branch):
+def test_missing_public_branch_uses_release(device_repo, updater_access, branch):
   git_creds._params_put("UpdaterTargetBranch", branch.encode())
   previous_blob = (device_repo.parent / "params" / "GitAuthBlob").read_bytes()
   output = git_creds.run_remote(["git", "ls-remote", "--heads"], str(device_repo), branch, updater_access.configure_auth)
 
-  assert "refs/heads/alpha" in output
+  assert "refs/heads/release" in output
   assert get_origin(device_repo) == RELEASE_ORIGIN
-  assert git_creds._params_get("UpdaterTargetBranch") == b"alpha"
+  assert git_creds._params_get("UpdaterTargetBranch") == b"release"
   assert (device_repo.parent / "params" / "GitAuthBlob").read_bytes() == previous_blob
 
 
 @pytest.mark.parametrize("clear_via_settings", [False, True])
 @pytest.mark.parametrize("selected,current,expected", [
-  ("feature/preview-only", "release", b"alpha"),
-  (None, "feature/preview-only", b"alpha"),
+  ("feature/preview-only", "release", b"release"),
+  (None, "feature/preview-only", b"release"),
   ("feature/shared", "feature/preview-only", b"feature/shared"),
   (None, "feature/shared", None),
 ])
@@ -418,14 +418,14 @@ def test_clear_credentials_leaves_preview_even_when_offline(device_repo, updater
   assert git_creds.get_credentials() is None
 
 
-def test_preview_only_fetch_retries_alpha(device_repo, updater_access):
+def test_preview_only_fetch_retries_release(device_repo, updater_access):
   branch = "feature/preview-only"
   git_creds._params_put("UpdaterTargetBranch", branch.encode())
   git_creds.run_remote(["git", "fetch", "origin", branch], str(device_repo), branch, updater_access.configure_auth)
   assert get_origin(device_repo) == RELEASE_ORIGIN
-  assert git_creds._params_get("UpdaterTargetBranch") == b"alpha"
+  assert git_creds._params_get("UpdaterTargetBranch") == b"release"
   assert subprocess.check_output(["git", "-C", str(device_repo), "rev-parse", "FETCH_HEAD"]) == subprocess.check_output(
-    ["git", "-C", str(updater_access.public_repo), "rev-parse", "alpha"])
+    ["git", "-C", str(updater_access.public_repo), "rev-parse", "release"])
 
 
 @pytest.mark.parametrize("failure", ["offline", "timeout"])
@@ -707,19 +707,19 @@ def test_fallback_keeps_a_branch_selected_while_it_probes(device_repo, updater_a
       git_creds._params_put("UpdaterTargetBranch", b"feature/shared")
     updater_access.configure_auth(repo)
 
-  assert git_creds.fetch_remote(str(device_repo), "feature/preview-only", select_during_probe) == "alpha"
+  assert git_creds.fetch_remote(str(device_repo), "feature/preview-only", select_during_probe) == "release"
   assert git_creds._params_get("UpdaterTargetBranch") == b"feature/shared"
 
 
 @pytest.mark.parametrize("origin,target,stored,listing,expected", [
-  (RELEASE_ORIGIN, "feature/preview-only", "feature/preview-only", {"alpha", "release"}, "alpha"),
-  (GITHUB_MIRROR_ORIGIN, "feature/preview-only", None, {"alpha"}, "alpha"),
-  (RELEASE_ORIGIN, "feature/preview-only", "feature/preview-only", {"release"}, "feature/preview-only"),
+  (RELEASE_ORIGIN, "feature/preview-only", "feature/preview-only", {"alpha", "release"}, "release"),
+  (GITHUB_MIRROR_ORIGIN, "feature/preview-only", None, {"release"}, "release"),
+  (RELEASE_ORIGIN, "feature/preview-only", "feature/preview-only", {"alpha"}, "feature/preview-only"),
   (RELEASE_ORIGIN, "release", "release", {"alpha", "release"}, "release"),
-  (PREVIEW_ORIGIN, "feature/preview-only", "feature/preview-only", {"alpha"}, "feature/preview-only"),
-  (RELEASE_ORIGIN, "feature/preview-only", "feature/shared", {"alpha", "feature/shared"}, "feature/shared"),
+  (PREVIEW_ORIGIN, "feature/preview-only", "feature/preview-only", {"release"}, "feature/preview-only"),
+  (RELEASE_ORIGIN, "feature/preview-only", "feature/shared", {"release", "feature/shared"}, "feature/shared"),
 ])
-def test_missing_public_target_moves_to_alpha_only_when_alpha_exists(device_repo, origin, target, stored, listing, expected):
+def test_missing_public_target_moves_to_release_only_when_release_exists(device_repo, origin, target, stored, listing, expected):
   set_origin(device_repo, origin)
   if stored is not None:
     git_creds._params_put("UpdaterTargetBranch", stored.encode())
