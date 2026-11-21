@@ -1,0 +1,22 @@
+"""
+Copyright © IQ.Lvbs, part of Project Teal Lvbs, All Rights Reserved, licensed under https://iqlvbs.com/terms
+
+IQ.Pilot Nissan extension: safety flag + cruise-button table.
+"""
+from collections import namedtuple
+
+from iqdbc.car import structs
+
+
+class NissanSafetyFlagsIQ:
+  DEFAULT = 0
+  LEAF = 1
+
+
+ButtonType = structs.CarState.ButtonEvent.Type
+Button = namedtuple('Button', ['event_type', 'can_addr', 'can_msg', 'values'])
+
+BUTTONS = [
+  Button(ButtonType.accelCruise, "CRUISE_THROTTLE", "RES_BUTTON", [1]),
+  Button(ButtonType.decelCruise, "CRUISE_THROTTLE", "SET_BUTTON", [1]),
+]
