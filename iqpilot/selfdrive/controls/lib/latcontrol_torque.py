@@ -613,6 +613,17 @@ LAT_TUNE_V9 = {
   },
 }
 
+# Slow, tight turns: allow for the friction that holds the wheel, and start the release when the model's plan eases.
+LAT_TUNE_V10 = {
+  TUCSON_FINGERPRINT: {
+    "turn_friction": 0.20,
+    "jerk_gain": 0.5,
+    "speed_weight": ([8.0, 10.5], [1.0, 0.0]),
+    "angle_weight": ([30.0, 70.0], [0.0, 1.0]),
+    "preview": {"to_s": 0.7, "from_s": 0.15, "deadzone": 0.20, "max": 1.0, "tau": 0.1},
+  },
+}
+
 def friction_error_with_preview(error: float, measurement: float, desired_jerk: float) -> float:
   return float(np.clip(error + JERK_GAIN * desired_jerk,
                        min(error, -measurement, 0.0), max(error, -measurement, 0.0)))
@@ -671,6 +682,9 @@ class LatControlTorque(LatControl):
     if self.v8 is not None:
       self._ff_torque_params = CP.lateralTuning.torque.as_builder()
     self.v9 = LAT_TUNE_V9.get(str(CP.carFingerprint)) if self.v8 is not None else None
+    self.v10 = LAT_TUNE_V10.get(str(CP.carFingerprint)) if self.v8 is not None and self.v7 is not None else None
+    self._turn_friction_torque = 0.0
+    self._turn_preview = FirstOrderFilter(0.0, self.v10["preview"]["tau"], self.dt) if self.v10 is not None else None
     self.curve_weight = CurveWeight(self.dt)
     self.reference_slew_limiter = LateralAccelerationSlewLimiter(self.lateral_acceleration_slew_limiter.enabled)
     self.turn_guard_reference_buffer = deque(maxlen=self.lat_accel_request_buffer_len)
@@ -733,8 +747,38 @@ class LatControlTorque(LatControl):
         self._fric_torque_params.latAccelOffset = self.torque_params.latAccelOffset
         self._fric_torque_params.friction = float(np.interp(CS.vEgo, *self.v7["friction_speed"]))
         fric_params = self._fric_torque_params
+    self._turn_friction_torque = fric_gain * self._turn_friction(CS, fric_err, desired_lateral_jerk, lateral_accel_deadzone, fric_threshold,
+                                                                 fric_params)
     return fric_gain * self.friction_scale * get_friction(fric_err + jerk_gain * desired_lateral_jerk, lateral_accel_deadzone,
                                                           fric_threshold, fric_params)
+
+  def _turn_weight(self, CS):
+    return float(np.interp(CS.vEgo, *self.v10["speed_weight"])) * float(np.interp(abs(CS.steeringAngleDeg), *self.v10["angle_weight"]))
+
+  def _turn_exit_preview(self, CS, request):
+    # lead the request down by what the plan says comes next; only ever less turn, never past straight
+    cfg, nnff = self.v10["preview"], self.nnff_assist
+    side = 1.0 if request > 0.0 else -1.0
+    weight = self._turn_weight(CS)
+    unwind = 0.0
+    if weight > 0.0 and nnff.model_valid and nnff.model_v2 is not None and request != 0.0:
+      now, later = np.interp([cfg["from_s"], cfg["to_s"]], ModelConstants.T_IDXS, nnff.model_v2.acceleration.y)
+      unwind = weight * float(np.clip(side * (later - now) + cfg["deadzone"], -cfg["max"], 0.0))
+    lead = self._turn_preview.update(unwind)
+    if lead > -1e-4:
+      self._turn_preview.x = 0.0
+      return request
+    return side * max(abs(request) + lead, 0.0)
+
+  def _turn_friction(self, CS, fric_err, desired_lateral_jerk, lateral_accel_deadzone, fric_threshold, fric_params):
+    unit = fric_params.friction * fric_params.latAccelFactor
+    weight = self._turn_weight(CS) if self.v10 is not None else 0.0
+    if weight <= 0.0 or unit <= 0.0:
+      return 0.0
+    # direction and size of the friction to overcome, -1..1, shaped like the friction term
+    shape = get_friction(fric_err + self.v10["jerk_gain"] * desired_lateral_jerk, lateral_accel_deadzone, fric_threshold, fric_params) / unit
+    already = self.friction_scale * fric_params.friction * fric_params.latAccelFactor / self._fb_torque_params.latAccelFactor
+    return weight * max(self.v10["turn_friction"] - already, 0.0) * shape
 
   def _standard_output_torque(self, CS, error, ff, ff_core, fric_la, steer_limited_by_safety):
     freeze_integrator = self._freeze_integrator(CS, steer_limited_by_safety, error, ff)
@@ -757,6 +801,7 @@ class LatControlTorque(LatControl):
       ff_torque = self._curve_feedforward(CS.vEgo, ff_core, ff_torque)
     return (ff_torque
             + self.torque_from_lateral_accel(fric_la, self._fb_torque_params)
+            + self._turn_friction_torque
             + self.torque_from_lateral_accel(fb_lataccel, self._fb_torque_params))
 
   def _curve_feedforward(self, v_ego, request, ff_torque):
@@ -850,6 +895,8 @@ class LatControlTorque(LatControl):
       self.lateral_acceleration_slew_limiter.reset(target_curvature * CS.vEgo ** 2)
     limited_curvature = self.lateral_acceleration_slew_limiter.update(target_curvature, CS.vEgo, self.dt)
     future_desired_lateral_accel = limited_curvature * CS.vEgo ** 2
+    if self.v10 is not None and active:
+      future_desired_lateral_accel = self._turn_exit_preview(CS, future_desired_lateral_accel)
     self.lat_accel_request_buffer.append(future_desired_lateral_accel)
 
     roll_compensation = params.roll * ACCELERATION_DUE_TO_GRAVITY
@@ -891,6 +938,9 @@ class LatControlTorque(LatControl):
       if self.v6 is not None and self.v6.get("handback"):
         self._fric_err_lp = 0.0
       self.curve_weight.reset()
+      self._turn_friction_torque = 0.0
+      if self._turn_preview is not None:
+        self._turn_preview.x = 0.0
       output_torque = 0.0
       pid_log.active = False
     else:
