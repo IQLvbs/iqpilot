@@ -22,6 +22,7 @@ from iqpilot.selfdrive.controls.lib.iq_longitudinal_planner import LongitudinalP
 from iqpilot.selfdrive.controls.lib.accel_boost import AccelBoost
 from iqpilot.selfdrive.controls.lib.e2e_distance_controller import E2EDistanceController
 from iqpilot.selfdrive.controls.lib.stop_offset import CONTROLLER_VERSION, LeadStopTargets, StopFrame, StopOffset, StopOffsetPlan
+from iqpilot.selfdrive.controls.lib.speed_comfort import PickupLimiter, cruise_shape, uses_speed_comfort
 
 A_CRUISE_MAX_VALS = [2.0, 1.6, 0.8, 0.6]
 A_CRUISE_MAX_BP = [0., 10.0, 25., 40.]
@@ -67,7 +68,8 @@ def get_lead_distance(radarState):
     return radarState.leadTwo.dRel
   return 0
 
-def get_cruise_accel(e2e, v_cruise, v_ego, a_cruise_prev, a_target_prev, angle_steers, CP, dt, accel_coast, allow_throttle, min_accel=A_CRUISE_MIN):
+def get_cruise_accel(e2e, v_cruise, v_ego, a_cruise_prev, a_target_prev, angle_steers, CP, dt, accel_coast, allow_throttle, min_accel=A_CRUISE_MIN,
+                     shape=None):
   max_accel = ACCEL_MAX if e2e else get_max_accel(v_ego)
 
   if not e2e:
@@ -80,9 +82,16 @@ def get_cruise_accel(e2e, v_cruise, v_ego, a_cruise_prev, a_target_prev, angle_s
     coast_limit = np.interp(v_ego, [MIN_ALLOW_THROTTLE_SPEED, MIN_ALLOW_THROTTLE_SPEED*2], [max_accel, clipped_accel_coast])
     max_accel = min(max_accel, coast_limit)
 
-  target_accel = np.clip(v_cruise - v_ego, min_accel, max_accel)
+  speed_error = v_cruise - v_ego
   j_cruise = np.interp(v_ego, J_CRUISE_BP, J_CRUISE_VALS)
-  target_accel = float(np.clip(target_accel, min(a_cruise_prev, a_target_prev) - j_cruise * dt, a_cruise_prev + j_cruise * dt))
+  j_brake = j_cruise
+  if shape is not None:
+    speed_error *= shape.gain_below if speed_error > 0.0 else shape.gain_above
+    min_accel = max(min_accel, shape.min_accel)
+    if a_cruise_prev <= 0.0:
+      j_brake = min(j_cruise, shape.jerk_brake)
+  target_accel = np.clip(speed_error, min_accel, max_accel)
+  target_accel = float(np.clip(target_accel, min(a_cruise_prev, a_target_prev) - j_brake * dt, a_cruise_prev + j_cruise * dt))
 
   cruise_should_stop = v_cruise == 0.0 and v_ego < CRUISE_STOP_SPEED
   return target_accel, cruise_should_stop
@@ -137,6 +146,8 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
     self.launch_armed = False
     self.prev_e2e = False
     self.mode_blend_timer = 0.0
+    self.speed_comfort = uses_speed_comfort(CP)
+    self.pickup = PickupLimiter(dt) if self.speed_comfort else None
     try:
       distance_control_enabled = Params().get_bool("IQE2EDistanceControl")
     except UnknownKeyName:
@@ -243,6 +254,8 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
       self.a_cruise = self.a_desired
 
     self.v_desired_filter.x = max(0.0, self.v_desired_filter.update(v_ego))
+    if self.pickup is not None:
+      self.v_desired_filter.x = self.pickup.limit_run_ahead(self.v_desired_filter.x, v_ego, self.a_desired, sm['carState'].aEgo, reset_state)
     _, model_v, model_a, _, throttle_prob = self.parse_model(sm['modelV2'])
     self.allow_throttle = throttle_prob > ALLOW_THROTTLE_THRESHOLD or v_ego <= MIN_ALLOW_THROTTLE_SPEED
 
@@ -290,10 +303,13 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
       output_a_target_e2e = max(output_a_target_e2e, min(a_launch, a_launch_max))
 
     e2e = self.is_e2e(sm)
+    shape = None
+    if self.speed_comfort and self.source in (IQPlanSource.cruise, IQPlanSource.nav):
+      shape = cruise_shape(self.source == IQPlanSource.nav, self.nav_provider, bool(sm['controlsState'].forceDecel) or self.forcing_stop)
     self.a_cruise, cruise_should_stop = get_cruise_accel(e2e, v_cruise, v_ego, self.a_cruise, a_prev,
                                                           steer_angle_without_offset, self.CP, self.dt,
                                                           accel_coast, self.allow_throttle,
-                                                          A_CRUISE_MIN_NAV if self.source == IQPlanSource.nav else A_CRUISE_MIN)
+                                                          A_CRUISE_MIN_NAV if self.source == IQPlanSource.nav else A_CRUISE_MIN, shape=shape)
 
     model_limited = e2e and output_a_target_e2e < min(output_a_target_mpc, self.a_cruise) - 0.1
     self.accel_boost.update(sm['selfdriveState'].enabled, v_ego, sm['carState'].gasPressed, model_limited)
@@ -336,6 +352,11 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
       limited_a_target = limit_mode_transition(output_a_target, a_prev, self.dt)
       self.mode_blend_timer = 0.0 if limited_a_target == output_a_target else max(self.mode_blend_timer - self.dt, 0.0)
       output_a_target = limited_a_target
+
+    if self.pickup is not None:
+      wheel_lateral_accel = v_ego ** 2 * steer_angle_without_offset * CV.DEG_TO_RAD / (self.CP.steerRatio * self.CP.wheelbase)
+      output_a_target = self.pickup.limit_rise(output_a_target, a_prev, reset_state, v_ego, sm['carState'].aEgo, wheel_lateral_accel,
+                                               sm['carState'].standstill)
 
     if stop_trajectory is not None:
       # A mode blend may ease ordinary braking, but must not override the

@@ -113,7 +113,7 @@ def test_planner_latches_model_limit_after_cruise_update(monkeypatch, e2e, a_mod
   monkeypatch.setattr(lp.LongitudinalPlannerIQ, "update_targets", lambda self, sm, v_ego, v_cruise: v_cruise)
   monkeypatch.setattr(lp, "get_accel_from_plan", lambda *args, **kwargs: (a_mpc, False))
   cruise_calls = []
-  monkeypatch.setattr(lp, "get_cruise_accel", lambda *args: cruise_calls.append(args) or (a_cruise, False))
+  monkeypatch.setattr(lp, "get_cruise_accel", lambda *args, **kwargs: cruise_calls.append(args) or (a_cruise, False))
   planner = object.__new__(lp.LongitudinalPlanner)
   planner.CP = SimpleNamespace(openpilotLongitudinalControl=True, longitudinalActuatorDelay=0.1)
   planner.dt = DT_MDL
@@ -127,6 +127,8 @@ def test_planner_latches_model_limit_after_cruise_update(monkeypatch, e2e, a_mod
   planner.forcing_stop = False
   planner.prev_e2e = e2e
   planner.mode_blend_timer = 0.0
+  planner.speed_comfort = False
+  planner.pickup = None
   planner.accel_boost = AccelBoost(True, DT_MDL)
   planner.distance_control = SimpleNamespace(enabled=False, update=lambda *args, **kwargs: kwargs["a_model"])
   planner.is_e2e = lambda sm: e2e
