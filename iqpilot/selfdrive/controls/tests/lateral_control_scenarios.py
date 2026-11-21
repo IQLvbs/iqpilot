@@ -115,6 +115,7 @@ def build_controls(module, case, lookahead=False, slew=False, smooth=False, nnff
   controls.navigation_enabled = False
   controls.nav_exit_lane_change = False
   controls.nav_turn_signal_controller = SimpleNamespace(update=lambda *args: (False, False))
+  controls.lane_change_signal = SimpleNamespace(update=lambda *args: (False, False))
   controls.known_turn_assist = SimpleNamespace(update=lambda *args: args[4])
   controls.LoC = SimpleNamespace(long_control_state="off", reset=lambda: None, update=lambda *args, **kwargs: 0.125)
   controls.enable_long_comfort_mode = False

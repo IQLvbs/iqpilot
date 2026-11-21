@@ -11,6 +11,7 @@ from iqdbc.car.disable_ecu import disable_ecu
 from iqdbc.car.hyundai.carcontroller import CarController
 from iqdbc.car.hyundai.carstate import CarState
 from iqdbc.car.hyundai.radar_interface import RadarInterface
+from iqdbc.car.hyundai.spas2 import spas2_blinkers_supported
 
 from iqpilot.common.params import Params
 
@@ -148,6 +149,11 @@ class CarInterface(CarInterfaceBase):
         ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_ALT_BUTTONS.value
       if ret.flags & HyundaiFlags.CANFD_CAMERA_SCC:
         ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CAMERA_SCC.value
+
+      # opt-in turn signals through SPAS2, see docs/hyundai_tucson_blinkers.md
+      if spas2_blinkers_supported(candidate, ret.flags, CAN.ECAN, fingerprint[CAN.ECAN]) and params.get_bool("HyundaiSpas2Blinkers"):
+        ret.flags |= HyundaiFlags.CANFD_SPAS2_BLINKERS.value
+        ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_SPAS2_BLINKERS.value
 
     else:
       # Shared configuration for non CAN-FD cars
