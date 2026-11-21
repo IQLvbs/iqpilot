@@ -259,6 +259,9 @@ class CarController(CarControllerBase):
 
     # steering torque
     new_torque = int(round(actuators.torque * self.params.STEER_MAX))
+    if CS.lfa_rejected:
+      # a rejected frame resets the panda's torque reference to 0: restart the ramp there or every later frame is rejected too
+      self.apply_torque_last = 0
     apply_torque = apply_driver_steer_torque_limits(new_torque, self.apply_torque_last, CS.out.steeringTorque, self.params)
 
     # >90 degree steering fault prevention
@@ -403,6 +406,10 @@ class CarController(CarControllerBase):
     self.steering_pressed_prev = CS.out.steeringPressed if CC.latActive else False
 
     self.apply_angle_last = apply_angle
+
+    if CS.lat_hold:
+      apply_torque = 0
+      apply_steer_req = False
 
     # Hold torque with induced temporary fault when cutting the actuation bit
     torque_fault = CC.latActive and not apply_steer_req

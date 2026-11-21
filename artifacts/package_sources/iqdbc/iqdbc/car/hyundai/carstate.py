@@ -31,6 +31,16 @@ BUTTONS_DICT = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: Bu
 GearShifter = structs.CarState.GearShifter
 
 READY_COUNT_OK = 200
+
+# Camera-SCC cars with comma longitudinal. From the moment the panda closes the relay it blocks the camera's LFA, cluster and SCC
+# frames and the car's MDPS and TCS frames to the camera, so the replacements have to be ready by then. It also rejects steering
+# until ADAPTIVE main turns on or SET/RES is released, so lateral follows those same edges.
+PANDA_SYNC_CARS = (CAR.HYUNDAI_TUCSON_4TH_GEN,)
+PANDA_SAFETY_READY_TICKS = 20  # the panda is in car safety mode about 0.2 s after ControlsReady
+LFA_ADDR = 0x12a
+CAN_RETURNED_SRC = 128         # the panda sent this frame
+CAN_REJECTED_SRC = 192         # panda safety rejected this frame
+LFA_REJECT_LIMIT = 10          # about 0.1 s of rejected frames in a row, well inside the EPS's 0.5 s LFA timeout
 TRAILER_DISCONNECT_GRACE_FRAMES = int(5.0 / DT_CTRL)
 EV_MODE_STATUS_TIMEOUT_NS = 500_000_000
 
@@ -141,6 +151,13 @@ class CarState(CarStateBase):
     self.op_params = Params()
 
     self.main_enabled = True if self.op_params.get_int("AutoEngage") == 2 else False
+    self.panda_sync = CP.carFingerprint in PANDA_SYNC_CARS and bool(CP.flags & HyundaiFlags.CANFD_CAMERA_SCC) and bool(CP.openpilotLongitudinalControl)
+    self.panda_main = False  # mirrors the panda's acc_main_on
+    self.adaptive_main_prev = False
+    self.set_res_prev = False
+    self.lat_hold = False    # SET/RES is down and the panda only allows steering on release
+    self.lfa_rejected = 0    # LFA frames rejected in the latest CAN packets
+    self.lfa_rejected_run = 0
     self.gear_shifter = GearShifter.drive # Gear_init for Nexo ?? unknown 21.02.23.LSW
 
     self.totalDistance = 0.0
@@ -224,6 +241,13 @@ class CarState(CarStateBase):
           setattr(self, attr, parser.vl[name])
           return True
         return False
+
+      if self.panda_sync and canfd and self.controls_ready_count == 1:
+        self.scc_control = self.cp_cam.vl["SCC_CONTROL"]
+        self.tcs = self.cp.vl["TCS"]
+        self.mdps = self.cp.vl["MDPS"]
+        self.lfa = self.cp_cam.vl["LFA"]
+        self.lfahda_cluster = self.cp_cam.vl["LFAHDA_CLUSTER"]
 
       if self.controls_ready_count == 50:
         self.cp.controls_ready = self.cp_cam.controls_ready = True
@@ -525,6 +549,39 @@ class CarState(CarStateBase):
       self.speedLimitDistance = self.totalDistance
     ret.speedLimitDistance = self.speedLimitDistance - self.totalDistance
 
+  def note_lfa_rejections(self, can_packets) -> None:
+    srcs = [src for _, frames in can_packets for address, _, src in frames if address == LFA_ADDR]
+    self.lfa_rejected = srcs.count(CAN_REJECTED_SRC)
+    if self.lfa_rejected:
+      self.lfa_rejected_run += self.lfa_rejected
+    elif CAN_RETURNED_SRC in srcs:
+      self.lfa_rejected_run = 0
+
+  def update_panda_sync(self, cp, ret, cruise_button) -> None:
+    # MAIN: the panda flips acc_main_on on the rising edge of ADAPTIVE main and only allows steering when that turns it on.
+    # A press always turns lateral off here and turns it on only when the panda turned on too, so the two cannot end up opposite.
+    for pressed in cp.vl_all[self.cruise_btns_msg_canfd]["ADAPTIVE_CRUISE_MAIN_BTN"]:
+      if pressed and not self.adaptive_main_prev and self.controls_ready_count >= PANDA_SAFETY_READY_TICKS:
+        self.panda_main = not self.panda_main
+        self.main_enabled = False if self.main_enabled else self.panda_main
+      self.adaptive_main_prev = bool(pressed)
+
+    # SET/RES with lateral off: the panda allows steering once the button is released, and not at all while braking at speed
+    set_res = cruise_button in (Buttons.RES_ACCEL, Buttons.SET_DECEL)
+    if set_res and not self.set_res_prev and not self.main_enabled and not (ret.brakePressed and not ret.standstill):
+      self.main_enabled = True
+      self.lat_hold = True
+    elif not set_res:
+      self.lat_hold = False
+    self.set_res_prev = set_res
+
+    # the panda keeps rejecting steering: turn lateral off cleanly before the EPS times out on LFA
+    if self.lfa_rejected_run >= LFA_REJECT_LIMIT and self.controls_ready_count >= READY_COUNT_OK:
+      self.lfa_rejected_run = 0
+      if cp.vl["TCS"]["ACC_REQ"] != 1:
+        self.main_enabled = False
+        self.panda_main = False
+
   def update_canfd(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
@@ -637,7 +694,9 @@ class CarState(CarStateBase):
       cruise_button = self.cruise_buttons_alt2["CRUISE_BUTTONS"]
     else:
       cruise_button = cp.vl[self.cruise_btns_msg_canfd]["CRUISE_BUTTONS"]
-    if cruise_button in [Buttons.RES_ACCEL, Buttons.SET_DECEL] and self.CP.openpilotLongitudinalControl:
+    if self.panda_sync:
+      self.update_panda_sync(cp, ret, cruise_button)
+    elif cruise_button in [Buttons.RES_ACCEL, Buttons.SET_DECEL] and self.CP.openpilotLongitudinalControl:
       self.main_enabled = True
     # CAN FD cars enable on main button press, set available if no TCS faults preventing engagement
     ret.cruiseState.available = self.main_enabled and self.controls_ready_count >= READY_COUNT_OK #cp.vl["TCS"]["ACCEnable"] == 0
@@ -651,7 +710,7 @@ class CarState(CarStateBase):
       # These are not used for engage/disengage since openpilot keeps track of state using the buttons
       ret.cruiseState.enabled = cp.vl["TCS"]["ACC_REQ"] == 1
       ret.cruiseState.standstill = False
-      if self.MainMode_ACC or self.main_enabled:
+      if not self.panda_sync and (self.MainMode_ACC or self.main_enabled):
         self.main_enabled = True
     else:
       cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp
@@ -786,7 +845,7 @@ class CarState(CarStateBase):
       adaptive_main = cp.vl_all[self.cruise_btns_msg_canfd]["ADAPTIVE_CRUISE_MAIN_BTN"]
       normal_main = cp.vl_all[self.cruise_btns_msg_canfd]["NORMAL_CRUISE_MAIN_BTN"]
       self.main_buttons.extend(int(adaptive or normal) for adaptive, normal in zip(adaptive_main, normal_main, strict=True))
-    if self.main_buttons[-1] != prev_main_buttons and not self.main_buttons[-1]: # and self.CP.openpilotLongitudinalControl: #carrot
+    if not self.panda_sync and self.main_buttons[-1] != prev_main_buttons and not self.main_buttons[-1]: # and self.CP.openpilotLongitudinalControl: #carrot
       self.main_enabled = not self.main_enabled
       print("main_enabled = {}".format(self.main_enabled))
     self.buttons_counter = cp.vl[self.cruise_btns_msg_canfd]["COUNTER"]
