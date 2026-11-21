@@ -406,8 +406,9 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
   if not enabled or gas_override:
     a_val, a_raw = 0, 0
   else:
-    a_raw = accel
-    a_val = apply_accel_jerk_limit(a_raw, accel_value_last, jerk_u, jerk_l)
+    cap = hyundai_jerk.launch_cap
+    a_val = apply_accel_jerk_limit(accel if cap is None else min(accel, cap), accel_value_last, jerk_u, jerk_l)
+    a_raw = accel if cap is None else a_val  # while a launch is shaped the raw request follows the value the car is given
 
   values = copy.copy(CS.scc_control)
   rx_counter = values.pop("COUNTER", None)
