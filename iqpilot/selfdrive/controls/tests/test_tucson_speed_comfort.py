@@ -1,4 +1,6 @@
-"""The gentler cruise candidate inside the real planner: gentle where nothing is at stake, untouched everywhere else."""
+"""Speed comfort inside the real planner: gentle where nothing is at stake, untouched everywhere else."""
+import math
+
 import numpy as np
 import pytest
 
@@ -13,7 +15,8 @@ from iqpilot.common.params import Params
 from iqpilot.selfdrive.controls.lib import longitudinal_planner
 from iqpilot.selfdrive.controls.lib.longitudinal_planner import (A_CRUISE_MIN, A_CRUISE_MIN_NAV, J_CRUISE_BP, J_CRUISE_VALS, LongitudinalPlanner,
                                                                  get_cruise_accel)
-from iqpilot.selfdrive.controls.lib.speed_comfort import BEND_SHAPE, RETURN_SHAPE
+from iqpilot.selfdrive.controls.lib.speed_comfort import (BEND_SHAPE, PICKUP_JERK, PICKUP_MARGIN, PICKUP_PATIENCE, RETURN_SHAPE, RUN_AHEAD_MARGIN,
+                                                             TURN_ACCEL_V)
 from iqpilot.selfdrive.iqmodeld.config import ModelConstants
 
 DT = 0.05
@@ -92,9 +95,13 @@ def run(planner, seconds, **kwargs):
   return np.array(out)
 
 
+def wheel_angle_for(planner, v_ego, lateral_accel):
+  return math.degrees(lateral_accel * planner.CP.steerRatio * planner.CP.wheelbase / v_ego ** 2)
+
+
 def test_only_the_tucson_has_the_layer():
-  assert tucson().speed_comfort
-  assert not civic().speed_comfort
+  assert tucson().speed_comfort and tucson().pickup is not None
+  assert not civic().speed_comfort and civic().pickup is None
 
 
 def test_the_cruise_candidate_is_the_release_formula_when_no_shape_is_given():
@@ -153,3 +160,55 @@ def test_reaching_the_set_speed_tapers_earlier():
   assert run(civic(init_v=14.0), 3.0, v_ego=14.0, set_speed=15.0)[-1] == pytest.approx(1.0)
   far = run(tucson(init_v=5.0), 4.0, v_ego=5.0, a_ego=2.0, set_speed=15.0)
   assert far[-1] == pytest.approx(2.0)                                     # far below the set speed nothing changes
+
+
+def test_taking_over_while_moving_waits_for_the_car():
+  planner = tucson(init_v=5.0)
+  run(planner, 0.5, v_ego=5.0, a_ego=0.0, cruise_in_control=False)        # the driver has lifted off
+  held = run(planner, 0.6, v_ego=5.0, a_ego=0.0)                          # cruise takes over; the car has let go of the drive
+  assert held.max() <= PICKUP_MARGIN + PICKUP_PATIENCE * 0.6 + 1e-6
+  assert np.diff(held).max() <= PICKUP_JERK * DT + 1e-9
+  answered = run(planner, 4.0, v_ego=5.0, a_ego=1.5)                      # the car answers
+  assert np.diff(np.r_[held[-1], answered]).max() <= PICKUP_JERK * DT + 1e-9
+  assert answered[-1] == pytest.approx(2.0)
+  assert planner.pickup.window == 0.0
+
+  other = civic(init_v=5.0)
+  run(other, 0.5, v_ego=5.0, a_ego=0.0, cruise_in_control=False)
+  assert run(other, 0.6, v_ego=5.0, a_ego=0.0).max() > 0.9                # the release runs ahead of the car
+
+
+def test_taking_over_near_standstill_is_a_launch_and_is_left_alone():
+  planner, other = tucson(), civic()
+  for p in (planner, other):
+    run(p, 0.5, v_ego=0.5, cruise_in_control=False)
+  assert np.array_equal(run(planner, 2.0, v_ego=0.5), run(other, 2.0, v_ego=0.5))
+
+
+def test_braking_right_after_a_take_over_is_immediate():
+  planner = tucson(init_v=15.0)
+  run(planner, 0.5, v_ego=15.0, cruise_in_control=False)
+  assert run(planner, 0.2, v_ego=15.0, model_accel=-3.0)[0] == pytest.approx(-3.0)
+
+
+def test_cornering_holds_acceleration_back_only_on_the_tucson():
+  planner, other = tucson(init_v=5.0), civic(init_v=5.0)
+  angle = wheel_angle_for(planner, 5.0, 2.2)
+  out = run(planner, 4.0, v_ego=5.0, a_ego=2.0, set_speed=30.0, steer_deg=angle)
+  assert out[-1] == pytest.approx(TURN_ACCEL_V[-1])
+  assert run(planner, 0.5, v_ego=5.0, a_ego=2.0, set_speed=30.0, steer_deg=-angle)[-1] == pytest.approx(TURN_ACCEL_V[-1])
+  assert run(other, 4.0, v_ego=5.0, a_ego=2.0, set_speed=30.0, steer_deg=wheel_angle_for(other, 5.0, 2.2))[-1] == pytest.approx(2.0)
+
+
+def test_the_planned_speed_waits_for_the_car_after_a_take_over_only_on_the_tucson():
+  planner, other = tucson(init_v=5.0), civic(init_v=5.0)
+  for p in (planner, other):
+    run(p, 0.5, v_ego=5.0, a_ego=0.0, cruise_in_control=False)
+  gaps, gaps_other = [], []
+  for _ in range(16):                                                    # 0.8 s: the car has let go of the drive
+    planner.update(scene(v_ego=5.0, a_ego=0.0))
+    other.update(scene(v_ego=5.0, a_ego=0.0))
+    gaps.append(planner.v_desired_trajectory[0] - 5.0)
+    gaps_other.append(other.v_desired_trajectory[0] - 5.0)
+  assert max(gaps) <= RUN_AHEAD_MARGIN + 0.1
+  assert max(gaps_other) > max(gaps)

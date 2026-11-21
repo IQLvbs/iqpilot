@@ -22,7 +22,7 @@ from iqpilot.selfdrive.controls.lib.iq_longitudinal_planner import LongitudinalP
 from iqpilot.selfdrive.controls.lib.accel_boost import AccelBoost
 from iqpilot.selfdrive.controls.lib.e2e_distance_controller import E2EDistanceController
 from iqpilot.selfdrive.controls.lib.stop_offset import CONTROLLER_VERSION, LeadStopTargets, StopFrame, StopOffset, StopOffsetPlan
-from iqpilot.selfdrive.controls.lib.speed_comfort import cruise_shape, uses_speed_comfort
+from iqpilot.selfdrive.controls.lib.speed_comfort import PickupLimiter, cruise_shape, uses_speed_comfort
 
 A_CRUISE_MAX_VALS = [2.0, 1.6, 0.8, 0.6]
 A_CRUISE_MAX_BP = [0., 10.0, 25., 40.]
@@ -147,6 +147,7 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
     self.prev_e2e = False
     self.mode_blend_timer = 0.0
     self.speed_comfort = uses_speed_comfort(CP)
+    self.pickup = PickupLimiter(dt) if self.speed_comfort else None
     try:
       distance_control_enabled = Params().get_bool("IQE2EDistanceControl")
     except UnknownKeyName:
@@ -253,6 +254,8 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
       self.a_cruise = self.a_desired
 
     self.v_desired_filter.x = max(0.0, self.v_desired_filter.update(v_ego))
+    if self.pickup is not None:
+      self.v_desired_filter.x = self.pickup.limit_run_ahead(self.v_desired_filter.x, v_ego, self.a_desired, sm['carState'].aEgo, reset_state)
     _, model_v, model_a, _, throttle_prob = self.parse_model(sm['modelV2'])
     self.allow_throttle = throttle_prob > ALLOW_THROTTLE_THRESHOLD or v_ego <= MIN_ALLOW_THROTTLE_SPEED
 
@@ -349,6 +352,11 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
       limited_a_target = limit_mode_transition(output_a_target, a_prev, self.dt)
       self.mode_blend_timer = 0.0 if limited_a_target == output_a_target else max(self.mode_blend_timer - self.dt, 0.0)
       output_a_target = limited_a_target
+
+    if self.pickup is not None:
+      wheel_lateral_accel = v_ego ** 2 * steer_angle_without_offset * CV.DEG_TO_RAD / (self.CP.steerRatio * self.CP.wheelbase)
+      output_a_target = self.pickup.limit_rise(output_a_target, a_prev, reset_state, v_ego, sm['carState'].aEgo, wheel_lateral_accel,
+                                               sm['carState'].standstill)
 
     if stop_trajectory is not None:
       # A mode blend may ease ordinary braking, but must not override the
