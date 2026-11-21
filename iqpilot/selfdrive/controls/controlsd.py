@@ -34,6 +34,7 @@ from iqpilot.system.proprietary_runtime._verified_import import import_verified_
 from iqpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
 
 from iqpilot.selfdrive.controls.iq_controls_layer import IQControlsLayer
+from iqpilot.selfdrive.controls.lib.lane_change_signal import LaneChangeSignal, holds_lane_change_signal
 
 NavTurnSignalController = import_verified_module(
   "iqpilot_navd_private", "iqpilot_private.navd.nav_turn_signals"
@@ -107,6 +108,7 @@ class Controls(IQControlsLayer):
     self._update_params()
 
     self.nav_turn_signal_controller = NavTurnSignalController(self.CP)
+    self.lane_change_signal = LaneChangeSignal(holds_lane_change_signal(self.CP))
     self.known_turn_assist = KnownTurnAssist()
 
     self.pose_calibrator = PoseCalibrator()
@@ -229,7 +231,7 @@ class Controls(IQControlsLayer):
                     (not override_longitudinal or long_through_override) and \
                     (self.CP.openpilotLongitudinalControl or not self.CP_IQ.pcmCruiseSpeed)
 
-    CC.leftBlinker, CC.rightBlinker = self.nav_turn_signal_controller.update(
+    nav_left, nav_right = self.nav_turn_signal_controller.update(
       self.sm['iqNavState'] if self.sm.alive['iqNavState'] else None,
       self.navigation_enabled,
       self.nav_exit_lane_change,
@@ -241,6 +243,11 @@ class Controls(IQControlsLayer):
       CS.steeringAngleDeg,
       self.sm.alive['iqNavState'] and self.sm.valid['iqNavState'],
     )
+    hold_left, hold_right = self.lane_change_signal.update(
+      model_v2.meta.laneChangeState, model_v2.meta.laneChangeDirection, CS.leftBlinker, CS.rightBlinker, CS.vEgo,
+      CC.latActive, CS.steeringPressed, CS.steeringTorque, nav_left, nav_right,
+    )
+    CC.leftBlinker, CC.rightBlinker = bool(nav_left or hold_left), bool(nav_right or hold_right)
 
     actuators = CC.actuators
     actuators.longControlState = self.LoC.long_control_state

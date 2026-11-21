@@ -505,13 +505,7 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
 
-def create_spas_messages(packer, CAN, frame, left_blink, right_blink):
-  ret = []
-
-  values = {
-  }
-  ret.append(packer.make_can_msg("SPAS1", CAN.ECAN, values))
-
+def create_spas2_message(packer, CAN, left_blink, right_blink):
   blink = 0
   if left_blink:
     blink = 3
@@ -520,9 +514,14 @@ def create_spas_messages(packer, CAN, frame, left_blink, right_blink):
   values = {
     "BLINKER_CONTROL": blink,
   }
-  ret.append(packer.make_can_msg("SPAS2", CAN.ECAN, values))
+  return packer.make_can_msg("SPAS2", CAN.ECAN, values)
 
-  return ret
+
+def create_spas_messages(packer, CAN, frame, left_blink, right_blink):
+  return [
+    packer.make_can_msg("SPAS1", CAN.ECAN, {}),
+    create_spas2_message(packer, CAN, left_blink, right_blink),
+  ]
 
 
 def create_fca_warning_light(CP, packer, CAN, frame):
