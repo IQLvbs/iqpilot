@@ -127,6 +127,7 @@ def test_planner_latches_model_limit_after_cruise_update(monkeypatch, e2e, a_mod
   planner.forcing_stop = False
   planner.prev_e2e = e2e
   planner.mode_blend_timer = 0.0
+  planner.stop_point = None
   planner.accel_boost = AccelBoost(True, DT_MDL)
   planner.distance_control = SimpleNamespace(enabled=False, update=lambda *args, **kwargs: kwargs["a_model"])
   planner.is_e2e = lambda sm: e2e
