@@ -22,6 +22,7 @@ from iqpilot.selfdrive.controls.lib.iq_longitudinal_planner import LongitudinalP
 from iqpilot.selfdrive.controls.lib.accel_boost import AccelBoost
 from iqpilot.selfdrive.controls.lib.e2e_distance_controller import E2EDistanceController
 from iqpilot.selfdrive.controls.lib.stop_offset import CONTROLLER_VERSION, LeadStopTargets, StopFrame, StopOffset, StopOffsetPlan
+from iqpilot.selfdrive.controls.lib.stop_point import StopPoint, plan_stop_distance, uses_stop_point
 
 A_CRUISE_MAX_VALS = [2.0, 1.6, 0.8, 0.6]
 A_CRUISE_MAX_BP = [0., 10.0, 25., 40.]
@@ -137,6 +138,7 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
     self.launch_armed = False
     self.prev_e2e = False
     self.mode_blend_timer = 0.0
+    self.stop_point = StopPoint(dt) if uses_stop_point(CP) else None
     try:
       distance_control_enabled = Params().get_bool("IQE2EDistanceControl")
     except UnknownKeyName:
@@ -336,6 +338,19 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
       limited_a_target = limit_mode_transition(output_a_target, a_prev, self.dt)
       self.mode_blend_timer = 0.0 if limited_a_target == output_a_target else max(self.mode_blend_timer - self.dt, 0.0)
       output_a_target = limited_a_target
+
+    if self.stop_point is not None:
+      radar = sm['radarState']
+      # the landing is the soft stop's, which only runs with IQForceStops on
+      in_control = bool(e2e and not reset_state and not self.fcw and sm['selfdriveState'].enabled and sm['carControl'].longActive
+                        and self.iq_dynamic.force_stops_enabled)
+      gas = bool(sm['carState'].gasPressed or sm['iqCarState'].accelPressed)
+      lead_distance = float(get_lead_distance(radar)) if radar.leadOne.status or radar.leadTwo.status else None
+      output_a_target, finish_stop = self.stop_point.update(
+        float(output_a_target), float(a_prev), in_control, float(v_ego), bool(sm['carState'].standstill), gas,
+        plan_stop_distance(sm['modelV2'].position.x, sm['modelV2'].velocity.x), float(np.max(model_v)),
+        float(sm['modelV2'].action.desiredAcceleration), lead_distance, float(sm['carState'].aEgo))
+      self.output_should_stop = self.output_should_stop or finish_stop
 
     if stop_trajectory is not None:
       # A mode blend may ease ordinary braking, but must not override the
