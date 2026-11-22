@@ -8,6 +8,7 @@ from iqdbc.car.hyundai import hyundaicanfd, hyundaican
 from iqdbc.car.hyundai.carstate import CarState
 from iqdbc.car.hyundai.hyundaicanfd import CanBus
 from iqdbc.car.hyundai.stopping import CanfdStopping
+from iqdbc.car.hyundai import tucson_longitudinal
 from iqdbc.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CAR, CAN_GEARS, HyundaiExtFlags
 from iqdbc.car.interfaces import CarControllerBase
 from iqdbc.car.vehicle_model import VehicleModel
@@ -149,6 +150,10 @@ class CarController(CarControllerBase):
     self.last_button_frame = 0
 
     self.hyundai_jerk = HyundaiJerk()
+    self.tucson_launch = None
+    if CP.carFingerprint == CAR.HYUNDAI_TUCSON_4TH_GEN:
+      self.tucson_launch = tucson_longitudinal.TucsonLaunch()
+      self.hyundai_jerk.car_limits = tucson_longitudinal.jerk_limits
     self.speedCameraHapticEndFrame = 0
     self.hapticFeedbackWhenSpeedCamera = 0
     self.max_angle_frames = MAX_ANGLE_FRAMES
@@ -494,6 +499,7 @@ class CarController(CarControllerBase):
       if self.camera_scc_params in [2, 3]:
         self.canfd_toggle_adas(CC, CS)
       if self.CP.openpilotLongitudinalControl:
+        self.hyundai_jerk.accel_value_last = self.accel_value_last
         self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, CC, CC_IQ)
         self.hyundai_jerk.check_carrot_cruise(CC, CS, hud_control, stopping, accel, actuators.aTarget)
 
@@ -506,6 +512,8 @@ class CarController(CarControllerBase):
           can_sends.extend(hyundaicanfd.create_camera_keepalive(self.CP, self.packer, self.CAN, self.frame))
         if self.frame % 2 == 0:
           if self.CP.flags & HyundaiFlags.CAMERA_SCC.value:
+            if self.tucson_launch is not None:
+              self.tucson_launch.apply(self.hyundai_jerk, accel, self.accel_value_last, CS, CC, CC_IQ, stopping)
             msg, self.accel_value_last = hyundaicanfd.create_acc_control_scc2(
               self.packer, self.CAN, CC.enabled, self.accel_value_last, accel, stopping, CC.cruiseControl.override,
               set_speed_in_units, hud_control, self.hyundai_jerk, CS, self.canfd_stopping,
@@ -758,6 +766,9 @@ class HyundaiJerk:
     self.cb_upper = self.cb_lower = 0.0
     self.comfort_active = False
     self.jerk_u_min = 0.5
+    self.accel_value_last = 0.0
+    self.launch_cap = None
+    self.car_limits = None
     self.carrot_cruise = 1
     self.carrot_cruise_accel = 0.0
 
@@ -830,6 +841,8 @@ class HyundaiJerk:
         self.jerk_u = min(max(self.jerk_u_min, self.jerk * 2.0), jerk_max_u)
         self.jerk_l = max(jerk_l_raw, jerk_l_mpc)
         self.cb_upper = self.cb_lower = 0.0
+        if self.car_limits is not None:
+          self.jerk_u, self.jerk_l = self.car_limits(self.jerk, accel, self.accel_value_last, CS.out.vEgo, fcw, CC.cruiseControl.override)
       else:
         self.jerk_u = min(max(self.jerk_u_min, self.jerk * 2.0), jerk_max_u)
         self.jerk_l = min(max(1.0, -self.jerk * 4.0), jerk_max_l)
