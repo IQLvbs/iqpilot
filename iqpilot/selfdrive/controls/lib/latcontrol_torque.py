@@ -23,6 +23,7 @@ from iqpilot.common.pid import PIDController
 from iqpilot.common.swaglog import cloudlog
 from iqpilot.common.turn_guard_settings import get_turn_guards_enabled
 from iqpilot.selfdrive.controls.lib.actuator_feedback import SteeringActuatorFeedback
+from iqpilot.selfdrive.controls.lib.curve_feedforward import CurveWeight
 from iqpilot.selfdrive.controls.lib.hkg_tuning import uses_hkg_tuning
 from iqpilot.selfdrive.controls.lib.lateral_acceleration_slew_limiter import LateralAccelerationSlewLimiter
 from iqpilot.selfdrive.controls.lib.latcontrol import LatControl
@@ -604,6 +605,13 @@ LAT_TUNE_V8 = {
                               [1.0, 0.86, 0.80, 0.80, 0.88, 0.94, 1.0, 1.0, 1.08, 1.08, 1.12]),
   },
 }
+# In a curve the feed-forward follows the steering's stiffness (torque per m/s^2) instead of the lane-keeping tables.
+LAT_TUNE_V9 = {
+  TUCSON_FINGERPRINT: {
+    "stiffness_speed": ([10.7, 12.1, 14.8, 17.5, 20.6, 24.3, 29.4, 33.0], [0.213, 0.182, 0.135, 0.120, 0.100, 0.105, 0.101, 0.108]),
+    "speed_weight": ([9.5, 12.0], [0.0, 1.0]),
+  },
+}
 
 def friction_error_with_preview(error: float, measurement: float, desired_jerk: float) -> float:
   return float(np.clip(error + JERK_GAIN * desired_jerk,
@@ -662,6 +670,8 @@ class LatControlTorque(LatControl):
     self.v8 = LAT_TUNE_V8.get(str(CP.carFingerprint))
     if self.v8 is not None:
       self._ff_torque_params = CP.lateralTuning.torque.as_builder()
+    self.v9 = LAT_TUNE_V9.get(str(CP.carFingerprint)) if self.v8 is not None else None
+    self.curve_weight = CurveWeight(self.dt)
     self.reference_slew_limiter = LateralAccelerationSlewLimiter(self.lateral_acceleration_slew_limiter.enabled)
     self.turn_guard_reference_buffer = deque(maxlen=self.lat_accel_request_buffer_len)
     self.friction_accel_request_buffer = deque(maxlen=self.lat_accel_request_buffer_len)
@@ -742,13 +752,24 @@ class LatControlTorque(LatControl):
               + self.torque_from_lateral_accel(fb_lataccel, self._fb_torque_params))
     self._ff_torque_params.latAccelFactor = float(np.interp(CS.vEgo, *self.v8["ff_lat_accel_factor_speed"]))
     ff_scale = float(np.interp(CS.vEgo, *self.v8.get("ff_torque_scale_speed", ([0.0], [1.0]))))
-    return (ff_scale * self.torque_from_lateral_accel(ff_core, self._ff_torque_params)
+    ff_torque = ff_scale * self.torque_from_lateral_accel(ff_core, self._ff_torque_params)
+    if self.v9 is not None:
+      ff_torque = self._curve_feedforward(CS.vEgo, ff_core, ff_torque)
+    return (ff_torque
             + self.torque_from_lateral_accel(fric_la, self._fb_torque_params)
             + self.torque_from_lateral_accel(fb_lataccel, self._fb_torque_params))
+
+  def _curve_feedforward(self, v_ego, request, ff_torque):
+    weight = self.curve_weight.update(request) * float(np.interp(v_ego, *self.v9["speed_weight"]))
+    if weight <= 0.0:
+      return ff_torque
+    curve_torque = float(np.interp(v_ego, *self.v9["stiffness_speed"])) * request
+    return ff_torque + weight * (curve_torque - ff_torque)
 
   def reset(self):
     super().reset()
     self._actuator_feedback = None
+    self.curve_weight.reset()
     if self.hkg_fix:
       self.pid.reset()
       self.nnff_assist.reset_history()
@@ -869,6 +890,7 @@ class LatControlTorque(LatControl):
         self.reset()
       if self.v6 is not None and self.v6.get("handback"):
         self._fric_err_lp = 0.0
+      self.curve_weight.reset()
       output_torque = 0.0
       pid_log.active = False
     else:
