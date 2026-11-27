@@ -41,6 +41,7 @@ CARD_FLAG_SENDCAN_GAP = 1 << 2
 CARD_SENDCAN_GAP_WARN_US = 20_000
 CARD_SENDCAN_GAP_ERROR_US = 60_000
 CARD_CAN_INVALID_REPORT_FRAMES = int(5. / DT_CTRL)
+STOCK_AUTOSTEER_RELEASE_FRAMES = int(5. / DT_CTRL)
 
 # forward
 carlog.addHandler(ForwardingHandler(cloudlog))
@@ -155,6 +156,7 @@ class Car:
     self.iq_dynamic_mode = self.params.get_bool("IQDynamicMode")
 
     self.stock_autosteer_standby = self.CP.brand == "tesla" and self.params.get_bool("TeslaStockAutosteerActive")
+    self.stock_autosteer_idle_frames = 0
     openpilot_enabled_toggle = (self.params.get_bool("OpenpilotEnabledToggle") and not self.params.get_bool("DashcamMode") and
                                 not self.stock_autosteer_standby)
     run_optional_pre_init(self.CI, self.CP, self.CP_IQ, self.can_callbacks)
@@ -486,8 +488,24 @@ class Car:
         min_interval_s=0.25,
       )
 
+  def _release_stock_autosteer_standby(self, CS: car.CarState) -> None:
+    if CS.invalidLkasSetting or CS.cruiseState.enabled or not CS.canValid:
+      self.stock_autosteer_idle_frames = 0
+      return
+    self.stock_autosteer_idle_frames += 1
+    if self.stock_autosteer_idle_frames >= STOCK_AUTOSTEER_RELEASE_FRAMES:
+      self.stock_autosteer_standby = False
+      self.stock_autosteer_idle_frames = 0
+      self.params.put_bool("TeslaStockAutosteerActive", False)
+      self.params.put_bool("OnroadCycleRequested", True)
+
   def _yield_to_stock_autosteer(self, CS: car.CarState) -> None:
-    if self.CP.brand != "tesla" or self.CP.passive or self.stock_autosteer_standby:
+    if self.CP.brand != "tesla":
+      return
+    if self.stock_autosteer_standby:
+      self._release_stock_autosteer_standby(CS)
+      return
+    if self.CP.passive:
       return
     if CS.invalidLkasSetting and not self.sm['carControl'].enabled:
       self.stock_autosteer_standby = True

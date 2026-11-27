@@ -32,6 +32,7 @@ ACTIVATE_FRAC = float(os.getenv("IQEMAC_ACTIVATE_FRAC", "0.7"))
 REARM_LIMIT = int(os.getenv("IQEMAC_REARM_LIMIT", "2"))
 MODEL_FREQ = 20.0
 WARMUP_FRAMES = 40
+FRAME_RESET_GAP = 30
 STATUS_WINDOW = int(os.getenv("IQEMAC_STATUS_EVERY", "20"))
 
 SELECTOR_SERVICES = ["modelV2", "drivingModelData", "cameraOdometry", "iqDriveModelData"]
@@ -136,6 +137,24 @@ def hold_big_plan(active: bool, last_big_payload: dict | None, last_big_publishe
   if not active or last_big_payload is None or last_big_published < 0:
     return None
   return last_big_payload if 0 <= target - last_big_published <= max_lag_frames else None
+
+
+def next_target(small_head: int | None, big_head: int | None, last_published: int,
+                big_active: bool) -> int | None:
+  target = small_head
+  if big_active and big_head is not None:
+    reference = max(small_head if small_head is not None else -1, last_published)
+    if reference < big_head <= reference + BIG_FUTURE_ACCEPT:
+      target = big_head if target is None else max(target, big_head)
+  if target is None or target <= last_published:
+    return None
+  return target
+
+
+def frame_stream_reset(small_head: int | None, last_published: int, big_active: bool) -> bool:
+  if last_published < 0 or small_head is None:
+    return False
+  return small_head < last_published - (FRAME_RESET_GAP if big_active else 1)
 
 
 class BigLatch:
@@ -251,6 +270,7 @@ def main() -> None:
   last_published = -1
   last_big_published = -1
   last_big_payload: dict | None = None
+  last_small_payload: dict | None = None
   held_count = 0
   frame_dropped_filter = FirstOrderFilter(0.0, 10.0, 1.0 / MODEL_FREQ)
   recent_big = deque(maxlen=STATUS_WINDOW)
@@ -275,12 +295,9 @@ def main() -> None:
       except OSError:
         big_channel = None
 
-    fid = small_channel.peek_frame_id()
-    if fid is None or fid == last_published:
-      time.sleep(0.0005)
-      continue
-    if last_published >= 0 and fid < last_published - 1:
-      cloudlog.warning(f"modeld_selector frame reset {last_published} -> {fid}; re-arming")
+    small_head = small_channel.peek_frame_id()
+    if frame_stream_reset(small_head, last_published, latch.active):
+      cloudlog.warning(f"modeld_selector frame reset {last_published} -> {small_head}; re-arming")
       last_published = -1
       last_big_published = -1
       last_big_payload = None
@@ -289,6 +306,12 @@ def main() -> None:
       latch = BigLatch()
       pwriter.put_bool(keys["active"], False)
       pwriter.put_bool(keys["failed"], False)
+
+    big_head = big_channel.peek()[0] if big_channel is not None and latch.active else None
+    fid = next_target(small_head, big_head, last_published, latch.active)
+    if fid is None:
+      time.sleep(0.0005)
+      continue
 
     now_mono = time.monotonic()
     if now_mono - last_backend_check > 1.0:
@@ -315,6 +338,7 @@ def main() -> None:
     got = small_channel.read()
     if got is not None and got[0] == target:
       small_payload = got[1]
+      last_small_payload = small_payload
 
     payload = None
     used_big = False
@@ -410,7 +434,7 @@ def main() -> None:
       frame_drop_perc = 100.0 * frames_dropped / (1.0 + frames_dropped)
       _patch_and_send(pm, payload, frame_drop_perc, selector_dropped, target, source_lag, frame_mismatch,
                       pose_payload=small_payload if used_big else None,
-                      backup_payload=small_payload if used_big else None)
+                      backup_payload=(small_payload or last_small_payload) if used_big else None)
       last_published = target
 
 

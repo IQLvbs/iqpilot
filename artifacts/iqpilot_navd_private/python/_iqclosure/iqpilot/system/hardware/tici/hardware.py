@@ -52,6 +52,11 @@ class NMActiveConnectionState(IntEnum):
   DEACTIVATING = 3
   DEACTIVATED = 4
 
+# Third-party SIMs (e.g. computers4people) often hand out no DNS server over the bearer; NetworkManager appends these to whatever the carrier supplies
+FALLBACK_DNS_V4 = "1.1.1.1,8.8.8.8"
+FALLBACK_DNS_V6 = "2606:4700:4700::1111,2001:4860:4860::8888"
+
+
 class NMMetered(IntEnum):
   NM_METERED_UNKNOWN = 0
   NM_METERED_YES = 1
@@ -554,6 +559,8 @@ class Tici(HardwareBase):
       "gsm.initial-eps-bearer-configure", "yes" if initial_eps_apn else "no",
       "gsm.initial-eps-bearer-apn", initial_eps_apn,
       "connection.metered", "unknown" if metered_enabled else "no",
+      "ipv4.dns", FALLBACK_DNS_V4,
+      "ipv6.dns", FALLBACK_DNS_V6,
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     if self.get_device_type() in ("tici", "tizi"):

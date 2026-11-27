@@ -87,21 +87,21 @@ def publish(device, branch):
   return commit
 
 
-def test_reconnecting_moves_to_public_alpha(device):
-  alpha = publish(device, 'alpha')
+def test_reconnecting_moves_to_public_release(device):
+  release = publish(device, 'release')
   updater = updated.Updater()
   updater.check_for_update()
-  assert device.params.get('UpdaterTargetBranch') == 'alpha'
+  assert device.params.get('UpdaterTargetBranch') == 'release'
   assert updater.update_available
   updater.fetch_update()
-  assert git(device.repo, 'rev-parse', 'HEAD') == alpha
-  assert git(device.repo, 'branch', '--show-current') == 'alpha'
+  assert git(device.repo, 'rev-parse', 'HEAD') == release
+  assert git(device.repo, 'branch', '--show-current') == 'release'
 
 
 @pytest.mark.parametrize('installed', [BRANCH, 'feature/other-preview'])
-@pytest.mark.parametrize('listing', ['empty', 'no alpha'])
+@pytest.mark.parametrize('listing', ['empty', 'no release'])
 def test_without_a_public_fallback_nothing_is_fetched(device, listing, installed):
-  if listing == 'no alpha':
+  if listing == 'no release':
     publish(device, 'beta')
   if installed != BRANCH:
     # Running one Preview branch with another queued as the target.
@@ -122,7 +122,7 @@ def test_a_branch_saved_while_recovery_waits_for_the_lock_is_kept(device):
   import threading
   lock = os.open(os.path.join(os.path.dirname(os.path.normpath(device.params.get_param_path())), '.lock'), os.O_CREAT | os.O_RDONLY)
   fcntl.flock(lock, fcntl.LOCK_EX)
-  recovery = threading.Thread(target=git_creds._replace_target, args=(BRANCH, 'alpha'))
+  recovery = threading.Thread(target=git_creds._replace_target, args=(BRANCH, 'release'))
   try:
     recovery.start()
     recovery.join(0.3)
@@ -136,7 +136,7 @@ def test_a_branch_saved_while_recovery_waits_for_the_lock_is_kept(device):
 
 
 def test_recovery_replaces_an_unchanged_target(device):
-  git_creds._replace_target(BRANCH, 'alpha')
-  assert device.params.get('UpdaterTargetBranch') == 'alpha'
+  git_creds._replace_target(BRANCH, 'release')
+  assert device.params.get('UpdaterTargetBranch') == 'release'
   assert [name for name in os.listdir(os.path.dirname(os.path.normpath(device.params.get_param_path())))
           if name.startswith('.tmp_value_')] == []

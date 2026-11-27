@@ -24,6 +24,8 @@ class _TurnGateState:
   speed_limit_mps: float = TURN_TRIGGER_MPS
   outcome: int = TurnDirection.none
   refresh_tick: int = 0
+  lane_change_left: bool = False
+  lane_change_right: bool = False
 
 
 def _resolve_signal_choice(speed_mps: float,
@@ -80,12 +82,16 @@ class TurnSignalPlanner:
              **legacy) -> None:
     if legacy:
       blocked_l, blocked_r, blink_l, blink_r, speed_mps = self._consume_legacy_kwargs(**legacy)
-    self._state.outcome = _resolve_signal_choice(speed_mps,
-                                                 self._state.speed_limit_mps,
-                                                 blink_l,
-                                                 blink_r,
-                                                 blocked_l,
-                                                 blocked_r)
+    state = self._state
+    tainted = blink_l and blink_r or speed_mps >= state.speed_limit_mps
+    state.lane_change_left = blink_l and (state.lane_change_left or tainted)
+    state.lane_change_right = blink_r and (state.lane_change_right or tainted)
+    state.outcome = _resolve_signal_choice(speed_mps,
+                                           state.speed_limit_mps,
+                                           blink_l and not state.lane_change_left,
+                                           blink_r and not state.lane_change_right,
+                                           blocked_l,
+                                           blocked_r)
 
   def output(self):
     return self._state.outcome if self._state.active else TurnDirection.none
